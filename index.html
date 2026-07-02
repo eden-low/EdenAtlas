@@ -4,14 +4,9 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Low Fang Jun - Solo Leveling Resume</title>
-    <!-- Tailwind CSS CDN -->
     <script src="https://cdn.tailwindcss.com"></script>
-    <!-- Google Fonts for Gaming/Cyberpunk feel -->
     <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;600&family=Orbitron:wght@400;700;900&family=Inter:wght@300;400;600;800&display=swap" rel="stylesheet">
-    <!-- Font Awesome Icons -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <!-- Chart.js for gorgeous interactive stats -->
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script>
         tailwind.config = {
             theme: {
@@ -20,9 +15,9 @@
                         darkBg: '#09090e',
                         cardBg: '#12121e',
                         borderNeon: '#2d1b4e',
-                        neonPurple: '#d946ef', // magenta-500
-                        neonBlue: '#3b82f6', // blue-500
-                        neonViolet: '#8b5cf6', // violet-500
+                        neonPurple: '#d946ef',
+                        neonBlue: '#3b82f6',
+                        neonViolet: '#8b5cf6',
                         textGray: '#a0aec0',
                     },
                     fontFamily: {
@@ -34,48 +29,7 @@
             }
         }
     </script>
-    <style>
-        /* Neon Glow Utility classes */
-        .neon-border-purple {
-            box-shadow: 0 0 10px rgba(217, 70, 239, 0.15), inset 0 0 10px rgba(217, 70, 239, 0.1);
-            border: 1px solid rgba(217, 70, 239, 0.3);
-        }
-        .neon-border-purple:hover {
-            box-shadow: 0 0 18px rgba(217, 70, 239, 0.35), inset 0 0 12px rgba(217, 70, 239, 0.15);
-            border-color: rgba(217, 70, 239, 0.6);
-            transition: all 0.3s ease;
-        }
-        .neon-text-purple {
-            text-shadow: 0 0 8px rgba(217, 70, 239, 0.6);
-        }
-        .neon-text-blue {
-            text-shadow: 0 0 8px rgba(59, 130, 246, 0.6);
-        }
-        .neon-bg-purple {
-            background: radial-gradient(circle, rgba(217, 70, 239, 0.2) 0%, rgba(9, 9, 14, 0) 70%);
-        }
-        /* Custom scrollbar */
-        ::-webkit-scrollbar {
-            width: 6px;
-        }
-        ::-webkit-scrollbar-track {
-            background: #09090e;
-        }
-        ::-webkit-scrollbar-thumb {
-            background: #2d1b4e;
-            border-radius: 3px;
-        }
-        ::-webkit-scrollbar-thumb:hover {
-            background: #8b5cf6;
-        }
-        /* Grid background pattern */
-        .grid-bg {
-            background-size: 40px 40px;
-            background-image: 
-                linear-gradient(to right, rgba(45, 27, 78, 0.15) 1px, transparent 1px),
-                linear-gradient(to bottom, rgba(45, 27, 78, 0.15) 1px, transparent 1px);
-        }
-    </style>
+    <link rel="stylesheet" href="styles.css">
 </head>
 <body class="bg-darkBg text-white font-sans grid-bg min-h-screen pb-12">
     <header class="max-w-7xl mx-auto px-4 pt-6">
@@ -89,16 +43,15 @@
                     <span class="text-[10px] block text-neonPurple font-code font-bold tracking-widest -mt-1">SYSTEM LEVELING ONLINE</span>
                 </div>
             </div>
-
             <nav class="flex flex-wrap items-center justify-center gap-4 text-sm font-cyber font-semibold tracking-wider text-textGray">
                 <a href="index.html" class="hover:text-neonPurple transition-colors flex items-center gap-1.5"><i class="fa-solid fa-house text-xs"></i> Home</a>
                 <a href="status.html" class="hover:text-neonPurple transition-colors flex items-center gap-1.5"><i class="fa-solid fa-user text-xs"></i> Status</a>
                 <a href="matrix.html" class="hover:text-neonPurple transition-colors flex items-center gap-1.5"><i class="fa-solid fa-chart-line text-xs"></i> Matrix</a>
                 <a href="quests.html" class="hover:text-neonPurple transition-colors flex items-center gap-1.5"><i class="fa-solid fa-scroll text-xs"></i> Quests</a>
                 <a href="events.html" class="hover:text-neonPurple transition-colors flex items-center gap-1.5"><i class="fa-solid fa-users text-xs"></i> Events</a>
-                <a href="inventory.html" class="hover:text-neonPurple transition-colors flex items-center gap-1.5"><i class="fa-solid fa-briefcase text-xs"></i> Inventory</a>
+                <a href="experience.html" class="hover:text-neonPurple transition-colors flex items-center gap-1.5"><i class="fa-solid fa-briefcase text-xs"></i> Experience</a>
+                <a href="inventory.html" class="hover:text-neonPurple transition-colors flex items-center gap-1.5"><i class="fa-solid fa-box text-xs"></i> Inventory</a>
             </nav>
-
             <div class="px-4 py-1.5 bg-gradient-to-r from-neonViolet/20 to-neonPurple/20 border border-neonPurple/40 rounded-full text-xs font-cyber font-bold tracking-wider text-neonPurple">
                 LV.24 (HUNTER)
             </div>
@@ -109,10 +62,10 @@
         <section class="bg-cardBg/90 backdrop-blur-sm p-8 rounded-2xl neon-border-purple">
             <div class="flex flex-col lg:flex-row lg:items-end lg:justify-between gap-6">
                 <div class="max-w-2xl">
-                    <p class="text-[10px] uppercase tracking-[0.35em] text-neonPurple font-code">Resume Navigation System</p>
-                    <h1 class="font-cyber font-black text-3xl md:text-4xl mt-3 text-transparent bg-clip-text bg-gradient-to-r from-white to-neonPurple">每一个 section 都能单独打开，阅读体验会更轻松。</h1>
+                    <p class="text-[10px] uppercase tracking-[0.35em] text-neonPurple font-code">RESUME PORTAL</p>
+                    <h1 class="font-cyber font-black text-3xl md:text-4xl mt-3 text-transparent bg-clip-text bg-gradient-to-r from-white to-neonPurple">Split sections preserve detail while improving readability.</h1>
                     <p class="mt-4 text-textGray leading-relaxed">
-                        现在的版本已经从“超长单页”改成了“首页入口 + 分栏页面”的结构。每个模块都保留相同的赛博风格，点击后就能独立展开，信息更清楚，也不会让页面显得太拥挤。
+                        Each section is now a separate page while the style and content remain intact. This gives the viewer room to focus on one category at a time without losing any of the original English resume details.
                     </p>
                 </div>
                 <a href="status.html" class="px-6 py-3 bg-gradient-to-r from-neonViolet to-neonPurple rounded-xl text-sm font-cyber font-bold tracking-wider text-white hover:scale-105 transition-all shadow-lg shadow-neonPurple/30">
@@ -127,49 +80,43 @@
                     <h2 class="font-cyber font-black text-lg tracking-wider text-white">STATUS</h2>
                     <i class="fa-solid fa-user text-neonPurple"></i>
                 </div>
-                <p class="text-sm text-textGray leading-relaxed">个人概况、联系方式与技能条，像进入角色档案一样查看。</p>
+                <p class="text-sm text-textGray leading-relaxed">View complete profile, contact details, academic progress and skill bars in full English detail.</p>
             </a>
-
             <a href="matrix.html" class="bg-cardBg/90 backdrop-blur-sm p-6 rounded-2xl neon-border-purple hover:-translate-y-1 transition-all block">
                 <div class="flex items-center justify-between mb-4">
                     <h2 class="font-cyber font-black text-lg tracking-wider text-white">MATRIX</h2>
                     <i class="fa-solid fa-chart-line text-neonBlue"></i>
                 </div>
-                <p class="text-sm text-textGray leading-relaxed">领导力、能力雷达与核心数值，用图表呈现你的成长轨迹。</p>
+                <p class="text-sm text-textGray leading-relaxed">Inspect leadership metrics and core attributes with neon chart cards built from the original design.</p>
             </a>
-
             <a href="quests.html" class="bg-cardBg/90 backdrop-blur-sm p-6 rounded-2xl neon-border-purple hover:-translate-y-1 transition-all block">
                 <div class="flex items-center justify-between mb-4">
                     <h2 class="font-cyber font-black text-lg tracking-wider text-white">QUESTS</h2>
                     <i class="fa-solid fa-scroll text-emerald-400"></i>
                 </div>
-                <p class="text-sm text-textGray leading-relaxed">教育背景、项目经历与学术任务，像一份成长任务清单。</p>
+                <p class="text-sm text-textGray leading-relaxed">Show all academic quests, projects, and achievements in a clear, readable format.</p>
             </a>
-
             <a href="events.html" class="bg-cardBg/90 backdrop-blur-sm p-6 rounded-2xl neon-border-purple hover:-translate-y-1 transition-all block">
                 <div class="flex items-center justify-between mb-4">
                     <h2 class="font-cyber font-black text-lg tracking-wider text-white">EVENTS</h2>
                     <i class="fa-solid fa-users text-amber-400"></i>
                 </div>
-                <p class="text-sm text-textGray leading-relaxed">活动策划、社团组织与工作经历，展示你真正带队和执行的能力。</p>
+                <p class="text-sm text-textGray leading-relaxed">Explore full event organization and leadership records without compression.</p>
             </a>
-
+            <a href="experience.html" class="bg-cardBg/90 backdrop-blur-sm p-6 rounded-2xl neon-border-purple hover:-translate-y-1 transition-all block">
+                <div class="flex items-center justify-between mb-4">
+                    <h2 class="font-cyber font-black text-lg tracking-wider text-white">EXPERIENCE</h2>
+                    <i class="fa-solid fa-briefcase text-amber-400"></i>
+                </div>
+                <p class="text-sm text-textGray leading-relaxed">Read the original work journey in full detail, with each role presented clearly.</p>
+            </a>
             <a href="inventory.html" class="bg-cardBg/90 backdrop-blur-sm p-6 rounded-2xl neon-border-purple hover:-translate-y-1 transition-all block">
                 <div class="flex items-center justify-between mb-4">
                     <h2 class="font-cyber font-black text-lg tracking-wider text-white">INVENTORY</h2>
                     <i class="fa-solid fa-box text-rose-400"></i>
                 </div>
-                <p class="text-sm text-textGray leading-relaxed">成就、奖项与技能道具，像打开你的装备栏一样浏览。</p>
+                <p class="text-sm text-textGray leading-relaxed">Browse achievements, awards and skill inventory exactly as the original dashboard intended.</p>
             </a>
-
-            <div class="bg-cardBg/90 backdrop-blur-sm p-6 rounded-2xl neon-border-purple">
-                <div class="flex items-center justify-between mb-4">
-                    <h2 class="font-cyber font-black text-lg tracking-wider text-white">CONTACT</h2>
-                    <i class="fa-solid fa-paper-plane text-neonPurple"></i>
-                </div>
-                <p class="text-sm text-textGray leading-relaxed">如果你愿意，我也可以继续把这个版本再优化成“更像官网主页”的样子。</p>
-                <a href="mailto:jjun8647@gmail.com" class="inline-flex items-center gap-2 mt-4 text-sm font-cyber text-neonPurple">Email Me <i class="fa-solid fa-arrow-right"></i></a>
-            </div>
         </section>
     </main>
 </body>

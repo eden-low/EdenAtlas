@@ -49,40 +49,76 @@
         <a href="matrix.html" class="hover:text-neonPurple transition-colors flex items-center gap-1.5"><i class="fa-solid fa-chart-line text-xs"></i> Matrix</a>
         <a href="quests.html" class="hover:text-neonPurple transition-colors flex items-center gap-1.5"><i class="fa-solid fa-scroll text-xs"></i> Quests</a>
         <a href="events.html" class="hover:text-neonPurple transition-colors flex items-center gap-1.5"><i class="fa-solid fa-users text-xs"></i> Events</a>
-        <a href="inventory.html" class="hover:text-neonPurple transition-colors flex items-center gap-1.5"><i class="fa-solid fa-briefcase text-xs"></i> Inventory</a>
+        <a href="experience.html" class="hover:text-neonPurple transition-colors flex items-center gap-1.5"><i class="fa-solid fa-briefcase text-xs"></i> Experience</a>
+        <a href="inventory.html" class="hover:text-neonPurple transition-colors flex items-center gap-1.5"><i class="fa-solid fa-box text-xs"></i> Inventory</a>
       </nav>
     </div>
   </header>
 
   <main class="max-w-6xl mx-auto px-4 mt-8 space-y-6">
     <section class="bg-cardBg/90 backdrop-blur-sm p-6 rounded-2xl neon-border-purple">
-      <h1 class="font-cyber font-black text-2xl text-white">Quest Board</h1>
-      <p class="text-textGray mt-2">Academic paths, projects and progress milestones.</p>
-      <div class="mt-6 space-y-6">
-        <div class="border-l-2 border-neonPurple pl-5">
-          <div class="flex flex-col sm:flex-row sm:justify-between gap-2">
+      <div class="flex flex-col md:flex-row md:items-start md:justify-between gap-4">
+        <div>
+          <h1 class="font-cyber font-black text-3xl text-white">Quest Board</h1>
+          <p class="text-textGray mt-3">Academic paths, project achievements and learning milestones.</p>
+        </div>
+        <div class="text-sm font-code text-textGray bg-darkBg/70 px-4 py-2 rounded-2xl border border-borderNeon">Full details preserved from the original resume section.</div>
+      </div>
+
+      <div class="mt-6 space-y-10">
+        <div class="bg-darkBg/60 border border-borderNeon rounded-2xl p-6">
+          <div class="flex flex-col sm:flex-row sm:justify-between gap-4">
             <div>
-              <h2 class="font-cyber font-bold text-white">UTAR Bachelor of Information Systems</h2>
-              <p class="text-sm text-textGray">2023 - 2026 | CGPA 2.86</p>
+              <p class="text-[10px] uppercase tracking-[0.35em] text-neonPurple font-code mb-3">Main Quest</p>
+              <h2 class="font-cyber font-bold text-xl text-white">Universiti Tunku Abdul Rahman (UTAR)</h2>
+              <p class="text-xs text-textGray mt-1">2023 - 2026 | Bachelor of Information Systems (Honours) Business Information Systems</p>
             </div>
-            <span class="text-xs text-neonPurple font-code">In Progress</span>
+            <span class="self-start sm:self-center px-3 py-1 rounded-full bg-neonPurple/15 border border-neonPurple/40 text-[10px] font-cyber font-bold tracking-wider text-neonPurple uppercase">PROGRESSING (CGPA 2.86)</span>
           </div>
-          <div class="mt-3 bg-darkBg/50 rounded-xl p-4 text-sm text-textGray space-y-2">
-            <p>Built an event planning management system as final year project.</p>
-            <p>Used HTML, CSS, JavaScript, and SQL for interface and database integration.</p>
+          <div class="mt-6 space-y-5 text-sm text-textGray leading-relaxed">
+            <p>During the UTAR program, I focused on systems thinking, business information strategies, and practical software development. I have applied both technical and analytical skills through coursework and project work.</p>
+            <div class="bg-darkBg/40 border border-borderNeon/40 rounded-xl p-4 space-y-3">
+              <div class="flex justify-between text-xs font-bold text-white">
+                <span>??? UTAR Event Planning Management System (Final Year Project)</span>
+                <span class="text-neonPurple font-code">EPIC QUEST</span>
+              </div>
+              <p class="text-xs text-textGray">Built a web-based system to assist UTAR event organizers and students with event registration and management. Enabled UTAR staff to review and approve event requests, improving workflow efficiency. Utilized HTML, CSS, JavaScript, and SQL for front-end interface and database integration.</p>
+            </div>
+            <div class="bg-darkBg/40 border border-borderNeon/40 rounded-xl p-4 space-y-3">
+              <div class="flex justify-between text-xs font-bold text-white">
+                <span>?? Fundamentals of Business System (MonsoonSIM)</span>
+                <span class="text-neonBlue font-code">SIMULATION QUEST</span>
+              </div>
+              <p class="text-xs text-textGray">Managed Low Family Juice's B2B beverage sales using MonsoonSIM, handling inventory, procurement, and finance in a simulated business environment. Gained practical experience in business process management and decision-making.</p>
+            </div>
           </div>
         </div>
-        <div class="border-l-2 border-emerald-400 pl-5">
-          <div class="flex flex-col sm:flex-row sm:justify-between gap-2">
+
+        <div class="bg-darkBg/60 border border-borderNeon rounded-2xl p-6">
+          <div class="flex flex-col sm:flex-row sm:justify-between gap-4">
             <div>
-              <h2 class="font-cyber font-bold text-white">iCATS Diploma in Software Engineering</h2>
-              <p class="text-sm text-textGray">2020 - 2023 | CGPA 3.22</p>
+              <p class="text-[10px] uppercase tracking-[0.35em] text-emerald-400 font-code mb-3">Sub Quest</p>
+              <h2 class="font-cyber font-bold text-xl text-white">International College of Advanced Technology Sarawak (iCATS)</h2>
+              <p class="text-xs text-textGray mt-1">2020 - 2023 | Diploma in Software Engineering</p>
             </div>
-            <span class="text-xs text-emerald-400 font-code">Completed</span>
+            <span class="self-start sm:self-center px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-[10px] font-cyber font-bold tracking-wider text-emerald-400 uppercase">COMPLETED (CGPA 3.22) <i class="fa-solid fa-circle-check ml-1"></i></span>
           </div>
-          <div class="mt-3 bg-darkBg/50 rounded-xl p-4 text-sm text-textGray space-y-2">
-            <p>Developed a Python library management system.</p>
-            <p>Built tourism websites using HTML, CSS, and JavaScript.</p>
+          <div class="mt-6 space-y-5 text-sm text-textGray leading-relaxed">
+            <p>At iCATS, I built foundational software engineering skills through team-based projects, Python programming, and front-end development. I gained hands-on experience building practical applications while strengthening my analytical and problem-solving abilities.</p>
+            <div class="bg-darkBg/40 border border-borderNeon/40 rounded-xl p-4 space-y-3">
+              <div class="flex justify-between text-xs font-bold text-white">
+                <span>?? Library Management System (Python Project)</span>
+                <span class="text-emerald-400 font-code">PYTHON SKILL UP</span>
+              </div>
+              <p class="text-xs text-textGray">Developed a library management system using Python to handle book records, user registrations, borrowing, and returns. Implemented data validation, reporting, and basic file/database storage, gaining experience in object-oriented programming and practical Python applications.</p>
+            </div>
+            <div class="bg-darkBg/40 border border-borderNeon/40 rounded-xl p-4 space-y-3">
+              <div class="flex justify-between text-xs font-bold text-white">
+                <span>?? Frontend Application Development – Tourism Websites</span>
+                <span class="text-emerald-400 font-code">FRONTEND SKILL UP</span>
+              </div>
+              <p class="text-xs text-textGray">Developed interactive tourism websites using HTML, CSS, and JavaScript to structure content and create a user-friendly and visually appealing interface for travelers. Learned responsive design and basic front-end programming techniques.</p>
+            </div>
           </div>
         </div>
       </div>

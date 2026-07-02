@@ -50,20 +50,68 @@
         <a href="matrix.html" class="hover:text-neonPurple transition-colors flex items-center gap-1.5"><i class="fa-solid fa-chart-line text-xs"></i> Matrix</a>
         <a href="quests.html" class="hover:text-neonPurple transition-colors flex items-center gap-1.5"><i class="fa-solid fa-scroll text-xs"></i> Quests</a>
         <a href="events.html" class="hover:text-neonPurple transition-colors flex items-center gap-1.5"><i class="fa-solid fa-users text-xs"></i> Events</a>
-        <a href="inventory.html" class="hover:text-neonPurple transition-colors flex items-center gap-1.5"><i class="fa-solid fa-briefcase text-xs"></i> Inventory</a>
+        <a href="experience.html" class="hover:text-neonPurple transition-colors flex items-center gap-1.5"><i class="fa-solid fa-briefcase text-xs"></i> Experience</a>
+        <a href="inventory.html" class="hover:text-neonPurple transition-colors flex items-center gap-1.5"><i class="fa-solid fa-box text-xs"></i> Inventory</a>
       </nav>
     </div>
   </header>
 
-  <main class="max-w-6xl mx-auto px-4 mt-8 grid grid-cols-1 md:grid-cols-2 gap-6">
+  <main class="max-w-6xl mx-auto px-4 mt-8 grid grid-cols-1 gap-6">
     <section class="bg-cardBg/90 backdrop-blur-sm p-6 rounded-2xl neon-border-purple">
-      <h2 class="font-cyber font-black text-lg tracking-wider text-white">Guild Leadership</h2>
-      <div class="h-56 mt-4"><canvas id="leadershipChart"></canvas></div>
+      <div class="flex flex-col md:flex-row md:items-start md:justify-between gap-4">
+        <div>
+          <h1 class="font-cyber font-black text-3xl text-white">Matrix</h1>
+          <p class="text-textGray mt-3">Leadership metrics and core attribute performance delivered with neon chart styling.</p>
+        </div>
+        <div class="text-sm font-code text-textGray bg-darkBg/70 px-4 py-2 rounded-2xl border border-borderNeon">Charts are interactive and show a clear breakdown of competency & event leadership.</div>
+      </div>
     </section>
+    <section class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div class="bg-cardBg/90 backdrop-blur-sm p-5 rounded-2xl neon-border-purple min-h-[360px] flex flex-col justify-between">
+        <div>
+          <div class="flex justify-between items-start border-b border-borderNeon pb-3">
+            <h2 class="font-cyber font-bold text-sm uppercase tracking-wider text-white"><i class="fa-solid fa-fire text-neonPurple mr-2"></i> Guild Leadership</h2>
+            <span class="text-[10px] font-code text-neonPurple px-2 py-0.5 rounded bg-neonPurple/10 border border-neonPurple/20">TEAMWORK HP</span>
+          </div>
+          <div class="flex justify-between mt-4 text-[10px] font-code text-textGray">
+            <div>Led Events</div>
+            <div class="text-white font-bold">6+ Times</div>
+          </div>
+          <div class="flex justify-between mt-2 text-[10px] font-code text-textGray">
+            <div>Stat Rank</div>
+            <div class="text-white font-bold">A-Rank Chairperson</div>
+          </div>
+        </div>
+        <div class="h-56 mt-4"><canvas id="leadershipChart"></canvas></div>
+        <div class="mt-4 pt-3 border-t border-borderNeon/60 flex flex-col gap-3 text-[10px] font-code text-textGray">
+          <div class="flex justify-between">
+            <span>Collaboration Intensity</span>
+            <span class="text-neonPurple font-bold">9.2 / 10 MAX</span>
+          </div>
+          <div class="w-full h-2 bg-darkBg rounded-full overflow-hidden"><div class="h-full bg-neonPurple" style="width:92%"></div></div>
+        </div>
+      </div>
 
-    <section class="bg-cardBg/90 backdrop-blur-sm p-6 rounded-2xl neon-border-purple">
-      <h2 class="font-cyber font-black text-lg tracking-wider text-white">Core Attributes</h2>
-      <div class="h-56 mt-4"><canvas id="capabilitiesChart"></canvas></div>
+      <div class="bg-cardBg/90 backdrop-blur-sm p-5 rounded-2xl neon-border-purple min-h-[360px] flex flex-col justify-between">
+        <div>
+          <div class="flex justify-between items-start border-b border-borderNeon pb-3">
+            <h2 class="font-cyber font-bold text-sm uppercase tracking-wider text-white"><i class="fa-solid fa-crown text-amber-400 mr-2"></i> Core Attributes</h2>
+            <span class="text-[10px] font-code text-emerald-400 px-2 py-0.5 rounded bg-emerald-500/10 border border-emerald-500/20">RADAR MATRIX</span>
+          </div>
+          <div class="grid grid-cols-5 gap-1 mt-4 text-center text-[9px] font-cyber text-textGray">
+            <div><div class="text-white font-code text-xs font-bold">85</div><span>LOGIC(LOG)</span></div>
+            <div><div class="text-white font-code text-xs font-bold">82</div><span>FRONTEND(WEB)</span></div>
+            <div><div class="text-white font-code text-xs font-bold">80</div><span>DATABASE(DAT)</span></div>
+            <div><div class="text-white font-code text-xs font-bold">90</div><span>COLLAB(COL)</span></div>
+            <div><div class="text-white font-code text-xs font-bold">88</div><span>ANALYTICS(BIS)</span></div>
+          </div>
+        </div>
+        <div class="h-56 mt-4"><canvas id="capabilitiesChart"></canvas></div>
+        <div class="mt-4 pt-3 border-t border-borderNeon/60 text-[10px] font-code text-textGray flex justify-between">
+          <span>Synergy Boost Status</span>
+          <span class="text-amber-400 font-bold">SYSTEM DRIVEN <i class="fa-solid fa-bolt"></i></span>
+        </div>
+      </div>
     </section>
   </main>
 
@@ -76,9 +124,24 @@
       type: 'doughnut',
       data: {
         labels: ['Chairperson', 'Program Leader', 'Technical Head', 'HR / Sponsorship'],
-        datasets: [{ data: [2, 1, 1, 2], backgroundColor: ['rgba(217,70,239,0.7)','rgba(59,130,246,0.7)','rgba(16,185,129,0.7)','rgba(245,158,11,0.7)'], borderColor:'#12121e', borderWidth:2 }]
+        datasets: [{
+          data: [2, 1, 1, 2],
+          backgroundColor: ['rgba(217,70,239,0.7)','rgba(59,130,246,0.7)','rgba(16,185,129,0.7)','rgba(245,158,11,0.7)'],
+          borderColor: '#12121e',
+          borderWidth: 2,
+        }]
       },
-      options: { responsive:true, maintainAspectRatio:false, plugins:{ legend:{ position:'bottom' } }, cutout:'65%' }
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: {
+            position: 'bottom',
+            labels: { font: { size: 9 }, boxWidth: 10 }
+          }
+        },
+        cutout: '65%'
+      }
     });
 
     const ctxCap = document.getElementById('capabilitiesChart').getContext('2d');
@@ -86,9 +149,33 @@
       type: 'radar',
       data: {
         labels: ['Python Logic', 'Frontend Web', 'SQL Database', 'Team Leadership', 'BIS Business Insights'],
-        datasets: [{ label:'Attribute Points', data:[85,82,80,90,88], borderColor:'#3b82f6', borderWidth:2, backgroundColor:'rgba(59,130,246,0.2)', pointBackgroundColor:'#3b82f6', pointBorderColor:'#fff' }]
+        datasets: [{
+          label: 'Attribute Points',
+          data: [85,82,80,90,88],
+          borderColor: '#3b82f6',
+          borderWidth: 2,
+          backgroundColor: 'rgba(59,130,246,0.2)',
+          pointBackgroundColor: '#3b82f6',
+          pointBorderColor: '#fff',
+          pointHoverBackgroundColor: '#fff',
+          pointHoverBorderColor: '#3b82f6'
+        }]
       },
-      options: { responsive:true, maintainAspectRatio:false, plugins:{ legend:{ display:false } }, scales:{ r:{ angleLines:{ color:'rgba(45,27,78,0.4)' }, grid:{ color:'rgba(45,27,78,0.4)' }, pointLabels:{ font:{ size:9, family:'Orbitron, sans-serif' }, color:'#a0aec0' }, ticks:{ display:false }, min:0, max:100 } } }
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: { legend: { display: false } },
+        scales: {
+          r: {
+            angleLines: { color: 'rgba(45,27,78,0.4)' },
+            grid: { color: 'rgba(45,27,78,0.4)' },
+            pointLabels: { font: { size: 9, family: 'Orbitron, sans-serif' }, color: '#a0aec0' },
+            ticks: { display: false },
+            min: 0,
+            max: 100
+          }
+        }
+      }
     });
   </script>
 </body>
