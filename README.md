@@ -13,6 +13,8 @@ An interactive, multi-page resume for **Low Fang Jun**, styled after the "Solo L
 | Events | [events.html](events.html) | Event organization and leadership records |
 | Experience | [experience.html](experience.html) | Work experience, role by role |
 | Inventory | [inventory.html](inventory.html) | Awards, certifications, skill inventory |
+| Gallery | [gallery.html](gallery.html) | Event, project, and personal photos (currently placeholder slots — see below) |
+| Contact | [contact.html](contact.html) | Email / phone / location, with a one-click "send message" CTA |
 
 ## Running locally
 
@@ -28,6 +30,13 @@ npx serve .
 - [Font Awesome 6](https://fontawesome.com/) for icons
 - Google Fonts: Orbitron (cyber headings), Fira Code (code/labels), Inter (body text)
 - Shared custom styles in [styles.css](styles.css) (neon borders/glow, grid background, scrollbar)
+
+## Adding real photos to the Gallery
+
+[gallery.html](gallery.html) currently shows dashed placeholder tiles grouped into three categories (Event & Work, Project Screenshots, Personal), each labeled with the filename it expects (e.g. `events-1.jpg`). To fill them in:
+
+1. Drop image files into the [images/](images/) folder using those filenames (or your own).
+2. Replace the matching placeholder `<div>` in gallery.html with an `<img src="images/your-file.jpg" class="aspect-square rounded-xl object-cover" alt="...">`.
 
 ## Structure notes
 
