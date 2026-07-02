@@ -1,0 +1,60 @@
+:root {
+  color-scheme: dark;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  background-color: #09090e;
+  color: #ffffff;
+  font-family: 'Inter', sans-serif;
+}
+
+.neon-border-purple {
+  box-shadow: 0 0 10px rgba(217, 70, 239, 0.15), inset 0 0 10px rgba(217, 70, 239, 0.1);
+  border: 1px solid rgba(217, 70, 239, 0.3);
+}
+
+.neon-border-purple:hover {
+  box-shadow: 0 0 18px rgba(217, 70, 239, 0.35), inset 0 0 12px rgba(217, 70, 239, 0.15);
+  border-color: rgba(217, 70, 239, 0.6);
+  transition: all 0.3s ease;
+}
+
+.neon-text-purple {
+  text-shadow: 0 0 8px rgba(217, 70, 239, 0.6);
+}
+
+.neon-text-blue {
+  text-shadow: 0 0 8px rgba(59, 130, 246, 0.6);
+}
+
+.neon-bg-purple {
+  background: radial-gradient(circle, rgba(217, 70, 239, 0.2) 0%, rgba(9, 9, 14, 0) 70%);
+}
+
+::-webkit-scrollbar {
+  width: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: #09090e;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #2d1b4e;
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #8b5cf6;
+}
+
+.grid-bg {
+  background-size: 40px 40px;
+  background-image:
+    linear-gradient(to right, rgba(45, 27, 78, 0.15) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(45, 27, 78, 0.15) 1px, transparent 1px);
+}

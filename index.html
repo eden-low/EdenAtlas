@@ -78,803 +78,99 @@
     </style>
 </head>
 <body class="bg-darkBg text-white font-sans grid-bg min-h-screen pb-12">
-
-    <!-- Top Navigation Header -->
     <header class="max-w-7xl mx-auto px-4 pt-6">
         <div class="bg-cardBg/80 backdrop-blur-md neon-border-purple rounded-2xl px-6 py-4 flex flex-col md:flex-row items-center justify-between gap-4">
-            <!-- Logo / Brand -->
             <div class="flex items-center gap-3">
                 <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-neonViolet to-neonPurple flex items-center justify-center shadow-lg shadow-neonPurple/20">
                     <i class="fa-solid fa-shield-halved text-white text-lg animate-pulse"></i>
                 </div>
                 <div>
-                    <span class="font-cyber font-black text-xl tracking-widest text-transparent bg-clip-text bg-gradient-to-r from-white to-neonPurple">
-                        LOW FANG JUN
-                    </span>
+                    <span class="font-cyber font-black text-xl tracking-widest text-transparent bg-clip-text bg-gradient-to-r from-white to-neonPurple">LOW FANG JUN</span>
                     <span class="text-[10px] block text-neonPurple font-code font-bold tracking-widest -mt-1">SYSTEM LEVELING ONLINE</span>
                 </div>
             </div>
 
-            <!-- Nav Options -->
-            <nav class="flex items-center gap-6 text-sm font-cyber font-semibold tracking-wider text-textGray">
-                <a href="#profile" class="hover:text-neonPurple transition-colors flex items-center gap-1.5"><i class="fa-solid fa-user text-xs"></i> Status</a>
-                <a href="#stats" class="hover:text-neonPurple transition-colors flex items-center gap-1.5"><i class="fa-solid fa-chart-line text-xs"></i> Matrix</a>
-                <a href="#quests" class="hover:text-neonPurple transition-colors flex items-center gap-1.5"><i class="fa-solid fa-scroll text-xs"></i> Quests</a>
-                <a href="#guild" class="hover:text-neonPurple transition-colors flex items-center gap-1.5"><i class="fa-solid fa-users text-xs"></i> Events</a>
-                <a href="#inventory" class="hover:text-neonPurple transition-colors flex items-center gap-1.5"><i class="fa-solid fa-briefcase text-xs"></i> Inventory</a>
+            <nav class="flex flex-wrap items-center justify-center gap-4 text-sm font-cyber font-semibold tracking-wider text-textGray">
+                <a href="index.html" class="hover:text-neonPurple transition-colors flex items-center gap-1.5"><i class="fa-solid fa-house text-xs"></i> Home</a>
+                <a href="status.html" class="hover:text-neonPurple transition-colors flex items-center gap-1.5"><i class="fa-solid fa-user text-xs"></i> Status</a>
+                <a href="matrix.html" class="hover:text-neonPurple transition-colors flex items-center gap-1.5"><i class="fa-solid fa-chart-line text-xs"></i> Matrix</a>
+                <a href="quests.html" class="hover:text-neonPurple transition-colors flex items-center gap-1.5"><i class="fa-solid fa-scroll text-xs"></i> Quests</a>
+                <a href="events.html" class="hover:text-neonPurple transition-colors flex items-center gap-1.5"><i class="fa-solid fa-users text-xs"></i> Events</a>
+                <a href="inventory.html" class="hover:text-neonPurple transition-colors flex items-center gap-1.5"><i class="fa-solid fa-briefcase text-xs"></i> Inventory</a>
             </nav>
 
-            <!-- Status Indicator -->
-            <div class="flex items-center gap-4">
-                <div class="flex items-center gap-2">
-                    <button class="px-4 py-1.5 bg-gradient-to-r from-neonViolet/20 to-neonPurple/20 border border-neonPurple/40 rounded-full text-xs font-cyber font-bold tracking-wider text-neonPurple transition-all">
-                        LV.24 (HUNTER)
-                    </button>
-                </div>
+            <div class="px-4 py-1.5 bg-gradient-to-r from-neonViolet/20 to-neonPurple/20 border border-neonPurple/40 rounded-full text-xs font-cyber font-bold tracking-wider text-neonPurple">
+                LV.24 (HUNTER)
             </div>
         </div>
     </header>
 
-    <!-- Main Content Layout Grid -->
-    <main class="max-w-7xl mx-auto px-4 mt-8 grid grid-cols-1 lg:grid-cols-12 gap-6">
-
-        <!-- ================= LEFT COLUMN: PROFILE & SKILLS (4 Cols) ================= -->
-        <div class="lg:col-span-4 flex flex-col gap-6" id="profile">
-            
-            <!-- Card 1: SOLO LEVELING SYSTEM (Profile Main) -->
-            <div class="bg-cardBg/90 backdrop-blur-sm p-6 rounded-2xl neon-border-purple relative overflow-hidden flex flex-col items-center">
-                <!-- Decorative scan line -->
-                <div class="absolute inset-x-0 top-0 h-[1px] bg-gradient-to-r from-transparent via-neonPurple to-transparent opacity-50"></div>
-                
-                <h2 class="font-cyber font-black text-xl text-left w-full tracking-wider border-b border-borderNeon pb-3 text-transparent bg-clip-text bg-gradient-to-r from-white to-textGray">
-                    HUNTER STATUS <span class="text-neonPurple">Low Fang Jun</span>
-                </h2>
-
-                <!-- Avatar Circle with Neon Ring -->
-                <div class="relative my-6 group">
-                    <div class="absolute -inset-1 rounded-full bg-gradient-to-tr from-neonPurple via-neonBlue to-neonViolet opacity-70 blur-md group-hover:opacity-100 transition duration-500"></div>
-                    <div class="relative w-40 h-40 rounded-full bg-darkBg overflow-hidden border-2 border-neonPurple flex items-center justify-center">
-                        <div class="text-center">
-                            <i class="fa-solid fa-user-astronaut text-6xl text-neonPurple mb-1 animate-pulse"></i>
-                            <span class="block text-[10px] font-cyber tracking-widest text-textGray">B.I.S ENGINEER</span>
-                        </div>
-                    </div>
-                    <!-- Level badge based on age in 2026 (Born Dec 2002 -> 23 years old turning 24) -->
-                    <div class="absolute -bottom-2 right-4 bg-gradient-to-r from-neonViolet to-neonPurple font-cyber font-black text-xs px-3 py-1 rounded-full border border-white/20 shadow-lg">
-                        LV.24
-                    </div>
-                </div>
-
-                <!-- Bio & Title -->
-                <div class="text-center w-full">
-                    <h3 class="font-cyber font-black text-xl tracking-wider neon-text-purple">Low Fang Jun</h3>
-                    <p class="text-textGray font-code text-xs mt-1">@jjun8647</p>
-                    <p class="text-sm text-textGray/90 mt-4 leading-relaxed px-2 text-justify">
-                        Undergraduate student of <b>Business Information Systems</b>. Aspiring and highly motivated, specializing in <b>system design, data security, and web programming</b>. Equipped with solid programming capabilities and algorithmic thinking using Python, Java, SQL, HTML, and CSS to conquer real-world commercial and technical dungeons.
+    <main class="max-w-7xl mx-auto px-4 mt-8 space-y-6">
+        <section class="bg-cardBg/90 backdrop-blur-sm p-8 rounded-2xl neon-border-purple">
+            <div class="flex flex-col lg:flex-row lg:items-end lg:justify-between gap-6">
+                <div class="max-w-2xl">
+                    <p class="text-[10px] uppercase tracking-[0.35em] text-neonPurple font-code">Resume Navigation System</p>
+                    <h1 class="font-cyber font-black text-3xl md:text-4xl mt-3 text-transparent bg-clip-text bg-gradient-to-r from-white to-neonPurple">每一个 section 都能单独打开，阅读体验会更轻松。</h1>
+                    <p class="mt-4 text-textGray leading-relaxed">
+                        现在的版本已经从“超长单页”改成了“首页入口 + 分栏页面”的结构。每个模块都保留相同的赛博风格，点击后就能独立展开，信息更清楚，也不会让页面显得太拥挤。
                     </p>
                 </div>
-
-                <!-- Stats details -->
-                <div class="w-full mt-6 bg-darkBg/60 border border-borderNeon rounded-xl p-4 font-code text-xs space-y-2.5">
-                    <div class="flex justify-between">
-                        <span class="text-textGray"><i class="fa-solid fa-medal text-neonPurple mr-1.5"></i> Class:</span>
-                        <span class="text-white font-semibold">BIS Analyst / Software Engineer</span>
-                    </div>
-                    <div class="flex justify-between">
-                        <span class="text-textGray"><i class="fa-solid fa-envelope text-neonBlue mr-1.5"></i> Email:</span>
-                        <span class="text-white hover:text-neonPurple transition-colors"><a href="mailto:jjun8647@gmail.com">jjun8647@gmail.com</a></span>
-                    </div>
-                    <div class="flex justify-between">
-                        <span class="text-textGray"><i class="fa-solid fa-phone text-emerald-500 mr-1.5"></i> Contact:</span>
-                        <span class="text-white font-semibold">011-10574969</span>
-                    </div>
-                    <div class="flex justify-between">
-                        <span class="text-textGray"><i class="fa-solid fa-location-dot text-rose-500 mr-1.5"></i> Address:</span>
-                        <span class="text-white font-semibold text-right">Kuching, Sarawak, Malaysia</span>
-                    </div>
-                    <div class="flex justify-between">
-                        <span class="text-textGray"><i class="fa-solid fa-id-card text-amber-500 mr-1.5"></i> Attributes:</span>
-                        <span class="text-white font-semibold">Male | Malaysian | Single</span>
-                    </div>
-                </div>
-
-                <!-- XP Bar -->
-                <div class="w-full mt-6">
-                    <div class="flex justify-between font-cyber text-[10px] tracking-wider mb-1.5">
-                        <span class="text-neonPurple">ACADEMIC PATH EXP (UTAR BS)</span>
-                        <span class="text-textGray font-code">CGPA 2.86 / 4.00</span>
-                    </div>
-                    <div class="w-full h-3 bg-darkBg/80 border border-borderNeon rounded-full overflow-hidden p-[2px]">
-                        <div class="h-full bg-gradient-to-r from-neonViolet to-neonPurple rounded-full shadow-[0_0_10px_rgba(217,70,239,0.5)] transition-all duration-1000" style="width: 71.5%"></div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Card 2: SKILL TRACKER (Passive & Active Skills) -->
-            <div class="bg-cardBg/90 backdrop-blur-sm p-6 rounded-2xl neon-border-purple" id="skills">
-                <h2 class="font-cyber font-black text-lg tracking-wider border-b border-borderNeon pb-3 text-transparent bg-clip-text bg-gradient-to-r from-white to-textGray flex justify-between items-center">
-                    <span>SKILL TRACKER</span>
-                    <span class="text-xs text-neonPurple font-code">PASSIVE & ACTIVE</span>
-                </h2>
-
-                <div class="space-y-4 mt-6">
-                    <!-- Python -->
-                    <div class="space-y-1">
-                        <div class="flex justify-between items-center">
-                            <span class="text-sm font-cyber font-bold tracking-wide flex items-center gap-2">
-                                <span class="w-6 h-6 rounded bg-neonPurple/20 text-neonPurple flex items-center justify-center text-xs">01</span>
-                                Python Scripting
-                            </span>
-                            <span class="text-xs font-code font-bold text-neonPurple">85%</span>
-                        </div>
-                        <div class="text-[11px] text-textGray leading-relaxed pl-8">
-                            Basic programming, data handling, simple automation scripts, OOP, and logical problem-solving.
-                        </div>
-                        <div class="pl-8 pt-1">
-                            <div class="w-full h-1.5 bg-darkBg rounded-full overflow-hidden">
-                                <div class="h-full bg-gradient-to-r from-neonViolet to-neonPurple rounded-full" style="width: 85%"></div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- Structured Query Language -->
-                    <div class="space-y-1">
-                        <div class="flex justify-between items-center">
-                            <span class="text-sm font-cyber font-bold tracking-wide flex items-center gap-2">
-                                <span class="w-6 h-6 rounded bg-neonBlue/20 text-neonBlue flex items-center justify-center text-xs">02</span>
-                                Structured Query Language (SQL)
-                            </span>
-                            <span class="text-xs font-code font-bold text-neonBlue">80%</span>
-                        </div>
-                        <div class="text-[11px] text-textGray leading-relaxed pl-8">
-                            Database management & querying, selective filtering (WHERE), joining tables (JOIN), and DML operations.
-                        </div>
-                        <div class="pl-8 pt-1">
-                            <div class="w-full h-1.5 bg-darkBg rounded-full overflow-hidden">
-                                <div class="h-full bg-gradient-to-r from-blue-600 to-neonBlue rounded-full" style="width: 80%"></div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- HTML & CSS -->
-                    <div class="space-y-1">
-                        <div class="flex justify-between items-center">
-                            <span class="text-sm font-cyber font-bold tracking-wide flex items-center gap-2">
-                                <span class="w-6 h-6 rounded bg-emerald-500/20 text-emerald-400 flex items-center justify-center text-xs">03</span>
-                                Web Architecture (HTML & CSS)
-                            </span>
-                            <span class="text-xs font-code font-bold text-emerald-400">82%</span>
-                        </div>
-                        <div class="text-[11px] text-textGray leading-relaxed pl-8">
-                            Semantic layouts (tables, headers, forms) and styled formatting using Flexbox, CSS animations, and responsive patterns.
-                        </div>
-                        <div class="pl-8 pt-1">
-                            <div class="w-full h-1.5 bg-darkBg rounded-full overflow-hidden">
-                                <div class="h-full bg-gradient-to-r from-emerald-600 to-emerald-400 rounded-full" style="width: 82%"></div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- Java -->
-                    <div class="space-y-1">
-                        <div class="flex justify-between items-center">
-                            <span class="text-sm font-cyber font-bold tracking-wide flex items-center gap-2">
-                                <span class="w-6 h-6 rounded bg-amber-500/20 text-amber-400 flex items-center justify-center text-xs">04</span>
-                                Object-Oriented Java
-                            </span>
-                            <span class="text-xs font-code font-bold text-amber-400">75%</span>
-                        </div>
-                        <div class="text-[11px] text-textGray leading-relaxed pl-8">
-                            Classes, objects, inheritance, methods, polymorphism, encapsulation, and robust application architecture.
-                        </div>
-                        <div class="pl-8 pt-1">
-                            <div class="w-full h-1.5 bg-darkBg rounded-full overflow-hidden">
-                                <div class="h-full bg-gradient-to-r from-amber-600 to-amber-400 rounded-full" style="width: 75%"></div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- ================= RIGHT COLUMN: INTERACTIVE PANELS (8 Cols) ================= -->
-        <div class="lg:col-span-8 flex flex-col gap-6">
-            
-            <!-- ROW A: Habit & Project Success Charts -->
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-6" id="stats">
-                
-                <!-- Chart Box 1: GUILD LEADERSHIP -->
-                <div class="bg-cardBg/90 backdrop-blur-sm p-5 rounded-2xl neon-border-purple flex flex-col justify-between min-h-[320px]">
-                    <div>
-                        <div class="flex justify-between items-start border-b border-borderNeon pb-3">
-                            <h3 class="font-cyber font-bold text-sm tracking-wider uppercase text-white">
-                                <i class="fa-solid fa-fire text-neonPurple mr-1.5"></i> Guild Leadership
-                            </h3>
-                            <span class="text-[10px] font-code text-neonPurple px-2 py-0.5 rounded bg-neonPurple/10 border border-neonPurple/20">TEAMWORK HP</span>
-                        </div>
-                        <div class="flex justify-between mt-3 text-[10px] font-code text-textGray">
-                            <div>Led Events: <span class="text-white font-bold">6+ Times</span></div>
-                            <div>Stat Rank: <span class="text-white font-bold">A-Rank Chairperson</span></div>
-                        </div>
-                    </div>
-
-                    <!-- Chart Container -->
-                    <div class="h-44 w-full mt-4 flex items-center justify-center relative">
-                        <canvas id="leadershipChart"></canvas>
-                    </div>
-
-                    <div class="mt-2 pt-2 border-t border-borderNeon/60 flex items-center justify-between text-[10px] font-code">
-                        <span class="text-textGray">Collaboration Intensity</span>
-                        <div class="flex items-center gap-2">
-                            <span class="text-neonPurple font-bold">9.2 / 10 MAX</span>
-                            <div class="w-16 h-1 bg-darkBg rounded-full overflow-hidden">
-                                <div class="h-full bg-neonPurple" style="width: 92%"></div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Chart Box 2: CORE ATTRIBUTES RADAR -->
-                <div class="bg-cardBg/90 backdrop-blur-sm p-5 rounded-2xl neon-border-purple flex flex-col justify-between min-h-[320px]">
-                    <div>
-                        <div class="flex justify-between items-start border-b border-borderNeon pb-3">
-                            <h3 class="font-cyber font-bold text-sm tracking-wider uppercase text-white">
-                                <i class="fa-solid fa-crown text-amber-400 mr-1.5"></i> Core Attributes
-                            </h3>
-                            <span class="text-[10px] font-code text-emerald-400 px-2 py-0.5 rounded bg-emerald-500/10 border border-emerald-500/20">RADAR MATRIX</span>
-                        </div>
-                        <!-- Custom Stats -->
-                        <div class="grid grid-cols-5 gap-1 mt-3 text-center text-[9px] font-cyber text-textGray">
-                            <div>
-                                <div class="text-white font-code text-xs font-bold">85</div>
-                                <span>LOGIC(LOG)</span>
-                            </div>
-                            <div>
-                                <div class="text-white font-code text-xs font-bold">82</div>
-                                <span>FRONTEND(WEB)</span>
-                            </div>
-                            <div>
-                                <div class="text-white font-code text-xs font-bold">80</div>
-                                <span>DATABASE(DAT)</span>
-                            </div>
-                            <div>
-                                <div class="text-white font-code text-xs font-bold">90</div>
-                                <span>COLLAB(COL)</span>
-                            </div>
-                            <div>
-                                <div class="text-white font-code text-xs font-bold">88</div>
-                                <span>ANALYTICS(BIS)</span>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- Radar Chart Container -->
-                    <div class="h-44 w-full mt-2 flex items-center justify-center relative">
-                        <canvas id="capabilitiesChart"></canvas>
-                    </div>
-
-                    <!-- Stats Footer -->
-                    <div class="mt-2 pt-2 border-t border-borderNeon/60 flex items-center justify-between text-[10px] font-code">
-                        <span class="text-textGray">Synergy Boost Status</span>
-                        <span class="text-amber-400 font-bold">SYSTEM DRIVEN <i class="fa-solid fa-bolt"></i></span>
-                    </div>
-                </div>
-            </div>
-
-            <!-- ROW B: Quest Board (Education & Academic Projects) -->
-            <div class="bg-cardBg/90 backdrop-blur-sm p-6 rounded-2xl neon-border-purple" id="quests">
-                <div class="flex justify-between items-center border-b border-borderNeon pb-4 mb-6">
-                    <h2 class="font-cyber font-black text-lg tracking-wider text-transparent bg-clip-text bg-gradient-to-r from-white to-textGray">
-                        <i class="fa-solid fa-scroll text-neonPurple mr-2"></i> QUEST BOARD (Academic Paths & Projects)
-                    </h2>
-                    <div class="flex gap-2">
-                        <span class="text-[10px] font-code text-amber-400 bg-amber-500/10 border border-amber-500/30 px-2.5 py-1 rounded-full flex items-center gap-1">
-                            <i class="fa-solid fa-circle-exclamation text-[8px] animate-ping"></i> MAIN PATH (2023-2026)
-                        </span>
-                        <span class="text-[10px] font-code text-emerald-400 bg-emerald-500/10 border border-emerald-500/30 px-2.5 py-1 rounded-full flex items-center gap-1">
-                            COMPLETED (4)
-                        </span>
-                    </div>
-                </div>
-
-                <!-- Quest timeline -->
-                <div class="relative pl-6 border-l border-borderNeon space-y-8 my-4">
-                    
-                    <!-- Quest Item 1: UTAR Bachelor -->
-                    <div class="relative">
-                        <div class="absolute -left-[31px] top-1 w-4 h-4 rounded-full bg-darkBg border-2 border-neonPurple flex items-center justify-center">
-                            <div class="w-1.5 h-1.5 rounded-full bg-neonPurple animate-ping"></div>
-                        </div>
-                        
-                        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                            <div>
-                                <h4 class="font-cyber font-bold text-base text-white hover:text-neonPurple transition-colors">
-                                    【Main Quest: Universiti Tunku Abdul Rahman (UTAR)】
-                                </h4>
-                                <p class="text-xs text-textGray font-code mt-0.5">2023 - 2026 | Bachelor of Information Systems (Honours) Business Information Systems</p>
-                            </div>
-                            <span class="self-start sm:self-center px-3 py-1 rounded bg-neonPurple/15 border border-neonPurple/40 text-[10px] font-cyber font-bold tracking-wider text-neonPurple uppercase">
-                                PROGRESSING (CGPA 2.86)
-                            </span>
-                        </div>
-                        
-                        <div class="text-sm text-textGray mt-3 leading-relaxed space-y-3">
-                            <p class="font-semibold text-white/90">Main Quest Accomplishments:</p>
-                            
-                            <!-- UTAR Event Planning System -->
-                            <div class="bg-darkBg/40 border border-borderNeon/40 rounded-lg p-3 space-y-1">
-                                <div class="flex justify-between text-xs font-bold text-white">
-                                    <span>🛡️ UTAR Event Planning Management System (Final Year Project)</span>
-                                    <span class="text-neonPurple font-code">EPIC QUEST</span>
-                                </div>
-                                <p class="text-xs">
-                                    Built a web-based system to assist UTAR event organizers and students with event registration and management. Enabled UTAR staff to review and approve event requests, improving workflow efficiency. Utilized <b>HTML, CSS, JavaScript, and SQL</b> for front-end interface and database integration.
-                                </p>
-                            </div>
-
-                            <!-- Fundamentals of Business System -->
-                            <div class="bg-darkBg/40 border border-borderNeon/40 rounded-lg p-3 space-y-1">
-                                <div class="flex justify-between text-xs font-bold text-white">
-                                    <span>📊 Fundamentals of Business System (MonsoonSIM)</span>
-                                    <span class="text-neonBlue font-code">SIMULATION QUEST</span>
-                                </div>
-                                <p class="text-xs">
-                                    Managed Low Family Juice's B2B beverage sales using MonsoonSIM, handling inventory, procurement, and finance in a simulated business environment. Gained practical experience in business process management and decision-making.
-                                </p>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- Quest Item 2: Diploma in Software Engineering -->
-                    <div class="relative">
-                        <div class="absolute -left-[31px] top-1 w-4 h-4 rounded-full bg-darkBg border-2 border-emerald-400 flex items-center justify-center">
-                            <div class="w-1.5 h-1.5 rounded-full bg-emerald-400"></div>
-                        </div>
-                        
-                        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                            <div>
-                                <h4 class="font-cyber font-bold text-base text-white hover:text-emerald-400 transition-colors">
-                                    【Sub Quest: International College of Advanced Technology Sarawak (iCATS)】
-                                </h4>
-                                <p class="text-xs text-textGray font-code mt-0.5">2020 - 2023 | Diploma in Software Engineering</p>
-                            </div>
-                            <span class="self-start sm:self-center px-3 py-1 rounded bg-emerald-500/10 border border-emerald-500/30 text-[10px] font-cyber font-bold tracking-wider text-emerald-400 uppercase">
-                                COMPLETED (CGPA 3.22) <i class="fa-solid fa-circle-check ml-1"></i>
-                            </span>
-                        </div>
-                        
-                        <div class="text-sm text-textGray mt-3 leading-relaxed space-y-3">
-                            <p class="font-semibold text-white/90">Sub Quest Accomplishments:</p>
-                            
-                            <!-- Library Management System -->
-                            <div class="bg-darkBg/40 border border-borderNeon/40 rounded-lg p-3 space-y-1">
-                                <div class="flex justify-between text-xs font-bold text-white">
-                                    <span>🐍 Library Management System (Python Project)</span>
-                                    <span class="text-emerald-400 font-code">PYTHON SKILL UP</span>
-                                </div>
-                                <p class="text-xs">
-                                    Developed a library management system using Python to handle book records, user registrations, borrowing, and returns. Implemented data validation, reporting, and basic file/database storage, gaining experience in object-oriented programming and practical Python applications.
-                                </p>
-                            </div>
-
-                            <!-- Frontend Application Development -->
-                            <div class="bg-darkBg/40 border border-borderNeon/40 rounded-lg p-3 space-y-1">
-                                <div class="flex justify-between text-xs font-bold text-white">
-                                    <span>🌐 Frontend Application Development – Tourism Websites</span>
-                                    <span class="text-emerald-400 font-code">FRONTEND SKILL UP</span>
-                                </div>
-                                <p class="text-xs">
-                                    Developed interactive tourism websites using HTML, CSS, and JavaScript to structure content and create a user-friendly and visually appealing interface for travelers. Learned responsive design and basic front-end programming techniques.
-                                </p>
-                            </div>
-                        </div>
-                    </div>
-
-                </div>
-            </div>
-
-            <!-- ROW C: Event Organizing & Leadership -->
-            <div class="bg-cardBg/90 backdrop-blur-sm p-6 rounded-2xl neon-border-purple" id="guild">
-                <h2 class="font-cyber font-black text-lg tracking-wider border-b border-borderNeon pb-3 mb-6 text-transparent bg-clip-text bg-gradient-to-r from-white to-textGray flex justify-between items-center">
-                    <span><i class="fa-solid fa-users text-neonPurple mr-2"></i> GUILD RAID ARCHIVES (Organizing & Leadership)</span>
-                    <span class="text-xs text-neonPurple font-code">ORGANIZING RECORD</span>
-                </h2>
-
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <!-- Event 1 -->
-                    <div class="bg-darkBg/60 border border-borderNeon/60 rounded-xl p-4 flex gap-3 hover:border-neonPurple transition-all">
-                        <div class="w-10 h-10 rounded-lg bg-neonPurple/10 flex items-center justify-center text-neonPurple text-lg shrink-0">
-                            <i class="fa-solid fa-people-roof"></i>
-                        </div>
-                        <div>
-                            <h4 class="font-cyber font-bold text-xs text-white">Chairperson - Ice Breaking Telematch</h4>
-                            <span class="block text-[10px] text-neonPurple font-code mt-0.5">UTAR - Mar 2026</span>
-                            <p class="text-[11px] text-textGray mt-1.5 leading-relaxed">
-                                Led overall event planning and execution, coordinating multiple sub-teams, resource distribution, and ensuring smooth event operations.
-                            </p>
-                        </div>
-                    </div>
-
-                    <!-- Event 2 -->
-                    <div class="bg-darkBg/60 border border-borderNeon/60 rounded-xl p-4 flex gap-3 hover:border-neonBlue transition-all">
-                        <div class="w-10 h-10 rounded-lg bg-neonBlue/10 flex items-center justify-center text-neonBlue text-lg shrink-0">
-                            <i class="fa-solid fa-dharmachakra"></i>
-                        </div>
-                        <div>
-                            <h4 class="font-cyber font-bold text-xs text-white">Chairperson - Buddhist Society Welcoming Night</h4>
-                            <span class="block text-[10px] text-neonBlue font-code mt-0.5">UTAR - Oct 2024</span>
-                            <p class="text-[11px] text-textGray mt-1.5 leading-relaxed">
-                                Managed event flow, team coordination, external relations, and strategic logistics planning for a large-scale student onboarding campaign.
-                            </p>
-                        </div>
-                    </div>
-
-                    <!-- Event 3 -->
-                    <div class="bg-darkBg/60 border border-borderNeon/60 rounded-xl p-4 flex gap-3 hover:border-emerald-400 transition-all">
-                        <div class="w-10 h-10 rounded-lg bg-emerald-500/10 flex items-center justify-center text-emerald-400 text-lg shrink-0">
-                            <i class="fa-solid fa-compass"></i>
-                        </div>
-                        <div>
-                            <h4 class="font-cyber font-bold text-xs text-white">Program Leader - ISC 2025</h4>
-                            <span class="block text-[10px] text-emerald-400 font-code mt-0.5">UTAR - 2025</span>
-                            <p class="text-[11px] text-textGray mt-1.5 leading-relaxed">
-                                Spearheaded structural program planning and execution, guaranteeing that student activities were well-organized, timed, and engaging.
-                            </p>
-                        </div>
-                    </div>
-
-                    <!-- Event 4 -->
-                    <div class="bg-darkBg/60 border border-borderNeon/60 rounded-xl p-4 flex gap-3 hover:border-amber-400 transition-all">
-                        <div class="w-10 h-10 rounded-lg bg-amber-500/10 flex items-center justify-center text-amber-400 text-lg shrink-0">
-                            <i class="fa-solid fa-laptop-code"></i>
-                        </div>
-                        <div>
-                            <h4 class="font-cyber font-bold text-xs text-white">Technical Head - Sport Glory Color Run</h4>
-                            <span class="block text-[10px] text-amber-400 font-code mt-0.5">UTAR - Technical</span>
-                            <p class="text-[11px] text-textGray mt-1.5 leading-relaxed">
-                                Oversaw full hardware setup, technical troubleshooting, and ensured high-fidelity operations of PA system equipment.
-                            </p>
-                        </div>
-                    </div>
-
-                    <!-- Event 5 -->
-                    <div class="bg-darkBg/60 border border-borderNeon/60 rounded-xl p-4 flex gap-3 hover:border-rose-400 transition-all">
-                        <div class="w-10 h-10 rounded-lg bg-rose-500/10 flex items-center justify-center text-rose-400 text-lg shrink-0">
-                            <i class="fa-solid fa-handshake-angle"></i>
-                        </div>
-                        <div>
-                            <h4 class="font-cyber font-bold text-xs text-white">HR & Sponsor Committee - IBT</h4>
-                            <span class="block text-[10px] text-rose-400 font-code mt-0.5">UTAR - Feb 2025</span>
-                            <p class="text-[11px] text-textGray mt-1.5 leading-relaxed">
-                                Managed participant onboarding workflows, coordinated communications, and assisted in sponsorship pitching.
-                            </p>
-                        </div>
-                    </div>
-
-                    <!-- Event 6 -->
-                    <div class="bg-darkBg/60 border border-borderNeon/60 rounded-xl p-4 flex gap-3 hover:border-purple-400 transition-all">
-                        <div class="w-10 h-10 rounded-lg bg-purple-500/10 flex items-center justify-center text-purple-400 text-lg shrink-0">
-                            <i class="fa-solid fa-user-gear"></i>
-                        </div>
-                        <div>
-                            <h4 class="font-cyber font-bold text-xs text-white">HR Committee - Warrior 3.0</h4>
-                            <span class="block text-[10px] text-purple-400 font-code mt-0.5">UTAR - Warrior 3.0</span>
-                            <p class="text-[11px] text-textGray mt-1.5 leading-relaxed">
-                                Assisted in handling manpower allocation, shifts scheduling, participant registration database, and internal synchronization.
-                            </p>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- ROW D: Gold Farming Quests (Working Experience) -->
-            <div class="bg-cardBg/90 backdrop-blur-sm p-6 rounded-2xl neon-border-purple" id="work">
-                <h2 class="font-cyber font-black text-lg tracking-wider border-b border-borderNeon pb-3 mb-6 text-transparent bg-clip-text bg-gradient-to-r from-white to-textGray flex justify-between items-center">
-                    <span><i class="fa-solid fa-coins text-amber-400 mr-2"></i> GOLD FARMING QUESTS (Working Experience)</span>
-                    <span class="text-xs text-amber-400 font-code">WORK EXP</span>
-                </h2>
-
-                <div class="space-y-4">
-                    <!-- Job 1 -->
-                    <div class="bg-darkBg/40 border border-borderNeon/40 rounded-xl p-4 flex flex-col sm:flex-row justify-between gap-3 hover:border-amber-400 transition-all">
-                        <div class="space-y-1.5">
-                            <span class="text-[10px] font-cyber tracking-widest text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/20">CARLSBERG PROMOTER</span>
-                            <h4 class="font-cyber font-bold text-sm text-white">Carlsberg Brand Promoter / Tristar, Taman Perindu, Malaysia</h4>
-                            <ul class="list-disc list-inside text-xs text-textGray space-y-1 pl-1">
-                                <li>Engaged customers through energetic brand presentations, product briefings, and campaigns.</li>
-                                <li>Built strong customer rapport and enhanced commercial brand loyalty.</li>
-                                <li>**Achieved exceptional sales records and received high recognition for sales excellence**.</li>
-                            </ul>
-                        </div>
-                        <div class="text-right shrink-0">
-                            <span class="font-code text-xs text-white block">Jan 2026 - Jan 2026</span>
-                            <span class="text-[10px] font-cyber text-amber-400 block mt-1">HIGH PERFORMANCE ⭐</span>
-                        </div>
-                    </div>
-
-                    <!-- Job 2 -->
-                    <div class="bg-darkBg/40 border border-borderNeon/40 rounded-xl p-4 flex flex-col sm:flex-row justify-between gap-3">
-                        <div class="space-y-1.5">
-                            <span class="text-[10px] font-cyber tracking-widest text-textGray bg-cardBg px-2 py-0.5 rounded border border-borderNeon">BAKKWA PROMOTER</span>
-                            <h4 class="font-cyber font-bold text-sm text-white">Bakkwa Promoter / New Eastern BBQ Meats, Singapore</h4>
-                            <ul class="list-disc list-inside text-xs text-textGray space-y-1 pl-1">
-                                <li>Promoted traditional meat products and actively engaged regional and international customers to drive peak holiday sales.</li>
-                                <li>Maintained eye-catching product showcases and ensured strict hygiene and cleanliness.</li>
-                            </ul>
-                        </div>
-                        <div class="text-right shrink-0">
-                            <span class="font-code text-xs text-white block">Jan 2024 - Feb 2024</span>
-                            <span class="text-[10px] font-cyber text-textGray block mt-1">SINGAPORE FIELD</span>
-                        </div>
-                    </div>
-
-                    <!-- Job 3 -->
-                    <div class="bg-darkBg/40 border border-borderNeon/40 rounded-xl p-4 flex flex-col sm:flex-row justify-between gap-3">
-                        <div class="space-y-1.5">
-                            <span class="text-[10px] font-cyber tracking-widest text-textGray bg-cardBg px-2 py-0.5 rounded border border-borderNeon">CASHIER</span>
-                            <h4 class="font-cyber font-bold text-sm text-white">Cashier / Everrise Pandungan Branch, Sarawak, Malaysia</h4>
-                            <ul class="list-disc list-inside text-xs text-textGray space-y-1 pl-1">
-                                <li>Operated POS system with zero discrepancies, handling complex multi-method financial transactions daily.</li>
-                                <li>Processed customer bills with absolute precision while delivering polite, highly professional service.</li>
-                            </ul>
-                        </div>
-                        <div class="text-right shrink-0">
-                            <span class="font-code text-xs text-white block">Dec 2019 - Jan 2020</span>
-                            <span class="text-[10px] font-cyber text-textGray block mt-1">TRANSACTION TRUST</span>
-                        </div>
-                    </div>
-
-                    <!-- Job 4 -->
-                    <div class="bg-darkBg/40 border border-borderNeon/40 rounded-xl p-4 flex flex-col sm:flex-row justify-between gap-3">
-                        <div class="space-y-1.5">
-                            <span class="text-[10px] font-cyber tracking-widest text-textGray bg-cardBg px-2 py-0.5 rounded border border-borderNeon">WAITER</span>
-                            <h4 class="font-cyber font-bold text-sm text-white">Waiter / Hong Kong Noodle House, Sarawak, Malaysia</h4>
-                            <ul class="list-disc list-inside text-xs text-textGray space-y-1 pl-1">
-                                <li>Delivered prompt, friendly, and patient service, organizing and dispatching tables orders efficiently.</li>
-                            </ul>
-                        </div>
-                        <div class="text-right shrink-0">
-                            <span class="font-code text-xs text-white block">Nov 2017 - Dec 2017</span>
-                            <span class="text-[10px] font-cyber text-textGray block mt-1">FIRST STEPS</span>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- ROW E: Inventory & Achievement -->
-            <div class="bg-cardBg/90 backdrop-blur-sm p-6 rounded-2xl neon-border-purple" id="inventory">
-                <h2 class="font-cyber font-black text-lg tracking-wider border-b border-borderNeon pb-3 mb-6 text-transparent bg-clip-text bg-gradient-to-r from-white to-textGray flex justify-between items-center">
-                    <span><i class="fa-solid fa-box text-neonPurple mr-2"></i> Achievements & Inventory</span>
-                    <span class="text-xs text-neonPurple font-code">EQUIPPED SUCCESS</span>
-                </h2>
-
-                <!-- Accomplishments and Awards -->
-                <div class="mb-6 grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <div class="bg-darkBg/60 border border-borderNeon rounded-xl p-4 text-center hover:border-neonPurple transition-all">
-                        <i class="fa-solid fa-trophy text-amber-400 text-3xl mb-2 animate-bounce"></i>
-                        <h4 class="font-cyber font-bold text-xs text-white">Swinburne Competition</h4>
-                        <span class="block text-[10px] text-neonPurple font-code mt-1">1st Runner Up - Web Dev 🥈</span>
-                    </div>
-
-                    <div class="bg-darkBg/60 border border-borderNeon rounded-xl p-4 text-center hover:border-neonBlue transition-all">
-                        <i class="fa-solid fa-plane text-neonBlue text-3xl mb-2 animate-pulse"></i>
-                        <h4 class="font-cyber font-bold text-xs text-white">Aircraft Designing</h4>
-                        <span class="block text-[10px] text-neonBlue font-code mt-1">Designed MYAIRLINE plane body at ME Info Media ✈️</span>
-                    </div>
-
-                    <div class="bg-darkBg/60 border border-borderNeon rounded-xl p-4 text-center hover:border-emerald-400 transition-all">
-                        <i class="fa-solid fa-file-signature text-emerald-400 text-3xl mb-2"></i>
-                        <h4 class="font-cyber font-bold text-xs text-white">Workshop Complete</h4>
-                        <span class="block text-[10px] text-emerald-400 font-code mt-1">Awarded completion certificates for professional workshops 🎓</span>
-                    </div>
-                </div>
-
-                <div class="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-5 gap-4">
-                    
-                    <!-- Item 1: Python -->
-                    <div class="bg-darkBg/80 p-4 rounded-xl border border-borderNeon hover:border-neonPurple hover:scale-105 transition-all duration-300 text-center flex flex-col items-center justify-between group cursor-pointer relative">
-                        <div class="absolute top-1.5 right-1.5 text-[9px] font-code text-neonPurple bg-neonPurple/10 px-1 rounded">SSR</div>
-                        <div class="w-12 h-12 rounded-full bg-neonPurple/10 flex items-center justify-center text-neonPurple text-xl group-hover:scale-110 transition-transform">
-                            <i class="fa-brands fa-python"></i>
-                        </div>
-                        <div class="mt-3">
-                            <span class="block font-cyber font-bold text-xs text-white">Python 3</span>
-                            <span class="block text-[9px] text-textGray font-code mt-0.5">Core Weapon</span>
-                        </div>
-                    </div>
-
-                    <!-- Item 2: SQL -->
-                    <div class="bg-darkBg/80 p-4 rounded-xl border border-borderNeon hover:border-neonBlue hover:scale-105 transition-all duration-300 text-center flex flex-col items-center justify-between group cursor-pointer relative">
-                        <div class="absolute top-1.5 right-1.5 text-[9px] font-code text-neonBlue bg-neonBlue/10 px-1 rounded">SR</div>
-                        <div class="w-12 h-12 rounded-full bg-neonBlue/10 flex items-center justify-center text-neonBlue text-xl group-hover:scale-110 transition-transform">
-                            <i class="fa-solid fa-database"></i>
-                        </div>
-                        <div class="mt-3">
-                            <span class="block font-cyber font-bold text-xs text-white">SQL / DB</span>
-                            <span class="block text-[9px] text-textGray font-code mt-0.5">Store & Guide</span>
-                        </div>
-                    </div>
-
-                    <!-- Item 3: HTML5 -->
-                    <div class="bg-darkBg/80 p-4 rounded-xl border border-borderNeon hover:border-amber-400 hover:scale-105 transition-all duration-300 text-center flex flex-col items-center justify-between group cursor-pointer relative">
-                        <div class="absolute top-1.5 right-1.5 text-[9px] font-code text-amber-400 bg-amber-400/10 px-1 rounded">R</div>
-                        <div class="w-12 h-12 rounded-full bg-amber-400/10 flex items-center justify-center text-amber-400 text-xl group-hover:scale-110 transition-transform">
-                            <i class="fa-brands fa-html5"></i>
-                        </div>
-                        <div class="mt-3">
-                            <span class="block font-cyber font-bold text-xs text-white">HTML5 & CSS3</span>
-                            <span class="block text-[9px] text-textGray font-code mt-0.5">Structure Shield</span>
-                        </div>
-                    </div>
-
-                    <!-- Item 4: Java -->
-                    <div class="bg-darkBg/80 p-4 rounded-xl border border-borderNeon hover:border-emerald-400 hover:scale-105 transition-all duration-300 text-center flex flex-col items-center justify-between group cursor-pointer relative">
-                        <div class="absolute top-1.5 right-1.5 text-[9px] font-code text-emerald-400 bg-emerald-400/10 px-1 rounded">SR</div>
-                        <div class="w-12 h-12 rounded-full bg-emerald-400/10 flex items-center justify-center text-emerald-400 text-xl group-hover:scale-110 transition-transform">
-                            <i class="fa-brands fa-java"></i>
-                        </div>
-                        <div class="mt-3">
-                            <span class="block font-cyber font-bold text-xs text-white">Java OOP</span>
-                            <span class="block text-[9px] text-textGray font-code mt-0.5">Object Scroll</span>
-                        </div>
-                    </div>
-
-                    <!-- Item 5: MonsoonSIM -->
-                    <div class="bg-darkBg/80 p-4 rounded-xl border border-borderNeon hover:border-rose-400 hover:scale-105 transition-all duration-300 text-center flex flex-col items-center justify-between group cursor-pointer relative">
-                        <div class="absolute top-1.5 right-1.5 text-[9px] font-code text-rose-400 bg-rose-400/10 px-1 rounded">SSR</div>
-                        <div class="w-12 h-12 rounded-full bg-rose-400/10 flex items-center justify-center text-rose-400 text-xl group-hover:scale-110 transition-transform">
-                            <i class="fa-solid fa-chart-pie"></i>
-                        </div>
-                        <div class="mt-3">
-                            <span class="block font-cyber font-bold text-xs text-white">MonsoonSIM</span>
-                            <span class="block text-[9px] text-textGray font-code mt-0.5">Business Grail</span>
-                        </div>
-                    </div>
-
-                </div>
-            </div>
-
-            <!-- Reference Section -->
-            <div class="bg-cardBg/90 backdrop-blur-sm p-6 rounded-2xl neon-border-purple" id="reference">
-                <h2 class="font-cyber font-black text-sm tracking-wider border-b border-borderNeon pb-3 mb-4 text-transparent bg-clip-text bg-gradient-to-r from-white to-textGray uppercase">
-                    <i class="fa-solid fa-signature text-neonPurple mr-2"></i> Character Reference
-                </h2>
-                <div class="flex flex-col md:flex-row justify-between items-start gap-4">
-                    <div class="space-y-1">
-                        <h4 class="font-cyber font-bold text-sm text-white">Nurul Syafidah binti Jamil</h4>
-                        <p class="text-xs text-neonPurple font-code">Lecturer / Academic Advisor</p>
-                        <p class="text-xs text-textGray">Universiti Tunku Abdul Rahman (UTAR)</p>
-                        <p class="text-xs text-textGray">Faculty of Information and Communication Technology, Department of Digital Technology Economy</p>
-                    </div>
-                    <div class="flex flex-col gap-1 items-start md:items-end">
-                        <span class="text-xs font-code text-white"><i class="fa-solid fa-envelope text-neonBlue mr-1"></i> syafidahj@utar.edu.my</span>
-                        <span class="text-[10px] font-cyber text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">VERIFIED MENTOR</span>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Footer Contact -->
-            <div class="bg-cardBg/90 backdrop-blur-sm p-6 rounded-2xl neon-border-purple flex flex-col md:flex-row items-center justify-between gap-6">
-                <div class="flex items-center gap-4">
-                    <div class="relative w-16 h-16 flex items-center justify-center">
-                        <svg class="w-16 h-16 transform -rotate-90">
-                            <circle cx="32" cy="32" r="28" stroke="#1c1917" stroke-width="4" fill="transparent" />
-                            <circle cx="32" cy="32" r="28" stroke="#d946ef" stroke-width="4" fill="transparent" 
-                                    stroke-dasharray="175" stroke-dashoffset="35" />
-                        </svg>
-                        <div class="absolute font-cyber font-black text-xs text-white">80%</div>
-                    </div>
-                    <div>
-                        <h4 class="font-cyber font-bold text-sm tracking-wide text-white">SYSTEM OBJECTIVE</h4>
-                        <p class="text-xs text-textGray leading-relaxed mt-1">
-                            “Seeking to join a high-performing tech guild/employer to conquer challenging digital dungeons and commercial software peaks!”
-                        </p>
-                    </div>
-                </div>
-
-                <!-- Action Button for contacting -->
-                <a href="mailto:jjun8647@gmail.com" class="px-6 py-3 bg-gradient-to-r from-neonViolet to-neonPurple hover:from-neonViolet/90 hover:to-neonPurple/90 rounded-xl text-sm font-cyber font-bold tracking-wider text-white hover:scale-105 active:scale-95 transition-all flex items-center gap-2 shadow-lg shadow-neonPurple/30">
-                    <i class="fa-solid fa-paper-plane animate-bounce"></i> CONTACT ME
+                <a href="status.html" class="px-6 py-3 bg-gradient-to-r from-neonViolet to-neonPurple rounded-xl text-sm font-cyber font-bold tracking-wider text-white hover:scale-105 transition-all shadow-lg shadow-neonPurple/30">
+                    <i class="fa-solid fa-rocket mr-2"></i> ENTER STATUS PAGE
                 </a>
             </div>
+        </section>
 
-        </div>
+        <section class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+            <a href="status.html" class="bg-cardBg/90 backdrop-blur-sm p-6 rounded-2xl neon-border-purple hover:-translate-y-1 transition-all block">
+                <div class="flex items-center justify-between mb-4">
+                    <h2 class="font-cyber font-black text-lg tracking-wider text-white">STATUS</h2>
+                    <i class="fa-solid fa-user text-neonPurple"></i>
+                </div>
+                <p class="text-sm text-textGray leading-relaxed">个人概况、联系方式与技能条，像进入角色档案一样查看。</p>
+            </a>
 
+            <a href="matrix.html" class="bg-cardBg/90 backdrop-blur-sm p-6 rounded-2xl neon-border-purple hover:-translate-y-1 transition-all block">
+                <div class="flex items-center justify-between mb-4">
+                    <h2 class="font-cyber font-black text-lg tracking-wider text-white">MATRIX</h2>
+                    <i class="fa-solid fa-chart-line text-neonBlue"></i>
+                </div>
+                <p class="text-sm text-textGray leading-relaxed">领导力、能力雷达与核心数值，用图表呈现你的成长轨迹。</p>
+            </a>
+
+            <a href="quests.html" class="bg-cardBg/90 backdrop-blur-sm p-6 rounded-2xl neon-border-purple hover:-translate-y-1 transition-all block">
+                <div class="flex items-center justify-between mb-4">
+                    <h2 class="font-cyber font-black text-lg tracking-wider text-white">QUESTS</h2>
+                    <i class="fa-solid fa-scroll text-emerald-400"></i>
+                </div>
+                <p class="text-sm text-textGray leading-relaxed">教育背景、项目经历与学术任务，像一份成长任务清单。</p>
+            </a>
+
+            <a href="events.html" class="bg-cardBg/90 backdrop-blur-sm p-6 rounded-2xl neon-border-purple hover:-translate-y-1 transition-all block">
+                <div class="flex items-center justify-between mb-4">
+                    <h2 class="font-cyber font-black text-lg tracking-wider text-white">EVENTS</h2>
+                    <i class="fa-solid fa-users text-amber-400"></i>
+                </div>
+                <p class="text-sm text-textGray leading-relaxed">活动策划、社团组织与工作经历，展示你真正带队和执行的能力。</p>
+            </a>
+
+            <a href="inventory.html" class="bg-cardBg/90 backdrop-blur-sm p-6 rounded-2xl neon-border-purple hover:-translate-y-1 transition-all block">
+                <div class="flex items-center justify-between mb-4">
+                    <h2 class="font-cyber font-black text-lg tracking-wider text-white">INVENTORY</h2>
+                    <i class="fa-solid fa-box text-rose-400"></i>
+                </div>
+                <p class="text-sm text-textGray leading-relaxed">成就、奖项与技能道具，像打开你的装备栏一样浏览。</p>
+            </a>
+
+            <div class="bg-cardBg/90 backdrop-blur-sm p-6 rounded-2xl neon-border-purple">
+                <div class="flex items-center justify-between mb-4">
+                    <h2 class="font-cyber font-black text-lg tracking-wider text-white">CONTACT</h2>
+                    <i class="fa-solid fa-paper-plane text-neonPurple"></i>
+                </div>
+                <p class="text-sm text-textGray leading-relaxed">如果你愿意，我也可以继续把这个版本再优化成“更像官网主页”的样子。</p>
+                <a href="mailto:jjun8647@gmail.com" class="inline-flex items-center gap-2 mt-4 text-sm font-cyber text-neonPurple">Email Me <i class="fa-solid fa-arrow-right"></i></a>
+            </div>
+        </section>
     </main>
-
-    <!-- JS script to initialize the Chart.js diagrams with neon effects -->
-    <script>
-        // Set styling defaults for dark mode charts
-        Chart.defaults.color = '#a0aec0';
-        Chart.defaults.font.family = 'Fira Code, monospace';
-
-        // 1. LEADERSHIP ROLES DISTRIBUTION (Doughnut Chart)
-        const ctxLead = document.getElementById('leadershipChart').getContext('2d');
-        new Chart(ctxLead, {
-            type: 'doughnut',
-            data: {
-                labels: ['Chairperson', 'Program Leader', 'Technical Head', 'HR / Sponsorship'],
-                datasets: [{
-                    data: [2, 1, 1, 2],
-                    backgroundColor: [
-                        'rgba(217, 70, 239, 0.7)',  // neonPurple
-                        'rgba(59, 130, 246, 0.7)',   // neonBlue
-                        'rgba(16, 185, 129, 0.7)',   // emerald
-                        'rgba(245, 158, 11, 0.7)'    // amber
-                    ],
-                    borderColor: '#12121e',
-                    borderWidth: 2,
-                }]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                plugins: {
-                    legend: {
-                        position: 'bottom',
-                        labels: {
-                            font: {
-                                size: 9
-                            },
-                            boxWidth: 10
-                        }
-                    }
-                },
-                cutout: '65%'
-            }
-        });
-
-        // 2. RADAR CHART for Capabilities (Fully populated for Low Fang Jun)
-        const ctxCap = document.getElementById('capabilitiesChart').getContext('2d');
-        new Chart(ctxCap, {
-            type: 'radar',
-            data: {
-                labels: ['Python Logic', 'Frontend Web', 'SQL Database', 'Team Leadership', 'BIS Business Insights'],
-                datasets: [{
-                    label: 'Attribute Points',
-                    data: [85, 82, 80, 90, 88],
-                    borderColor: '#3b82f6',
-                    borderWidth: 2,
-                    backgroundColor: 'rgba(59, 130, 246, 0.2)',
-                    pointBackgroundColor: '#3b82f6',
-                    pointBorderColor: '#fff',
-                    pointHoverBackgroundColor: '#fff',
-                    pointHoverBorderColor: '#3b82f6'
-                }]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                plugins: {
-                    legend: {
-                        display: false
-                    }
-                },
-                scales: {
-                    r: {
-                        angleLines: {
-                            color: 'rgba(45, 27, 78, 0.4)'
-                        },
-                        grid: {
-                            color: 'rgba(45, 27, 78, 0.4)'
-                        },
-                        pointLabels: {
-                            font: {
-                                size: 9,
-                                family: 'Orbitron, sans-serif'
-                            },
-                            color: '#a0aec0'
-                        },
-                        ticks: {
-                            display: false,
-                            stepSize: 20
-                        },
-                        min: 0,
-                        max: 100
-                    }
-                }
-            }
-        });
-    </script>
 </body>
 </html>

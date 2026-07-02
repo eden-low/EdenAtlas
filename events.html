@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Events | Low Fang Jun</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;600&family=Orbitron:wght@400;700;900&family=Inter:wght@300;400;600;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <link rel="stylesheet" href="styles.css" />
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            darkBg: '#09090e',
+            cardBg: '#12121e',
+            borderNeon: '#2d1b4e',
+            neonPurple: '#d946ef',
+            neonBlue: '#3b82f6',
+            neonViolet: '#8b5cf6',
+            textGray: '#a0aec0',
+          },
+          fontFamily: {
+            cyber: ['Orbitron', 'sans-serif'],
+            code: ['Fira Code', 'monospace'],
+            sans: ['Inter', 'sans-serif'],
+          }
+        }
+      }
+    }
+  </script>
+</head>
+<body class="bg-darkBg text-white font-sans grid-bg min-h-screen pb-12">
+  <header class="max-w-7xl mx-auto px-4 pt-6">
+    <div class="bg-cardBg/80 backdrop-blur-md neon-border-purple rounded-2xl px-6 py-4 flex flex-col md:flex-row items-center justify-between gap-4">
+      <div class="flex items-center gap-3">
+        <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-neonViolet to-neonPurple flex items-center justify-center shadow-lg shadow-neonPurple/20">
+          <i class="fa-solid fa-shield-halved text-white text-lg animate-pulse"></i>
+        </div>
+        <div>
+          <span class="font-cyber font-black text-xl tracking-widest text-transparent bg-clip-text bg-gradient-to-r from-white to-neonPurple">LOW FANG JUN</span>
+          <span class="text-[10px] block text-neonPurple font-code font-bold tracking-widest -mt-1">SYSTEM LEVELING ONLINE</span>
+        </div>
+      </div>
+      <nav class="flex flex-wrap items-center justify-center gap-4 text-sm font-cyber font-semibold tracking-wider text-textGray">
+        <a href="index.html" class="hover:text-neonPurple transition-colors flex items-center gap-1.5"><i class="fa-solid fa-house text-xs"></i> Home</a>
+        <a href="status.html" class="hover:text-neonPurple transition-colors flex items-center gap-1.5"><i class="fa-solid fa-user text-xs"></i> Status</a>
+        <a href="matrix.html" class="hover:text-neonPurple transition-colors flex items-center gap-1.5"><i class="fa-solid fa-chart-line text-xs"></i> Matrix</a>
+        <a href="quests.html" class="hover:text-neonPurple transition-colors flex items-center gap-1.5"><i class="fa-solid fa-scroll text-xs"></i> Quests</a>
+        <a href="events.html" class="hover:text-neonPurple transition-colors flex items-center gap-1.5"><i class="fa-solid fa-users text-xs"></i> Events</a>
+        <a href="inventory.html" class="hover:text-neonPurple transition-colors flex items-center gap-1.5"><i class="fa-solid fa-briefcase text-xs"></i> Inventory</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="max-w-6xl mx-auto px-4 mt-8 space-y-6">
+    <section class="bg-cardBg/90 backdrop-blur-sm p-6 rounded-2xl neon-border-purple">
+      <h1 class="font-cyber font-black text-2xl text-white">Guild Raid Archives</h1>
+      <p class="text-textGray mt-2">Leadership, organizing, and event execution experience.</p>
+      <div class="mt-6 grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div class="bg-darkBg/60 rounded-xl p-4 border border-borderNeon">
+          <h2 class="font-cyber font-bold text-white">Chairperson - Ice Breaking Telematch</h2>
+          <p class="text-sm text-textGray mt-2">Led overall event planning and coordination across multiple teams.</p>
+        </div>
+        <div class="bg-darkBg/60 rounded-xl p-4 border border-borderNeon">
+          <h2 class="font-cyber font-bold text-white">Chairperson - Buddhist Society Welcoming Night</h2>
+          <p class="text-sm text-textGray mt-2">Managed event flow, logistics and cross-team communication.</p>
+        </div>
+        <div class="bg-darkBg/60 rounded-xl p-4 border border-borderNeon">
+          <h2 class="font-cyber font-bold text-white">Program Leader - ISC 2025</h2>
+          <p class="text-sm text-textGray mt-2">Organized student activities and kept the program structure running smoothly.</p>
+        </div>
+        <div class="bg-darkBg/60 rounded-xl p-4 border border-borderNeon">
+          <h2 class="font-cyber font-bold text-white">Technical Head - Sport Glory Color Run</h2>
+          <p class="text-sm text-textGray mt-2">Handled technical setup and troubleshooting for event equipment.</p>
+        </div>
+      </div>
+    </section>
+  </main>
+</body>
+</html>

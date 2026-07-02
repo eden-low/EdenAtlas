@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Status | Low Fang Jun</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;600&family=Orbitron:wght@400;700;900&family=Inter:wght@300;400;600;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <link rel="stylesheet" href="styles.css" />
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            darkBg: '#09090e',
+            cardBg: '#12121e',
+            borderNeon: '#2d1b4e',
+            neonPurple: '#d946ef',
+            neonBlue: '#3b82f6',
+            neonViolet: '#8b5cf6',
+            textGray: '#a0aec0',
+          },
+          fontFamily: {
+            cyber: ['Orbitron', 'sans-serif'],
+            code: ['Fira Code', 'monospace'],
+            sans: ['Inter', 'sans-serif'],
+          }
+        }
+      }
+    }
+  </script>
+</head>
+<body class="bg-darkBg text-white font-sans grid-bg min-h-screen pb-12">
+  <header class="max-w-7xl mx-auto px-4 pt-6">
+    <div class="bg-cardBg/80 backdrop-blur-md neon-border-purple rounded-2xl px-6 py-4 flex flex-col md:flex-row items-center justify-between gap-4">
+      <div class="flex items-center gap-3">
+        <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-neonViolet to-neonPurple flex items-center justify-center shadow-lg shadow-neonPurple/20">
+          <i class="fa-solid fa-shield-halved text-white text-lg animate-pulse"></i>
+        </div>
+        <div>
+          <span class="font-cyber font-black text-xl tracking-widest text-transparent bg-clip-text bg-gradient-to-r from-white to-neonPurple">LOW FANG JUN</span>
+          <span class="text-[10px] block text-neonPurple font-code font-bold tracking-widest -mt-1">SYSTEM LEVELING ONLINE</span>
+        </div>
+      </div>
+      <nav class="flex flex-wrap items-center justify-center gap-4 text-sm font-cyber font-semibold tracking-wider text-textGray">
+        <a href="index.html" class="hover:text-neonPurple transition-colors flex items-center gap-1.5"><i class="fa-solid fa-house text-xs"></i> Home</a>
+        <a href="status.html" class="hover:text-neonPurple transition-colors flex items-center gap-1.5"><i class="fa-solid fa-user text-xs"></i> Status</a>
+        <a href="matrix.html" class="hover:text-neonPurple transition-colors flex items-center gap-1.5"><i class="fa-solid fa-chart-line text-xs"></i> Matrix</a>
+        <a href="quests.html" class="hover:text-neonPurple transition-colors flex items-center gap-1.5"><i class="fa-solid fa-scroll text-xs"></i> Quests</a>
+        <a href="events.html" class="hover:text-neonPurple transition-colors flex items-center gap-1.5"><i class="fa-solid fa-users text-xs"></i> Events</a>
+        <a href="inventory.html" class="hover:text-neonPurple transition-colors flex items-center gap-1.5"><i class="fa-solid fa-briefcase text-xs"></i> Inventory</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="max-w-6xl mx-auto px-4 mt-8">
+    <section class="bg-cardBg/90 backdrop-blur-sm p-8 rounded-2xl neon-border-purple">
+      <div class="flex flex-col md:flex-row gap-8 items-center">
+        <div class="w-40 h-40 rounded-full bg-darkBg border-2 border-neonPurple flex items-center justify-center">
+          <i class="fa-solid fa-user-astronaut text-6xl text-neonPurple animate-pulse"></i>
+        </div>
+        <div class="flex-1">
+          <p class="text-[10px] uppercase tracking-[0.35em] text-neonPurple font-code">Hunter Status</p>
+          <h1 class="font-cyber font-black text-3xl mt-2 text-white">Low Fang Jun</h1>
+          <p class="text-textGray mt-2">Undergraduate student in Business Information Systems, focused on system design, data security, and web programming.</p>
+          <div class="mt-4 flex flex-wrap gap-3">
+            <span class="px-3 py-1 rounded-full border border-neonPurple/40 text-neonPurple text-xs font-code">BIS Analyst</span>
+            <span class="px-3 py-1 rounded-full border border-neonBlue/40 text-neonBlue text-xs font-code">Software Engineer</span>
+            <span class="px-3 py-1 rounded-full border border-emerald-500/40 text-emerald-400 text-xs font-code">Web Developer</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mt-8">
+        <div class="bg-darkBg/60 border border-borderNeon rounded-xl p-5">
+          <h2 class="font-cyber font-bold text-sm tracking-wider text-white">Contact Profile</h2>
+          <div class="mt-4 space-y-3 text-sm text-textGray">
+            <div class="flex justify-between gap-4"><span>Email</span><a href="mailto:jjun8647@gmail.com" class="text-white hover:text-neonPurple">jjun8647@gmail.com</a></div>
+            <div class="flex justify-between gap-4"><span>Phone</span><span class="text-white">011-10574969</span></div>
+            <div class="flex justify-between gap-4"><span>Address</span><span class="text-white text-right">Kuching, Sarawak, Malaysia</span></div>
+            <div class="flex justify-between gap-4"><span>Attributes</span><span class="text-white">Male | Malaysian | Single</span></div>
+          </div>
+        </div>
+
+        <div class="bg-darkBg/60 border border-borderNeon rounded-xl p-5">
+          <h2 class="font-cyber font-bold text-sm tracking-wider text-white">Skill Tracker</h2>
+          <div class="mt-4 space-y-4">
+            <div>
+              <div class="flex justify-between text-sm mb-1"><span>Python Scripting</span><span class="text-neonPurple">85%</span></div>
+              <div class="h-2 rounded-full bg-darkBg overflow-hidden"><div class="h-full bg-gradient-to-r from-neonViolet to-neonPurple" style="width:85%"></div></div>
+            </div>
+            <div>
+              <div class="flex justify-between text-sm mb-1"><span>SQL</span><span class="text-neonBlue">80%</span></div>
+              <div class="h-2 rounded-full bg-darkBg overflow-hidden"><div class="h-full bg-gradient-to-r from-blue-600 to-neonBlue" style="width:80%"></div></div>
+            </div>
+            <div>
+              <div class="flex justify-between text-sm mb-1"><span>HTML & CSS</span><span class="text-emerald-400">82%</span></div>
+              <div class="h-2 rounded-full bg-darkBg overflow-hidden"><div class="h-full bg-gradient-to-r from-emerald-600 to-emerald-400" style="width:82%"></div></div>
+            </div>
+            <div>
+              <div class="flex justify-between text-sm mb-1"><span>Java</span><span class="text-amber-400">75%</span></div>
+              <div class="h-2 rounded-full bg-darkBg overflow-hidden"><div class="h-full bg-gradient-to-r from-amber-600 to-amber-400" style="width:75%"></div></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+</body>
+</html>
