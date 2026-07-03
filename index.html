@@ -46,7 +46,10 @@
                 <a href="index.html" class="hover:text-neonPurple transition-colors flex items-center gap-1.5"><i class="fa-solid fa-house text-xs"></i> Home</a>
                 <a href="resume.html" class="hover:text-neonPurple transition-colors flex items-center gap-1.5"><i class="fa-solid fa-scroll text-xs"></i> Resume</a>
                 <a href="gallery.html" class="hover:text-neonPurple transition-colors flex items-center gap-1.5"><i class="fa-solid fa-images text-xs"></i> Gallery</a>
+                <a href="journal.html" class="hover:text-neonPurple transition-colors flex items-center gap-1.5"><i class="fa-solid fa-book text-xs"></i> Journal</a>
                 <a href="expenses.html" class="hover:text-neonPurple transition-colors flex items-center gap-1.5"><i class="fa-solid fa-wallet text-xs"></i> Expenses</a>
+                <a href="timeline.html" class="hover:text-neonPurple transition-colors flex items-center gap-1.5"><i class="fa-solid fa-timeline text-xs"></i> Timeline</a>
+                <a href="dashboard.html" class="hover:text-neonPurple transition-colors flex items-center gap-1.5"><i class="fa-solid fa-chart-line text-xs"></i> Dashboard</a>
                 <a href="contact.html" class="hover:text-neonPurple transition-colors flex items-center gap-1.5"><i class="fa-solid fa-envelope text-xs"></i> Contact</a>
             </nav>
             <div class="px-4 py-1.5 bg-gradient-to-r from-neonViolet/20 to-neonPurple/20 border border-neonPurple/40 rounded-full text-xs font-cyber font-bold tracking-wider text-neonPurple">
@@ -73,7 +76,7 @@
         </section>
 
         <!-- Dashboard grid -->
-        <section class="reveal-group grid grid-cols-1 lg:grid-cols-12 gap-4">
+        <section class="reveal-group grid grid-cols-1 lg:grid-cols-12 gap-4 mb-4">
             <!-- System status panel -->
             <div class="reveal lg:col-span-7 bg-cardBg/90 neon-border-purple rounded-2xl p-6">
                 <p class="text-[10px] uppercase tracking-[0.2em] text-textGray font-code mb-4">System Status</p>
@@ -120,30 +123,53 @@
                 <p id="weather-cond" class="mt-2 text-sm text-textGray">Loading&hellip;</p>
                 <p id="weather-updated" class="mt-auto pt-3 text-[10px] font-code text-textGray/70 tracking-wide"></p>
             </div>
+        </section>
 
-            <!-- Quick links -->
-            <a href="resume.html" class="reveal lg:col-span-3 bg-cardBg/90 neon-border-purple rounded-2xl p-5 flex flex-col justify-between min-h-[120px] hover:border-neonPurple/40 transition-all">
+        <!-- Quick links -->
+        <section class="reveal-group grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
+            <a href="resume.html" class="reveal bg-cardBg/90 neon-border-purple rounded-2xl p-5 flex flex-col justify-between min-h-[120px] hover:border-neonPurple/40 transition-all">
                 <div class="w-9 h-9 rounded-lg bg-neonPurple/10 text-neonPurple flex items-center justify-center text-sm"><i class="fa-solid fa-scroll"></i></div>
                 <div class="mt-4">
                     <p class="text-sm font-semibold">Resume</p>
                     <p class="text-[11px] text-textGray mt-1 leading-relaxed">Profile, education, work &amp; leadership history</p>
                 </div>
             </a>
-            <a href="gallery.html" class="reveal lg:col-span-3 bg-cardBg/90 neon-border-purple rounded-2xl p-5 flex flex-col justify-between min-h-[120px] hover:border-neonBlue/40 transition-all">
+            <a href="gallery.html" class="reveal bg-cardBg/90 neon-border-purple rounded-2xl p-5 flex flex-col justify-between min-h-[120px] hover:border-neonBlue/40 transition-all">
                 <div class="w-9 h-9 rounded-lg bg-neonBlue/10 text-neonBlue flex items-center justify-center text-sm"><i class="fa-solid fa-images"></i></div>
                 <div class="mt-4">
                     <p class="text-sm font-semibold">Gallery</p>
                     <p class="text-[11px] text-textGray mt-1 leading-relaxed">Photo feed &mdash; public and private posts</p>
                 </div>
             </a>
-            <a href="expenses.html" class="reveal lg:col-span-3 bg-cardBg/90 neon-border-purple rounded-2xl p-5 flex flex-col justify-between min-h-[120px] hover:border-emerald-400/40 transition-all">
+            <a href="journal.html" class="reveal bg-cardBg/90 neon-border-purple rounded-2xl p-5 flex flex-col justify-between min-h-[120px] hover:border-amber-400/40 transition-all">
+                <div class="w-9 h-9 rounded-lg bg-amber-400/10 text-amber-400 flex items-center justify-center text-sm"><i class="fa-solid fa-book"></i></div>
+                <div class="mt-4">
+                    <p class="text-sm font-semibold">Journal</p>
+                    <p class="text-[11px] text-textGray mt-1 leading-relaxed">Daily notes with markdown &amp; mood tags</p>
+                </div>
+            </a>
+            <a href="expenses.html" class="reveal bg-cardBg/90 neon-border-purple rounded-2xl p-5 flex flex-col justify-between min-h-[120px] hover:border-emerald-400/40 transition-all">
                 <div class="w-9 h-9 rounded-lg bg-emerald-400/10 text-emerald-400 flex items-center justify-center text-sm"><i class="fa-solid fa-wallet"></i></div>
                 <div class="mt-4">
                     <p class="text-sm font-semibold">Expenses</p>
                     <p class="text-[11px] text-textGray mt-1 leading-relaxed">Personal spend tracker with charts</p>
                 </div>
             </a>
-            <a href="contact.html" class="reveal lg:col-span-3 bg-cardBg/90 neon-border-purple rounded-2xl p-5 flex flex-col justify-between min-h-[120px] hover:border-rose-400/40 transition-all">
+            <a href="timeline.html" class="reveal bg-cardBg/90 neon-border-purple rounded-2xl p-5 flex flex-col justify-between min-h-[120px] hover:border-neonBlue/40 transition-all">
+                <div class="w-9 h-9 rounded-lg bg-neonBlue/10 text-neonBlue flex items-center justify-center text-sm"><i class="fa-solid fa-timeline"></i></div>
+                <div class="mt-4">
+                    <p class="text-sm font-semibold">Timeline</p>
+                    <p class="text-[11px] text-textGray mt-1 leading-relaxed">Life events grouped by year</p>
+                </div>
+            </a>
+            <a href="dashboard.html" class="reveal bg-cardBg/90 neon-border-purple rounded-2xl p-5 flex flex-col justify-between min-h-[120px] hover:border-neonPurple/40 transition-all">
+                <div class="w-9 h-9 rounded-lg bg-neonPurple/10 text-neonPurple flex items-center justify-center text-sm"><i class="fa-solid fa-chart-line"></i></div>
+                <div class="mt-4">
+                    <p class="text-sm font-semibold">Dashboard</p>
+                    <p class="text-[11px] text-textGray mt-1 leading-relaxed">Analytics across Gallery, Expenses &amp; Journal</p>
+                </div>
+            </a>
+            <a href="contact.html" class="reveal bg-cardBg/90 neon-border-purple rounded-2xl p-5 flex flex-col justify-between min-h-[120px] hover:border-rose-400/40 transition-all">
                 <div class="w-9 h-9 rounded-lg bg-rose-400/10 text-rose-400 flex items-center justify-center text-sm"><i class="fa-solid fa-envelope"></i></div>
                 <div class="mt-4">
                     <p class="text-sm font-semibold">Contact</p>

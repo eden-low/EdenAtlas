@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Gallery | Low Fang Jun</title>
+  <title>Timeline | Low Fang Jun</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
   <link rel="stylesheet" href="styles.css" />
@@ -55,80 +55,88 @@
     </div>
   </header>
 
-  <main class="max-w-2xl mx-auto px-4 mt-8 space-y-6">
-    <section class="reveal bg-cardBg/90 backdrop-blur-sm p-6 rounded-2xl neon-border-purple">
+  <main class="max-w-3xl mx-auto px-4 mt-8 space-y-6">
+    <section class="reveal bg-cardBg/90 neon-border-purple rounded-2xl p-6">
       <div class="flex flex-col md:flex-row md:items-start md:justify-between gap-4">
         <div>
-          <h1 class="font-cyber font-black text-3xl text-white">Gallery</h1>
-          <p class="text-textGray mt-3">Event moments, project screenshots, and personal snapshots from the journey so far.</p>
+          <h1 class="font-cyber font-semibold text-2xl">Timeline</h1>
+          <p class="text-textGray mt-2 text-sm">Life events, grouped by year. Sign in to add entries and see private ones.</p>
         </div>
         <div id="auth-control" class="flex items-center gap-3"></div>
       </div>
-      <p id="gallery-access-note" class="hidden mt-4 text-xs font-code text-amber-400 bg-amber-500/10 border border-amber-500/20 rounded-xl px-4 py-2">
+      <p id="timeline-access-note" class="hidden mt-4 text-xs font-code text-amber-400 bg-amber-500/10 border border-amber-500/20 rounded-xl px-4 py-2">
         <i class="fa-solid fa-lock mr-1.5"></i> Signed in, but this account isn't on the private access list.
       </p>
+      <div class="mt-5 relative">
+        <i class="fa-solid fa-magnifying-glass absolute left-3.5 top-1/2 -translate-y-1/2 text-textGray text-xs"></i>
+        <input id="timeline-search" type="text" placeholder="Search title, description, or a year like 2024&hellip;" class="w-full bg-darkBg/60 border border-borderNeon rounded-xl pl-10 pr-4 py-2.5 text-sm text-white placeholder:text-textGray/60">
+      </div>
     </section>
 
-    <section class="reveal bg-cardBg/90 backdrop-blur-sm p-3 rounded-2xl neon-border-purple flex flex-wrap items-center justify-between gap-3">
-      <div id="feed-filters" class="flex flex-wrap items-center gap-1.5 text-xs font-cyber font-bold tracking-wider text-textGray">
+    <section class="reveal bg-cardBg/90 neon-border-purple rounded-2xl p-3 flex flex-wrap items-center justify-between gap-3">
+      <div id="timeline-filters" class="flex flex-wrap items-center gap-1.5 text-xs font-cyber font-bold tracking-wider text-textGray">
         <button data-filter="all" class="filter-tab px-3 py-1.5 rounded-full hover:text-neonPurple hover:bg-neonPurple/10 transition-colors">All</button>
+        <button data-filter="career" class="filter-tab px-3 py-1.5 rounded-full hover:text-neonPurple hover:bg-neonPurple/10 transition-colors">Career</button>
+        <button data-filter="education" class="filter-tab px-3 py-1.5 rounded-full hover:text-neonPurple hover:bg-neonPurple/10 transition-colors">Education</button>
+        <button data-filter="travel" class="filter-tab px-3 py-1.5 rounded-full hover:text-neonPurple hover:bg-neonPurple/10 transition-colors">Travel</button>
         <button data-filter="personal" class="filter-tab px-3 py-1.5 rounded-full hover:text-neonPurple hover:bg-neonPurple/10 transition-colors">Personal</button>
-        <button data-filter="event" class="filter-tab px-3 py-1.5 rounded-full hover:text-neonPurple hover:bg-neonPurple/10 transition-colors">Event</button>
-        <button data-filter="work" class="filter-tab px-3 py-1.5 rounded-full hover:text-neonPurple hover:bg-neonPurple/10 transition-colors">Work</button>
-        <button data-filter="project" class="filter-tab px-3 py-1.5 rounded-full hover:text-neonPurple hover:bg-neonPurple/10 transition-colors">Project</button>
         <button data-filter="public" class="filter-tab px-3 py-1.5 rounded-full hover:text-neonPurple hover:bg-neonPurple/10 transition-colors">Public</button>
         <button data-filter="private" class="filter-tab hidden px-3 py-1.5 rounded-full hover:text-rose-400 hover:bg-rose-400/10 transition-colors">Private</button>
       </div>
-      <button id="new-post-btn" class="hidden px-4 py-2 bg-gradient-to-r from-neonViolet to-neonPurple rounded-xl text-xs font-cyber font-bold tracking-wider text-white hover:scale-105 transition-all whitespace-nowrap">
-        <i class="fa-solid fa-plus mr-1.5"></i> NEW POST
+      <button id="new-event-btn" class="hidden px-4 py-2 bg-gradient-to-r from-neonViolet to-neonPurple rounded-xl text-xs font-cyber font-bold tracking-wider text-white hover:scale-105 transition-all whitespace-nowrap">
+        <i class="fa-solid fa-plus mr-1.5"></i> NEW EVENT
       </button>
     </section>
 
-    <div id="feed-container" class="space-y-6"></div>
-    <p id="feed-empty" class="hidden text-center text-xs font-code text-textGray py-10">No posts here yet.</p>
+    <div id="timeline-container" class="space-y-8"></div>
+    <p id="timeline-empty" class="hidden text-center text-xs font-code text-textGray py-10">No events here yet.</p>
   </main>
 
-  <!-- New Post modal -->
-  <div id="post-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4">
-    <div id="post-modal-backdrop" class="absolute inset-0 bg-darkBg/80 backdrop-blur-sm"></div>
+  <!-- New Event modal -->
+  <div id="event-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4">
+    <div id="event-modal-backdrop" class="absolute inset-0 bg-darkBg/80 backdrop-blur-sm"></div>
     <div class="relative w-full max-w-md bg-cardBg neon-border-purple rounded-2xl p-6">
       <div class="flex items-center justify-between mb-4">
-        <h2 class="font-cyber font-bold text-lg text-white">New Post</h2>
-        <button id="post-modal-close" class="text-textGray hover:text-white text-xl leading-none">&times;</button>
+        <h2 class="font-cyber font-semibold text-lg">New Event</h2>
+        <button id="event-modal-close" class="text-textGray hover:text-white text-xl leading-none">&times;</button>
       </div>
-      <form id="post-form" class="space-y-4">
+      <form id="event-form" class="space-y-4">
         <div>
-          <label class="block text-xs font-code text-textGray mb-1.5" for="post-file">Image</label>
-          <input id="post-file" type="file" accept="image/*" required class="w-full text-xs text-textGray file:mr-3 file:px-3 file:py-2 file:rounded-lg file:border file:border-borderNeon file:bg-darkBg/60 file:text-white file:text-xs">
+          <label class="block text-xs font-code text-textGray mb-1.5" for="event-title">Title</label>
+          <input id="event-title" type="text" required placeholder="Graduated from UTAR" class="w-full bg-darkBg/60 border border-borderNeon rounded-lg px-3 py-2 text-sm text-white placeholder:text-textGray/60">
         </div>
         <div>
-          <label class="block text-xs font-code text-textGray mb-1.5" for="post-caption">Caption</label>
-          <textarea id="post-caption" rows="2" placeholder="Say something about this post..." class="w-full bg-darkBg/60 border border-borderNeon rounded-lg px-3 py-2 text-sm text-white placeholder:text-textGray/60"></textarea>
+          <label class="block text-xs font-code text-textGray mb-1.5" for="event-description">Description</label>
+          <textarea id="event-description" rows="3" placeholder="Optional details" class="w-full bg-darkBg/60 border border-borderNeon rounded-lg px-3 py-2 text-sm text-white placeholder:text-textGray/60"></textarea>
         </div>
         <div class="flex items-center gap-4">
           <div class="flex-1">
-            <label class="block text-xs font-code text-textGray mb-1.5" for="post-category">Category</label>
-            <select id="post-category" class="w-full bg-darkBg/60 border border-borderNeon rounded-lg px-3 py-2 text-xs text-white">
+            <label class="block text-xs font-code text-textGray mb-1.5" for="event-date">Date</label>
+            <input id="event-date" type="date" required class="w-full bg-darkBg/60 border border-borderNeon rounded-lg px-3 py-2 text-sm text-white">
+          </div>
+          <div class="flex-1">
+            <label class="block text-xs font-code text-textGray mb-1.5" for="event-type">Type</label>
+            <select id="event-type" class="w-full bg-darkBg/60 border border-borderNeon rounded-lg px-3 py-2 text-xs text-white">
+              <option value="career">Career</option>
+              <option value="education">Education</option>
+              <option value="travel">Travel</option>
               <option value="personal">Personal</option>
-              <option value="event">Event</option>
-              <option value="work">Work</option>
-              <option value="project">Project</option>
             </select>
           </div>
-          <div class="flex items-center gap-4 text-xs font-code text-textGray">
-            <label class="flex items-center gap-1.5"><input type="radio" name="post-visibility" value="public" checked> Public</label>
-            <label class="flex items-center gap-1.5"><input type="radio" name="post-visibility" value="private"> Private</label>
-          </div>
+        </div>
+        <div class="flex items-center gap-4 text-xs font-code text-textGray">
+          <label class="flex items-center gap-1.5"><input type="radio" name="event-visibility" value="public" checked> Public</label>
+          <label class="flex items-center gap-1.5"><input type="radio" name="event-visibility" value="private"> Private</label>
         </div>
         <button type="submit" class="w-full px-5 py-2.5 bg-gradient-to-r from-neonViolet to-neonPurple rounded-xl text-xs font-cyber font-bold tracking-wider text-white hover:scale-105 transition-all">
-          POST
+          SAVE EVENT
         </button>
-        <p id="post-status" class="text-xs font-code text-textGray text-center"></p>
+        <p id="event-status" class="text-xs font-code text-textGray text-center"></p>
       </form>
     </div>
   </div>
 
   <script src="scripts.js" defer></script>
-  <script type="module" src="gallery.js"></script>
+  <script type="module" src="timeline.js"></script>
 </body>
 </html>

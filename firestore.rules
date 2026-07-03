@@ -17,6 +17,22 @@ service cloud.firestore {
                      ));
       allow write: if request.auth != null && request.auth.token.email == 'jjun8647@gmail.com';
     }
+    match /journals/{journalId} {
+      allow read: if resource.data.visibility == 'public'
+                  || (request.auth != null && (
+                       request.auth.token.email == 'jjun8647@gmail.com'
+                       || exists(/databases/$(database)/documents/allowedUsers/$(request.auth.token.email))
+                     ));
+      allow write: if request.auth != null && request.auth.token.email == 'jjun8647@gmail.com';
+    }
+    match /life_events/{eventId} {
+      allow read: if resource.data.visibility == 'public'
+                  || (request.auth != null && (
+                       request.auth.token.email == 'jjun8647@gmail.com'
+                       || exists(/databases/$(database)/documents/allowedUsers/$(request.auth.token.email))
+                     ));
+      allow write: if request.auth != null && request.auth.token.email == 'jjun8647@gmail.com';
+    }
     match /allowedUsers/{email} {
       allow read: if false;
       allow write: if request.auth != null && request.auth.token.email == 'jjun8647@gmail.com';
