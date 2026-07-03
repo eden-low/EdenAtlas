@@ -109,8 +109,8 @@
             <div class="reveal lg:col-span-5 bg-cardBg/90 neon-border-purple rounded-2xl p-6 flex flex-col">
                 <div class="flex items-start justify-between">
                     <div>
-                        <p class="text-sm font-semibold">Kuching</p>
-                        <p class="text-[11px] text-textGray mt-0.5">Sarawak, Malaysia</p>
+                        <p id="weather-city" class="text-sm font-semibold">Kuching</p>
+                        <p id="weather-region" class="text-[11px] text-textGray mt-0.5">Sarawak, Malaysia</p>
                     </div>
                     <div id="weather-icon" class="w-10 h-10 rounded-xl bg-amber-400/10 text-amber-400 flex items-center justify-center text-lg">
                         <i class="fa-solid fa-cloud-sun"></i>
@@ -180,17 +180,46 @@
             Haze: ["fa-smog", "text-textGray", "bg-white/5"],
         };
 
+        function getBrowserLocation() {
+            return new Promise((resolve) => {
+                if (!navigator.geolocation) {
+                    resolve(null);
+                    return;
+                }
+                navigator.geolocation.getCurrentPosition(
+                    (pos) => resolve({ lat: pos.coords.latitude, lon: pos.coords.longitude }),
+                    () => resolve(null),
+                    { timeout: 8000, maximumAge: 10 * 60 * 1000 }
+                );
+            });
+        }
+
         async function loadWeather() {
             const tempEl = document.getElementById("weather-temp");
             const condEl = document.getElementById("weather-cond");
             const updatedEl = document.getElementById("weather-updated");
             const iconEl = document.getElementById("weather-icon");
+            const cityEl = document.getElementById("weather-city");
+            const regionEl = document.getElementById("weather-region");
             try {
-                const res = await fetch(`https://api.openweathermap.org/data/2.5/weather?q=Kuching,MY&units=metric&appid=${WEATHER_API_KEY}`);
+                const coords = await getBrowserLocation();
+                const endpoint = coords
+                    ? `https://api.openweathermap.org/data/2.5/weather?lat=${coords.lat}&lon=${coords.lon}&units=metric&appid=${WEATHER_API_KEY}`
+                    : `https://api.openweathermap.org/data/2.5/weather?q=Kuching,MY&units=metric&appid=${WEATHER_API_KEY}`;
+
+                const res = await fetch(endpoint);
                 if (!res.ok) throw new Error(`Weather API ${res.status}`);
                 const data = await res.json();
                 const main = data.weather?.[0]?.main || "Clouds";
                 const [icon, textClass, bgClass] = WEATHER_ICONS[main] || ["fa-cloud-sun", "text-amber-400", "bg-amber-400/10"];
+
+                if (coords) {
+                    cityEl.textContent = data.name || "My Location";
+                    regionEl.textContent = data.sys?.country || "";
+                } else {
+                    cityEl.textContent = "Kuching";
+                    regionEl.textContent = "Sarawak, Malaysia";
+                }
 
                 tempEl.innerHTML = `${Math.round(data.main.temp)}&deg;<span class="text-lg text-textGray font-medium ml-1">C</span>`;
                 condEl.textContent = data.weather?.[0]?.description
