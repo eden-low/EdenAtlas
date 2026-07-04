@@ -58,6 +58,10 @@
     const signinBtn = document.getElementById("signin-btn");
     const statusEl = document.getElementById("signin-status");
 
+    // Guards against onAuthStateChanged redirecting away mid-click, which would tear down
+    // the page (and cancel the in-flight login_logs write below) before it can complete.
+    let signingIn = false;
+
     function getRedirectTarget() {
       const raw = new URLSearchParams(location.search).get("redirect");
       return raw && /^[a-zA-Z0-9_-]+\.html$/.test(raw) ? raw : "index.html";
@@ -65,6 +69,7 @@
 
     onAuthStateChanged(auth, (user) => {
       if (user) {
+        if (signingIn) return;
         location.href = getRedirectTarget();
         return;
       }
@@ -73,10 +78,12 @@
 
     signinBtn.addEventListener("click", async () => {
       statusEl.textContent = "";
+      signingIn = true;
       let user;
       try {
         ({ user } = await signInWithPopup(auth, googleProvider));
       } catch (err) {
+        signingIn = false;
         console.error("[login] sign-in failed:", err);
         statusEl.textContent = "Sign-in failed — please try again.";
         return;
