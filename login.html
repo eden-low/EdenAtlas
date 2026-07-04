@@ -52,7 +52,7 @@
   <script src="scripts.js" defer></script>
   <script type="module">
     import { auth, googleProvider, db, isOwner } from "./firebase-init.js";
-    import { onAuthStateChanged, signInWithPopup } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-auth.js";
+    import { onAuthStateChanged, signInWithPopup, signInWithRedirect, getRedirectResult } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-auth.js";
     import { addDoc, collection, serverTimestamp } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-firestore.js";
 
     const signinBtn = document.getElementById("signin-btn");
@@ -68,6 +68,13 @@
       return "an unknown device";
     }
 
+    // A standalone/installed PWA window can't reliably host signInWithPopup — on many mobile
+    // browsers the popup either fails to open or can't hand its result back to this window,
+    // which is what "stuck on the Google sign-in step" looks like. Redirect works everywhere.
+    function isStandalone() {
+      return window.matchMedia("(display-mode: standalone)").matches || window.navigator.standalone === true;
+    }
+
     // Guards against onAuthStateChanged redirecting away mid-click, which would tear down
     // the page (and cancel the in-flight login_logs write below) before it can complete.
     let signingIn = false;
@@ -77,28 +84,7 @@
       return raw && /^[a-zA-Z0-9_-]+\.html$/.test(raw) ? raw : "index.html";
     }
 
-    onAuthStateChanged(auth, (user) => {
-      if (user) {
-        if (signingIn) return;
-        location.href = getRedirectTarget();
-        return;
-      }
-      document.body.classList.remove("auth-check-pending");
-    });
-
-    signinBtn.addEventListener("click", async () => {
-      statusEl.textContent = "";
-      signingIn = true;
-      let user;
-      try {
-        ({ user } = await signInWithPopup(auth, googleProvider));
-      } catch (err) {
-        signingIn = false;
-        console.error("[login] sign-in failed:", err);
-        statusEl.textContent = "Sign-in failed — please try again.";
-        return;
-      }
-
+    async function logSuccessfulSignIn(user) {
       // Best-effort: don't let a login_logs write failure (e.g. firestore.rules not yet
       // pasted into the Firebase Console) block an otherwise-successful sign-in.
       try {
@@ -129,7 +115,57 @@
           console.error("[login] notification write failed (continuing anyway):", err);
         }
       }
+    }
 
+    // Completes a signInWithRedirect flow when the page reloads after bouncing to Google and
+    // back. Resolves to null (not an error) if this load wasn't a redirect return.
+    getRedirectResult(auth)
+      .then(async (result) => {
+        if (!result?.user) return;
+        signingIn = true;
+        await logSuccessfulSignIn(result.user);
+        location.href = getRedirectTarget();
+      })
+      .catch((err) => {
+        console.error("[login] redirect sign-in failed:", err);
+        statusEl.textContent = "Sign-in failed — please try again.";
+      });
+
+    onAuthStateChanged(auth, (user) => {
+      if (user) {
+        if (signingIn) return;
+        location.href = getRedirectTarget();
+        return;
+      }
+      document.body.classList.remove("auth-check-pending");
+    });
+
+    signinBtn.addEventListener("click", async () => {
+      statusEl.textContent = "";
+      signingIn = true;
+
+      if (isStandalone()) {
+        try {
+          await signInWithRedirect(auth, googleProvider);
+        } catch (err) {
+          signingIn = false;
+          console.error("[login] redirect sign-in failed:", err);
+          statusEl.textContent = "Sign-in failed — please try again.";
+        }
+        return; // page navigates to Google now; completion is handled by getRedirectResult above
+      }
+
+      let user;
+      try {
+        ({ user } = await signInWithPopup(auth, googleProvider));
+      } catch (err) {
+        signingIn = false;
+        console.error("[login] sign-in failed:", err);
+        statusEl.textContent = "Sign-in failed — please try again.";
+        return;
+      }
+
+      await logSuccessfulSignIn(user);
       location.href = getRedirectTarget();
     });
   </script>
