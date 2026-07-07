@@ -61,7 +61,10 @@ function topBarHTML() {
   return `
     <div id="mobile-topbar" class="md:hidden fixed top-0 inset-x-0 z-40 flex items-center justify-between px-4 py-3 bg-cardBg/90 backdrop-blur-md border-b border-borderNeon">
       <button id="mobile-hamburger-btn" type="button" aria-label="Open menu" aria-expanded="false" class="min-w-[44px] min-h-[44px] flex items-center justify-center text-white text-lg"><i class="fa-solid fa-bars"></i></button>
-      <span class="font-cyber font-semibold text-sm tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-white to-neonPurple">EdenAtlas</span>
+      <span class="flex items-center gap-2">
+        <img src="images/logo-mark.png" alt="" class="w-5 h-5 object-contain">
+        <span class="font-cyber font-semibold text-sm tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-white to-neonPurple">EdenAtlas</span>
+      </span>
       <a href="settings.html" aria-label="Account" class="min-w-[44px] min-h-[44px] flex items-center justify-center text-white text-lg"><i class="fa-solid fa-circle-user"></i></a>
     </div>`;
 }
@@ -76,7 +79,10 @@ function drawerHTML() {
       <div id="mobile-drawer-backdrop" class="absolute inset-0 bg-darkBg/80 backdrop-blur-sm"></div>
       <div id="mobile-drawer" role="dialog" aria-label="Navigation menu" class="absolute inset-y-0 left-0 w-72 max-w-[85vw] bg-cardBg neon-border-purple overflow-y-auto p-4 flex flex-col gap-1">
         <div class="flex items-center justify-between mb-2 px-1">
-          <span class="font-cyber font-semibold text-sm text-transparent bg-clip-text bg-gradient-to-r from-white to-neonPurple">EdenAtlas</span>
+          <span class="flex items-center gap-2">
+            <img src="images/logo-mark.png" alt="" class="w-6 h-6 object-contain">
+            <span class="font-cyber font-semibold text-sm text-transparent bg-clip-text bg-gradient-to-r from-white to-neonPurple">EdenAtlas</span>
+          </span>
           <button id="mobile-drawer-close" type="button" aria-label="Close menu" class="min-w-[44px] min-h-[44px] flex items-center justify-center text-textGray hover:text-white text-xl leading-none">&times;</button>
         </div>
         ${links}

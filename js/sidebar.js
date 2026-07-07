@@ -59,8 +59,8 @@ function sidebarHTML() {
   return `
     <aside id="eden-sidebar" class="hidden md:flex flex-col fixed left-0 inset-y-0 z-30 bg-cardBg/90 backdrop-blur-md border-r border-borderNeon" style="width:var(--sidebar-w)">
       <div class="flex items-center gap-2.5 px-4 h-16 flex-shrink-0 border-b border-borderNeon/60">
-        <div class="w-8 h-8 rounded-lg bg-gradient-to-tr from-neonViolet to-neonPurple flex items-center justify-center flex-shrink-0">
-          <i data-lucide="atom" class="w-4 h-4 text-white"></i>
+        <div class="w-8 h-8 flex items-center justify-center flex-shrink-0">
+          <img src="images/logo-mark.png" alt="EdenAtlas" class="w-full h-full object-contain">
         </div>
         <span class="eden-sidebar-label font-cyber font-semibold text-sm tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-white to-neonPurple truncate">EdenAtlas</span>
       </div>
