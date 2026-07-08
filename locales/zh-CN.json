@@ -479,6 +479,7 @@
     "open_button": "开启",
     "opened_on": "开启于 {date}",
     "empty": "写给未来的自己。",
+    "empty_subtitle": "你封存的时间胶囊会出现在这里。",
     "home_ready_card": "来自过去自己的讯息已经可以打开。"
   },
   "reflection": {

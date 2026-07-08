@@ -34,6 +34,14 @@
       }
     }
   </script>
+  <style>
+    /* Time Capsule only (v2.9.1): pins the footer below content on short pages instead of it
+       floating mid-viewport, without touching the shared `body` rule in styles.css that every
+       other page relies on. */
+    body { display: flex; flex-direction: column; min-height: 100vh; }
+    main { flex: 1 0 auto; }
+    footer { flex-shrink: 0; }
+  </style>
 </head>
 <body class="auth-check-pending bg-darkBg text-white font-sans grid-bg min-h-screen pb-12">
   <header class="hidden max-w-7xl mx-auto px-4 pt-6">
@@ -79,6 +87,11 @@
       <p id="capsule-access-note" class="hidden mt-4 text-xs font-code text-amber-400 bg-amber-500/10 border border-amber-500/20 rounded-xl px-4 py-2">
         <i class="fa-solid fa-lock mr-1.5"></i> Signed in, but this account isn't on the private access list.
       </p>
+      <div class="flex items-center gap-5 mt-4 text-[11px] font-code text-textGray">
+        <span class="flex items-center gap-1.5"><i class="fa-solid fa-lock text-textGray"></i><span id="capsule-count-sealed">0</span> <span data-i18n="time_capsule.sealed">Sealed</span></span>
+        <span class="flex items-center gap-1.5"><i class="fa-solid fa-envelope text-neonPurple"></i><span id="capsule-count-ready">0</span> <span data-i18n="time_capsule.ready_to_open">Ready to Open</span></span>
+        <span class="flex items-center gap-1.5"><i class="fa-solid fa-envelope-open text-emerald-400"></i><span id="capsule-count-opened">0</span> <span data-i18n="time_capsule.opened">Opened</span></span>
+      </div>
     </section>
 
     <section class="reveal flex items-center justify-end">
@@ -102,7 +115,11 @@
       <div id="capsules-opened" class="grid grid-cols-1 sm:grid-cols-2 gap-4"></div>
     </section>
 
-    <p id="capsules-empty" class="hidden text-center text-xs font-code text-textGray py-10" data-i18n="time_capsule.empty">Write something for the future you.</p>
+    <div id="capsules-empty" class="hidden text-center py-14">
+      <i class="fa-solid fa-box-archive text-3xl text-textGray/40 mb-3"></i>
+      <p class="text-sm font-cyber font-semibold text-white" data-i18n="time_capsule.empty">Write something for the future you.</p>
+      <p class="text-xs font-code text-textGray mt-1.5" data-i18n="time_capsule.empty_subtitle">Your sealed capsules will appear here.</p>
+    </div>
   </main>
 
   <!-- New Capsule modal -->
@@ -138,9 +155,39 @@
     </div>
   </div>
 
+  <!-- Edit Capsule modal (sealed capsules only) -->
+  <div id="capsule-edit-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4">
+    <div id="capsule-edit-modal-backdrop" class="absolute inset-0 bg-darkBg/80 backdrop-blur-sm"></div>
+    <div class="relative w-full max-w-md bg-cardBg neon-border-purple rounded-2xl p-6">
+      <div class="flex items-center justify-between mb-4">
+        <h2 class="font-cyber font-semibold text-lg" data-i18n="common.edit_metadata">Edit metadata</h2>
+        <button id="capsule-edit-modal-close" class="text-textGray hover:text-white text-xl leading-none">&times;</button>
+      </div>
+      <form id="capsule-edit-form" class="space-y-4">
+        <input type="hidden" id="capsule-edit-id">
+        <div>
+          <label class="block text-xs font-code text-textGray mb-1.5" for="capsule-edit-title" data-i18n="time_capsule.title_label">Title</label>
+          <input id="capsule-edit-title" type="text" required class="w-full bg-darkBg/60 border border-borderNeon rounded-lg px-3 py-2 text-sm text-white">
+        </div>
+        <div>
+          <label class="block text-xs font-code text-textGray mb-1.5" for="capsule-edit-message" data-i18n="time_capsule.message_label">Message</label>
+          <textarea id="capsule-edit-message" rows="5" required class="w-full bg-darkBg/60 border border-borderNeon rounded-lg px-3 py-2 text-sm text-white"></textarea>
+        </div>
+        <div>
+          <label class="block text-xs font-code text-textGray mb-1.5" for="capsule-edit-open-date" data-i18n="time_capsule.open_date_label">Open Date</label>
+          <input id="capsule-edit-open-date" type="date" required class="w-full bg-darkBg/60 border border-borderNeon rounded-lg px-3 py-2 text-sm text-white">
+        </div>
+        <button type="submit" class="w-full px-5 py-2.5 bg-gradient-to-r from-neonViolet to-neonPurple rounded-xl text-xs font-cyber font-bold tracking-wider text-white hover:scale-105 transition-all" data-i18n="common.save">
+          Save
+        </button>
+        <p id="capsule-edit-status" class="text-xs font-code text-textGray text-center"></p>
+      </form>
+    </div>
+  </div>
+
   <script type="module" src="js/i18n.js"></script>
   <footer class="max-w-7xl mx-auto px-4 mt-10 pb-6 text-center">
-    <p class="text-[11px] font-code text-textGray/70" data-i18n="footer.line">EdenAtlas &middot; by Jun &middot; Version 2.9</p>
+    <p class="text-[11px] font-code text-textGray/70">EdenAtlas &middot; by Jun &middot; Version 2.9.1</p>
   </footer>
 
   <script src="scripts.js" defer></script>

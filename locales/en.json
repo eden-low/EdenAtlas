@@ -479,6 +479,7 @@
     "open_button": "Open",
     "opened_on": "Opened on {date}",
     "empty": "Write something for the future you.",
+    "empty_subtitle": "Your sealed capsules will appear here.",
     "home_ready_card": "A message from your past self is ready."
   },
   "reflection": {
