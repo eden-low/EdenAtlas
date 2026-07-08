@@ -50,7 +50,7 @@
     "use_current_location": "Use current location"
   },
   "footer": {
-    "line": "EdenAtlas · by Jun · Version 2.5"
+    "line": "EdenAtlas · by Jun · Version 2.8"
   },
   "home": {
     "greeting_morning": "Good Morning",
@@ -81,7 +81,7 @@
     "add_certificate": "Add Certificate",
     "add_award": "Add Award",
     "no_experience": "Your story starts with a single role.",
-    "no_projects": "Every great career starts with a first project.",
+    "no_projects": "Your next project could begin today.",
     "no_certificates": "Certificates you earn will show up here.",
     "no_awards": "Recognition will find its place here.",
     "reflection": "Reflection",
@@ -127,7 +127,18 @@
   },
   "people": {
     "title": "Connections",
+    "subtitle": "Discover the people in your EdenAtlas — and open a profile to see what they've chosen to share.",
     "search_placeholder": "Search by name, @username, or email…",
+    "search_results": "Search Results",
+    "no_search_results": "No one matches that search.",
+    "recommended": "Recommended Connections",
+    "recommended_subtitle": "Recently joined people you can connect with.",
+    "no_recommendations": "No one to recommend just yet.",
+    "your_connections": "Your Connections",
+    "no_connections": "No connections yet. Invite someone you trust to share part of your journey.",
+    "requests": "Connection Requests",
+    "requests_placeholder": "Coming soon — you'll be able to send and receive connection requests here.",
+    "open_profile": "Open Profile",
     "goals": "Goals",
     "new_goal": "New Goal",
     "no_goals": "No goals yet — set one to start tracking progress.",
@@ -138,13 +149,13 @@
     "subtitle": "A map of the places your life has touched.",
     "my_atlas": "My Atlas",
     "connections": "Connections",
-    "no_locations": "No locations yet — add a place to a Memory, Journal entry, or Journey event."
+    "no_locations": "The map will grow as your journey continues."
   },
   "collections": {
     "title": "Collections",
     "subtitle": "Life chapters that group your Memories, Journal, Finance, Journey, and Career records together.",
     "new": "New Collection",
-    "no_collections": "No collections yet — group your memories into a life chapter.",
+    "no_collections": "Every chapter begins with one memory.",
     "back": "Back to Collections",
     "back_to_atlas": "Back to Atlas",
     "private_notice": "This collection is private.",
@@ -181,7 +192,10 @@
     "title": "Contact"
   },
   "login": {
-    "title": "Sign in with Google to continue."
+    "title": "Sign in with Google to continue.",
+    "tagline": "Your digital home.",
+    "continue_google": "Continue with Google",
+    "privacy": "Your data stays private — only you decide what to share."
   },
   "mobilenav": {
     "home": "Home",

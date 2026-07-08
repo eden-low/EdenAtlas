@@ -165,6 +165,74 @@ the Me merge; Collections deliberately has no sidebar/drawer entry of its own.
    `mobilenav.people`'s English *value* changed to "Connections" (Chinese "人脉" already read that
    way, so it was left as-is) — labels only, no key renames, no file renames.
 
+**"EdenAtlas v2.8" (most recent) — "Polish · Identity · Experience"** is a UX-only pass: no new
+pages, no Firestore/Storage schema changes, no rules changes. Four surfaces were touched:
+1. **Login** — `login.html` was rebuilt around one centered card (EA mark, "EdenAtlas," a
+   tagline, a rounded-full "Continue with Google" button, a small privacy line) over a new
+   `.login-bg`/`.login-dot-grid`/`.login-orbit-ring` texture (`styles.css`) — a dark gradient
+   plus an almost-invisible dot grid and a few hairline concentric rings, deliberately far short
+   of the old build's neon-glow register. A stacked footer (`EdenAtlas` / `Built by Jun` /
+   `Version 2.8`) replaced the single-line footer, on this page only — see the Brand &
+   navigation bullet below for why the version bump didn't go sitewide. Post-sign-in, both the
+   session-restore and fresh-sign-in paths now call a `transitionToApp()` helper that fades the
+   card out, fades a small pulsing EA mark in, and only then navigates — replacing an instant
+   `location.href` jump. New i18n keys: `login.tagline`/`login.continue_google`/`login.privacy`.
+2. **Connections redesign** — `dashboard.html`/`dashboard.js` (nav-labeled "Connections") grew
+   from a bare live-search box into an Apple Contacts-style page: a **Search** box that swaps the
+   page into a "Search Results" view while non-empty; a default **Recommended Connections**
+   strip (the four most-recently-joined people the viewer's role can see, by `users/{uid}.
+   createdAt`); **Your Connections** (everyone else that role can see, alphabetical); and a
+   static **Connection Requests** placeholder card with no backing data — there is no
+   follow/request graph in Firestore, and the brief explicitly called this a future placeholder.
+   All three lists share one `personCard()` renderer (avatar/name/@username/bio/location, plus a
+   lazily-fetched, cached **public Collections count** — `where("uid","==",p.uid),
+   where("visibility","==","public")` against `collections`, the same equality-only query shape
+   used everywhere else in this app) ending in an explicit "Open Profile" affordance rather than
+   an inline expansion. Skeleton placeholders (`.skeleton`) show in both list containers until
+   the `users` directory fetch resolves. New i18n keys under `people.*`
+   (`search_results`/`no_search_results`/`recommended`/`recommended_subtitle`/
+   `no_recommendations`/`your_connections`/`no_connections`/`requests`/`requests_placeholder`/
+   `open_profile`/`subtitle`).
+3. **Profile gained Career + Public Atlas** — `profile.js` now also fetches public
+   `career_experiences`/`career_projects` for the viewed `uid` (same `fetchPublicFor()` shape as
+   every other section; in practice usually only non-empty on the Owner's own profile, since
+   Career stays Owner-only to write) and renders a compact, date-sorted **Career** section
+   (`#career-section`, hidden if empty). **Public Atlas** (`#atlas-section`) is a tag list of
+   distinct `locationName` values pulled from the profile's already-fetched public
+   photos/journals/life_events, each with an occurrence count, plus a "View on Atlas" link to
+   `atlas.html` — a deliberate choice *not* to re-embed Leaflet on every profile view (Atlas
+   itself remains the one page that owns the map). `profile-content`'s section order was
+   reshuffled to roughly follow the brief's Profile → Career → Public Memories → Public Atlas →
+   Journey → Achievements sequence (Recent Activity and Public Journal, not named in the brief,
+   were kept and placed after).
+4. **Language consolidated, not changed** — auditing every page confirmed the language switcher
+   already lived in exactly the two places the brief allows on mobile/Me (Me → Preferences'
+   `.lang-choice-btn` row, the mobile drawer's `.drawer-lang-btn` footer row) and nowhere else;
+   the one gap was the desktop sidebar, which had no language control at all. `js/sidebar.js`
+   gained an `.eden-sidebar-lang-row` (EN/中文 pills) in its bottom-pinned footer block, wired to
+   the same `getLang()`/`setLang()`/`eden:langchange` triad every other switcher uses — still one
+   global language state, now genuinely three (not more) surfaces. The row is hidden via CSS
+   when the sidebar is collapsed, matching how `.eden-sidebar-label` text already disappears in
+   that state.
+5. **Loading & empty states** — a new sitewide `html::before` rule in `styles.css` paints a
+   small pulsing EA mark behind every page, invisible in normal use (the opaque `body` covers it)
+   but visible through `body.auth-check-pending`'s `opacity:0` during the brief window before
+   `auth-guard.js` resolves — since CSS opacity collapses an element's entire subtree as one
+   composited group, a *descendant* of body could never un-hide itself this way, so the mark had
+   to be painted on `html` instead, behind body rather than inside it. Warmer empty-state copy
+   landed in `locales/*.json` (+ each page's static HTML fallback) for Connections
+   (`people.no_connections`), Career Projects (`career.no_projects`), Collections
+   (`collections.no_collections`), and Atlas (`atlas.no_locations`), per the brief's exact
+   wording. `atlas.js`'s one remaining raw `"Loading..."` string was normalized to the
+   `"Loading…"` convention used everywhere else.
+6. **Brand & navigation**: no nav changes (Connections already existed, no new page was added).
+   Every page footer was bumped from `Version 2.5` to `Version 2.8` (a straight string swap —
+   `login.html`'s footer had already been rebuilt with the new stacked layout earlier in this
+   same pass, so this just brought the other 19 pages' single-line footers up to the same
+   version number; the `footer.line` locale key, though currently unused by any page's markup,
+   was updated to match). No `brand-book.md` exists in this repo — `design-system.md` remained
+   the single source of truth for tokens/spacing/motion throughout this pass.
+
 ## Architecture
 
 ### Roles and the multi-tenant data model

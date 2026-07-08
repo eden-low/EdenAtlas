@@ -85,6 +85,46 @@ body {
     radial-gradient(900px 500px at 100% 0%, rgba(110, 168, 254, 0.07), transparent 55%);
 }
 
+/* Login page only: a subtle dark gradient (never pure black) plus an almost-invisible
+   atlas/orbit/grid motif — a faint dot grid and a few hairline concentric rings centered
+   behind the card. Deliberately restrained: no glow, no cyberpunk grid lines. */
+.login-bg {
+  background-repeat: no-repeat;
+  background-image:
+    radial-gradient(1200px 700px at 18% -12%, rgba(167, 139, 250, 0.10), transparent 60%),
+    radial-gradient(1000px 650px at 100% 108%, rgba(110, 168, 254, 0.07), transparent 55%),
+    linear-gradient(180deg, #0a0a0e 0%, #100e17 100%);
+}
+
+.login-dot-grid {
+  background-image: radial-gradient(rgba(255, 255, 255, 0.035) 1px, transparent 1px);
+  background-size: 28px 28px;
+}
+
+.login-orbit-ring {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  border-radius: 9999px;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+html[data-theme="light"] .login-bg {
+  background-image:
+    radial-gradient(1200px 700px at 18% -12%, rgba(167, 139, 250, 0.10), transparent 60%),
+    radial-gradient(1000px 650px at 100% 108%, rgba(110, 168, 254, 0.08), transparent 55%),
+    linear-gradient(180deg, #f5f5f7 0%, #ecebf1 100%);
+}
+
+html[data-theme="light"] .login-dot-grid {
+  background-image: radial-gradient(rgba(0, 0, 0, 0.045) 1px, transparent 1px);
+}
+
+html[data-theme="light"] .login-orbit-ring {
+  border-color: rgba(0, 0, 0, 0.06);
+}
+
 /* Scroll-reveal: elements fade + slide up into view. Toggled by scripts.js via IntersectionObserver. */
 .reveal {
   opacity: 0;
@@ -129,6 +169,38 @@ body {
 body.auth-check-pending {
   visibility: hidden;
   opacity: 0;
+}
+
+/* EA-mark loading state during the sitewide auth check (auth-guard.js). Painted on <html>
+   itself (a generated pseudo-element, not a body descendant) so it stays visible through
+   body's opacity:0 above — opacity collapses an element's whole subtree as one composited
+   group, so a child can never "un-hide" itself, but content painted behind a transparent body
+   shows through naturally. Once auth-guard.js removes .auth-check-pending, body fades back to
+   opaque and covers this mark again — so in practice it's only ever seen for the brief window
+   before auth resolves, not a permanent watermark. */
+html::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  background: #0a0a0e url("images/logo-mark.png") no-repeat center center;
+  background-size: 44px 44px;
+  animation: eden-auth-pulse 1.6s ease-in-out infinite;
+}
+
+html[data-theme="light"]::before {
+  background-color: #f5f5f7;
+}
+
+@keyframes eden-auth-pulse {
+  0%, 100% { opacity: 0.55; }
+  50% { opacity: 0.9; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html::before {
+    animation: none;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -203,7 +275,8 @@ html[data-theme="light"] ::-webkit-scrollbar-thumb {
   transition: width 0.2s ease;
 }
 
-#eden-sidebar.eden-sidebar-collapsed .eden-sidebar-label {
+#eden-sidebar.eden-sidebar-collapsed .eden-sidebar-label,
+#eden-sidebar.eden-sidebar-collapsed .eden-sidebar-lang-row {
   display: none;
 }
 

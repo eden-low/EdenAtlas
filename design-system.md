@@ -5,7 +5,8 @@
 - **Name**: EdenAtlas
 - **Positioning**: "A personal digital atlas for memories, growth, career, and life."
 - **Homepage line**: "Your life, beautifully organized."
-- **Footer**: `EdenAtlas · by Jun · Version 2.5` on every page.
+- **Footer**: `EdenAtlas · by Jun · Version 2.8` on every page (`login.html` uses a stacked
+  three-line variant of the same text as part of its v2.8 redesign).
 - **Visual style**: Apple + Notion + Linear inspired — dark glassmorphism, one soft accent
   color, generous whitespace, calm typography. Not a dashboard, not a portfolio, not a game.
 

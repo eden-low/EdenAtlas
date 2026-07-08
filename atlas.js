@@ -203,7 +203,7 @@ async function setScope(scope) {
     btn.classList.toggle("text-white", active);
   });
 
-  atlasCount.textContent = "Loading...";
+  atlasCount.textContent = "Loading…";
   const clusters = scope === "mine" ? await loadMineClusters() : await loadConnectionsClusters();
   renderClusters(clusters, scope === "mine" ? "#a78bfa" : "#6ea8fe");
 }

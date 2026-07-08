@@ -5,6 +5,7 @@
 // hidden (see the sitewide `<header class="hidden ...">` → `<header class="hidden">` pass).
 import { auth } from "../firebase-init.js";
 import { onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-auth.js";
+import { getLang, setLang, init as initI18n } from "./i18n.js";
 
 const COLLAPSE_KEY = "eden:sidebarCollapsed";
 const EXPANDED_W = "240px";
@@ -72,6 +73,13 @@ function sidebarHTML() {
         ${secondary}
       </nav>
       <div class="px-2.5 py-3 border-t border-borderNeon/60 space-y-0.5 flex-shrink-0">
+        <div class="eden-sidebar-lang-row flex items-center justify-between px-3 py-1.5 mb-1">
+          <span class="text-[11px] font-code text-textGray" data-i18n="settings.language">Language</span>
+          <div id="sidebar-lang-toggle" class="flex items-center gap-0.5 bg-darkBg/60 border border-borderNeon rounded-full p-0.5 text-[10px] font-code">
+            <button data-lang-choice="en" class="sidebar-lang-btn px-2 py-1 rounded-full transition-colors">EN</button>
+            <button data-lang-choice="zh-CN" class="sidebar-lang-btn px-2 py-1 rounded-full transition-colors">中文</button>
+          </div>
+        </div>
         <a href="me.html" title="Me" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-textGray hover:bg-darkBg/40 hover:text-white transition-colors">
           <i data-lucide="user" class="w-[18px] h-[18px] flex-shrink-0"></i><span class="eden-sidebar-label truncate" data-i18n="nav.me">Me</span>
         </a>
@@ -98,6 +106,24 @@ function injectUI() {
     await signOut(auth);
     location.href = "login.html";
   });
+
+  // Same setLang()/getLang() from js/i18n.js that Me's Preferences tab and the mobile drawer
+  // use — one language state, three surfaces, no separate implementation.
+  const langButtons = document.querySelectorAll(".sidebar-lang-btn");
+  const paintActiveLang = () => {
+    langButtons.forEach((btn) => {
+      const active = btn.dataset.langChoice === getLang();
+      btn.classList.toggle("bg-neonPurple/20", active);
+      btn.classList.toggle("text-white", active);
+      btn.classList.toggle("text-textGray", !active);
+    });
+  };
+  initI18n().then(paintActiveLang);
+  langButtons.forEach((btn) => btn.addEventListener("click", async () => {
+    await setLang(btn.dataset.langChoice);
+    paintActiveLang();
+  }));
+  document.addEventListener("eden:langchange", paintActiveLang);
 
   const collapseBtn = document.getElementById("eden-sidebar-collapse");
   const collapseIcon = collapseBtn.querySelector("i");

@@ -32,6 +32,21 @@ Settings + Dashboard's personal-analytics half merged into one **Me** control ce
 Dashboard trimmed to just Search People (relabeled **Connections**). See `CLAUDE.md`'s version
 history for the full breakdown.
 
+**v2.8 ("Polish · Identity · Experience")** is a pure UX pass — no new pages, no database or
+Firebase changes. `login.html` was rebuilt into a single centered card (EA mark, tagline,
+"Continue with Google," a privacy line, a stacked footer) over an almost-invisible dark
+gradient/orbit/dot texture, with a small EA-mark fade transition after sign-in instead of an
+abrupt redirect. **Connections** (`dashboard.html`) grew from a bare search box into an Apple
+Contacts-style page — Search, **Recommended Connections** (a small recently-joined strip), **Your
+Connections** (everyone you can currently see), and a **Connection Requests** placeholder for a
+future feature — with richer cards (bio, location, public Collections count). `profile.html`
+gained **Career** and **Public Atlas** sections (a location-name summary linking out to Atlas,
+not a re-embedded map). The language switcher was consolidated to exactly three places — Me →
+Preferences, the desktop sidebar footer (new), and the mobile drawer footer — everywhere else was
+already clean. A sitewide EA-mark loading state now shows during the auth check instead of a
+blank flash, several empty states got warmer copy, and hover/press micro-interactions were
+extended to the newly-touched surfaces.
+
 ## Roles
 
 - **Owner** (`jjun8647@gmail.com`) — full access everywhere, plus the only role that sees System Logs and Whitelist Management in Me → Connections/System Logs.
@@ -60,8 +75,8 @@ original build to avoid a risky site-wide route rename (see the Brand & navigati
 | Habits | [habits.html](habits.html) | Habit tracker — daily check-ins, streaks, a 7-day weekly strip, and a monthly completion ring per habit |
 | Calendar | [calendar.html](calendar.html) | Monthly 7-column grid of your own expenses/photos/journal entries, bucketed by day |
 | Reports | [reports.html](reports.html) | Monthly recap of your own activity — total spend, top category, weekday-vs-weekend spending comparison, photo/journal counts |
-| Connections | [dashboard.html](dashboard.html) | **Search People** only (find another signed-in user by name/@username/email) — personal analytics/Goals/Achievements moved to **Me** in v2.7 |
-| (search result only) | [profile.html](profile.html) | Read-only GitHub+Instagram-style profile (`?uid=`) opened from Search People — avatar/name/@username/bio/location/joined date, public stats (incl. habit completion %), public Achievement badges, Recent Activity, photo **Albums** (Travel/Projects/Events/Daily Life/Favorites), and public Timeline/Journal lists — all public content only, nothing editable. Not in the nav — only reachable via a search result, same as `login.html` |
+| Connections | [dashboard.html](dashboard.html) | Apple Contacts-style discovery (v2.8): Search, **Recommended Connections**, **Your Connections**, and a **Connection Requests** placeholder, with richer cards (bio/location/public Collections count) linking to `profile.html` — personal analytics/Goals/Achievements stay on **Me** (moved there in v2.7) |
+| (search result only) | [profile.html](profile.html) | Read-only GitHub+Instagram-style profile (`?uid=`) opened from Connections — avatar/name/@username/bio/location/joined date, public stats (incl. habit completion %), **Career** (public items, v2.8), photo **Albums** (Travel/Projects/Events/Daily Life/Favorites), **Public Atlas** (a location-name summary linking to Atlas, v2.8), public Timeline/Journal lists, and public Achievement badges — all public content only, nothing editable. Not in the nav — only reachable via a search result, same as `login.html` |
 | Inbox | [notifications.html](notifications.html) | Your own notification center — login/expense/journal/habit/gallery alerts, unread badge in the nav, mark-as-read |
 | Contact | [contact.html](contact.html) | Email / phone / location, with a one-click "send message" CTA |
 | (via Atlas) | [collections.html](collections.html) / [collection-detail.html](collection-detail.html) | **Collections** — life chapters (e.g. "Japan Trip") that group existing Memories/Journal/Finance/Journey/Career records via a `collectionId` reference, never a copy. List page: create/edit/delete (blocked while non-empty) with per-type item counts; detail page: cover/title/description/visibility header, one section per record type plus a Reflection/Notes field, and a synthetic "Uncategorized" view for anything with no collection |
@@ -208,9 +223,9 @@ Each user sees only their own notifications ([notifications.js](notifications.js
 
 Available to any signed-in user from Settings ([export.js](export.js)) — downloads *your own* data: Expenses as CSV, Journal as a combined Markdown file, Timeline and Gallery metadata as JSON, and a "Full Backup" JSON bundling `{ profile, settings, expenses, journals, timeline, gallery_metadata, habits }`.
 
-## Connections: Search People
+## Connections
 
-[dashboard.js](dashboard.js) (nav-labeled "Connections" since v2.7) is now just **Search People** — fetches the `users` directory, lets you search by name/@username/email, and — filtered by role (a Viewer only finds the Owner; a Friend or the Owner finds the Owner and any Friend) — links each result to [profile.html](profile.html), a dedicated read-only profile page with a public photo grid (like/comment, no edit) instead of an inline summary card. Gallery/Expense/Journal analytics, Goals, and Achievements moved to [me.html](me.html)'s Overview tab in v2.7 (they used to live here).
+[dashboard.js](dashboard.js) (nav-labeled "Connections" since v2.7, redesigned in v2.8) fetches the `users` directory once, then role-filters it the same way it always has (a Viewer only finds the Owner; a Friend or the Owner finds the Owner and any Friend) into three views: a live **Search** that takes over the page while typing, a **Recommended Connections** strip (the four most recently joined people you can see), and **Your Connections** (everyone else you can see, alphabetical). A **Connection Requests** section is a static placeholder — no request/follow graph exists in Firestore. Each card shows avatar/name/@username/bio/location/public-Collections-count and links to [profile.html](profile.html), a dedicated read-only profile page — never an inline summary. Gallery/Expense/Journal analytics, Goals, and Achievements moved to [me.html](me.html)'s Overview tab in v2.7 (they used to live here).
 
 ## Me: personal control center
 
@@ -224,7 +239,9 @@ Dashboard→People, and as of v2.7, People→Connections, Settings→Me) but **f
 deliberately left unchanged** to avoid the risk of a site-wide route rename (broken bookmarks,
 PWA cache, internal links) for a purely cosmetic win — `dashboard.html` is "Connections" and
 `settings.html` is now a redirect to the new `me.html`. Every page footer reads
-`EdenAtlas · by Jun · Version 2.5`.
+`EdenAtlas · by Jun · Version 2.8` as of this pass (`login.html`'s footer is a stacked
+EdenAtlas / Built by Jun / Version 2.8 layout instead, part of its v2.8 rebuild; every other
+page kept its existing single-line layout and just had the version number bumped).
 
 ## Structure notes
 

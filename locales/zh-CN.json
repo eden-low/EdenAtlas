@@ -50,7 +50,7 @@
     "use_current_location": "使用当前位置"
   },
   "footer": {
-    "line": "EdenAtlas · by Jun · Version 2.5"
+    "line": "EdenAtlas · by Jun · Version 2.8"
   },
   "home": {
     "greeting_morning": "早上好",
@@ -81,7 +81,7 @@
     "add_certificate": "添加证书",
     "add_award": "添加奖项",
     "no_experience": "每段故事，都从第一份工作开始。",
-    "no_projects": "每一段精彩的职业生涯，都始于第一个项目。",
+    "no_projects": "你的下一个项目，或许就从今天开始。",
     "no_certificates": "你获得的证书，会显示在这里。",
     "no_awards": "属于你的荣誉，终将被看见。",
     "reflection": "复盘",
@@ -127,7 +127,18 @@
   },
   "people": {
     "title": "人脉",
+    "subtitle": "发现 EdenAtlas 里的其他人——打开主页，看看他们愿意分享的内容。",
     "search_placeholder": "按姓名、@用户名或邮箱搜索…",
+    "search_results": "搜索结果",
+    "no_search_results": "没有找到匹配的人。",
+    "recommended": "推荐关注",
+    "recommended_subtitle": "最近加入、你可以关注的人。",
+    "no_recommendations": "暂时没有可推荐的人。",
+    "your_connections": "我的人脉",
+    "no_connections": "还没有人脉。邀请一位你信任的人，分享你人生的一部分吧。",
+    "requests": "人脉请求",
+    "requests_placeholder": "即将上线——你将可以在这里发送和接收人脉请求。",
+    "open_profile": "查看主页",
     "goals": "目标",
     "new_goal": "新建目标",
     "no_goals": "还没有目标 — 设一个开始追踪进度吧。",
@@ -138,13 +149,13 @@
     "subtitle": "记录你生活足迹的地图。",
     "my_atlas": "我的地图",
     "connections": "人脉",
-    "no_locations": "还没有地点 — 为一张回忆、一篇日记或一个历程事件添加位置吧。"
+    "no_locations": "地图会随着你的旅程，慢慢展开。"
   },
   "collections": {
     "title": "收藏集",
     "subtitle": "把你的回忆、日记、财务、历程和履历记录，整理成一个个人生篇章。",
     "new": "新建收藏集",
-    "no_collections": "还没有收藏集 — 把你的回忆整理成一个人生篇章吧。",
+    "no_collections": "每一个篇章，都始于一段回忆。",
     "back": "返回收藏集",
     "back_to_atlas": "返回地图集",
     "private_notice": "这个收藏集是私密的。",
@@ -181,7 +192,10 @@
     "title": "联系方式"
   },
   "login": {
-    "title": "使用 Google 账号登录以继续。"
+    "title": "使用 Google 账号登录以继续。",
+    "tagline": "你的数字家园。",
+    "continue_google": "使用 Google 继续",
+    "privacy": "你的数据始终私密——分享与否，由你决定。"
   },
   "mobilenav": {
     "home": "首页",

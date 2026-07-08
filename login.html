@@ -35,30 +35,53 @@
     }
   </script>
 </head>
-<body class="auth-check-pending bg-darkBg text-white font-sans grid-bg min-h-screen flex items-center justify-center p-4">
-  <div class="w-full max-w-sm reveal bg-cardBg/90 backdrop-blur-md neon-border-purple rounded-2xl p-8 text-center">
-    <div class="w-14 h-14 mx-auto flex items-center justify-center">
-      <img src="images/logo-mark.png" alt="EdenAtlas" class="w-full h-full object-contain">
-    </div>
-    <h1 class="font-cyber font-semibold text-xl mt-5 text-transparent bg-clip-text bg-gradient-to-r from-white to-neonPurple">EdenAtlas</h1>
-    <p class="text-[10px] text-neonPurple font-code font-bold tracking-widest mt-1">DIGITAL ATLAS</p>
-    <p class="text-textGray text-sm mt-5">Sign in with Google to continue.</p>
-
-    <button id="signin-btn" class="mt-6 w-full px-5 py-3 bg-gradient-to-r from-neonViolet to-neonPurple rounded-xl text-sm font-cyber font-bold tracking-wider text-white hover:scale-[1.02] transition-all flex items-center justify-center gap-2">
-      <i class="fa-brands fa-google"></i> SIGN IN WITH GOOGLE
-    </button>
-    <p id="standalone-note" class="hidden mt-4 text-xs text-textGray leading-relaxed">
-      Google sign-in doesn't reliably complete inside the installed app on iPhone. Tap below to sign in using Safari, then reopen this app from your Home Screen — it'll remember you.
-    </p>
-    <a id="signin-safari-link" href="#" target="_blank" rel="noopener" class="hidden mt-4 w-full px-5 py-3 bg-gradient-to-r from-neonViolet to-neonPurple rounded-xl text-sm font-cyber font-bold tracking-wider text-white hover:scale-[1.02] transition-all items-center justify-center gap-2">
-      <i class="fa-solid fa-arrow-up-right-from-square"></i> OPEN IN SAFARI TO SIGN IN
-    </a>
-    <p id="signin-status" class="mt-4 text-xs font-code text-textGray"></p>
+<body class="auth-check-pending bg-darkBg text-white font-sans login-bg min-h-screen flex flex-col">
+  <!-- Almost-invisible atlas/orbit/grid texture — decorative only, never a cyberpunk grid. -->
+  <div class="pointer-events-none fixed inset-0 overflow-hidden" aria-hidden="true">
+    <div class="absolute inset-0 login-dot-grid"></div>
+    <div class="login-orbit-ring" style="width:560px;height:560px;"></div>
+    <div class="login-orbit-ring" style="width:840px;height:840px;"></div>
+    <div class="login-orbit-ring" style="width:1120px;height:1120px;"></div>
   </div>
 
+  <main class="relative flex-1 flex items-center justify-center px-4 py-16">
+    <div id="login-card" class="w-full max-w-sm reveal bg-cardBg/90 backdrop-blur-md neon-border-purple rounded-2xl px-8 py-10 md:px-10 md:py-12 text-center transition-opacity duration-300">
+      <div class="w-16 h-16 mx-auto flex items-center justify-center">
+        <img src="images/logo-mark.png" alt="EdenAtlas" class="w-full h-full object-contain">
+      </div>
+      <h1 class="font-cyber font-semibold text-2xl mt-6 text-transparent bg-clip-text bg-gradient-to-r from-white to-neonPurple">EdenAtlas</h1>
+      <p class="text-textGray text-sm mt-3" data-i18n="login.tagline">Your digital home.</p>
+
+      <button id="signin-btn" class="mt-9 w-full px-6 py-3.5 bg-gradient-to-r from-neonViolet to-neonPurple rounded-full text-sm font-semibold tracking-wide text-white hover:scale-[1.02] active:scale-[0.99] transition-transform duration-200 flex items-center justify-center gap-3">
+        <i class="fa-brands fa-google"></i> <span data-i18n="login.continue_google">Continue with Google</span>
+      </button>
+      <p id="standalone-note" class="hidden mt-5 text-xs text-textGray leading-relaxed">
+        Google sign-in doesn't reliably complete inside the installed app on iPhone. Tap below to sign in using Safari, then reopen this app from your Home Screen — it'll remember you.
+      </p>
+      <a id="signin-safari-link" href="#" target="_blank" rel="noopener" class="hidden mt-5 w-full px-6 py-3.5 bg-gradient-to-r from-neonViolet to-neonPurple rounded-full text-sm font-semibold tracking-wide text-white hover:scale-[1.02] transition-transform duration-200 items-center justify-center gap-3">
+        <i class="fa-solid fa-arrow-up-right-from-square"></i> Open in Safari to Sign In
+      </a>
+      <p id="signin-status" class="mt-4 text-xs font-code text-textGray"></p>
+
+      <p class="mt-7 text-[11px] text-textGray/70 leading-relaxed" data-i18n="login.privacy">Your data stays private — only you decide what to share.</p>
+    </div>
+
+    <!-- Post-sign-in transition: card fades out, a small EA-logo loading state fades in, then
+         we navigate — so the jump to Home never feels like a sudden page-load pop. -->
+    <div id="login-loading" class="hidden absolute inset-0 flex items-center justify-center">
+      <div id="login-loading-inner" class="flex flex-col items-center gap-4 opacity-0 transition-opacity duration-500">
+        <div class="w-14 h-14 animate-pulse">
+          <img src="images/logo-mark.png" alt="" class="w-full h-full object-contain">
+        </div>
+        <p class="text-[11px] font-code text-textGray tracking-widest">Loading…</p>
+      </div>
+    </div>
+  </main>
+
   <script type="module" src="js/i18n.js"></script>
-  <footer class="max-w-7xl mx-auto px-4 mt-10 pb-6 text-center">
-    <p class="text-[11px] font-code text-textGray/70">EdenAtlas &middot; by Jun &middot; Version 2.5</p>
+  <footer class="relative pb-8 text-center">
+    <p class="text-xs font-semibold text-white/80">EdenAtlas</p>
+    <p class="text-[11px] text-textGray/70 mt-1">Built by Jun &middot; Version 2.8</p>
   </footer>
 
   <script src="scripts.js" defer></script>
@@ -71,6 +94,9 @@
     const statusEl = document.getElementById("signin-status");
     const standaloneNote = document.getElementById("standalone-note");
     const safariLink = document.getElementById("signin-safari-link");
+    const loginCard = document.getElementById("login-card");
+    const loginLoading = document.getElementById("login-loading");
+    const loginLoadingInner = document.getElementById("login-loading-inner");
 
     function shortDevice(ua) {
       if (!ua) return "an unknown device";
@@ -80,6 +106,17 @@
       if (/Macintosh/.test(ua)) return "macOS";
       if (/Linux/.test(ua)) return "Linux";
       return "an unknown device";
+    }
+
+    // Small, deliberate transition instead of an abrupt navigation: fade the card out, fade a
+    // centered EA mark in, then hand off to the target page — which itself fades in via the
+    // existing auth-check-pending -> body opacity transition, so the whole hop reads as one
+    // continuous motion rather than a page-load jump.
+    function transitionToApp(target) {
+      loginCard.classList.add("opacity-0");
+      loginLoading.classList.remove("hidden");
+      requestAnimationFrame(() => loginLoadingInner.classList.remove("opacity-0"));
+      setTimeout(() => { location.href = target; }, 450);
     }
 
     // A standalone/installed iPhone PWA cannot reliably complete Google sign-in from inside
@@ -165,7 +202,7 @@
         const mode = await resolveUserMode(user);
         localStorage.setItem(USER_MODE_KEY, mode);
         await upsertUserProfile(user, mode);
-        location.href = getRedirectTarget();
+        transitionToApp(getRedirectTarget());
         return;
       }
       document.body.classList.remove("auth-check-pending");
@@ -216,7 +253,7 @@
         console.error("[login] notification write failed (continuing anyway):", err);
       }
 
-      location.href = getRedirectTarget();
+      transitionToApp(getRedirectTarget());
     });
   </script>
 </body>

@@ -43,6 +43,10 @@ const timelineSection = document.getElementById("timeline-list-section");
 const timelineListEl = document.getElementById("timeline-list");
 const journalSection = document.getElementById("journal-list-section");
 const journalListEl = document.getElementById("journal-list");
+const careerSection = document.getElementById("career-section");
+const careerListEl = document.getElementById("career-list");
+const atlasSection = document.getElementById("atlas-section");
+const atlasPlacesListEl = document.getElementById("atlas-places-list");
 
 let allPublicPhotos = [];
 let activeAlbum = null; // null = all, "featured" = favorites, or an album key
@@ -199,6 +203,72 @@ function renderJournalList(journals) {
       el.className = "py-1.5 border-b border-borderNeon/30 last:border-0";
       const snippet = (j.content || "").replace(/[#*_`>-]/g, "").slice(0, 90);
       el.innerHTML = `<p class="text-sm text-white">${j.title || "Untitled"}</p><p class="text-xs text-textGray mt-0.5 truncate">${snippet}</p>`;
+      return el;
+    })
+  );
+}
+
+// ---- Career (public subset — Career is Owner-only to write, so this is usually only
+// non-empty on the Owner's own profile; hidden entirely for anyone else). ----
+
+function careerTitle(item) {
+  return item.title_en || item.title_zh || "Untitled";
+}
+
+function renderCareer(experiences, projects) {
+  const items = [
+    ...experiences.map((e) => ({
+      icon: "fa-briefcase",
+      title: e.role_en || e.role_zh || careerTitle(e),
+      subtitle: [e.company, `${e.startDate || ""}${e.startDate || e.endDate ? " – " : ""}${e.endDate || (e.startDate ? "Present" : "")}`].filter(Boolean).join(" · "),
+      at: e.startDate ? new Date(e.startDate).getTime() : 0,
+    })),
+    ...projects.map((p) => ({
+      icon: "fa-diagram-project",
+      title: careerTitle(p),
+      subtitle: p.category || "",
+      at: p.createdAt?.toMillis?.() || 0,
+    })),
+  ].sort((a, b) => b.at - a.at);
+
+  careerSection.classList.toggle("hidden", items.length === 0);
+  if (!items.length) return;
+
+  careerListEl.replaceChildren(
+    ...items.map((item) => {
+      const el = document.createElement("div");
+      el.className = "flex items-start gap-3";
+      el.innerHTML = `
+        <span class="w-8 h-8 rounded-lg bg-neonPurple/10 text-neonPurple flex items-center justify-center text-xs flex-shrink-0 mt-0.5"><i class="fa-solid ${item.icon}"></i></span>
+        <div class="min-w-0">
+          <p class="text-sm text-white truncate">${item.title}</p>
+          ${item.subtitle ? `<p class="text-xs text-textGray font-code mt-0.5 truncate">${item.subtitle}</p>` : ""}
+        </div>`;
+      return el;
+    })
+  );
+}
+
+// ---- Public Atlas — a compact summary of named places across public Memories/Journal/Journey,
+// linking out to atlas.html rather than re-embedding Leaflet on every profile (Atlas itself
+// owns the map). ----
+
+function renderAtlasPlaces(photos, journals, events) {
+  const counts = new Map();
+  [...photos, ...journals, ...events].forEach((item) => {
+    if (!item.locationName) return;
+    counts.set(item.locationName, (counts.get(item.locationName) || 0) + 1);
+  });
+
+  const places = [...counts.entries()].sort((a, b) => b[1] - a[1]);
+  atlasSection.classList.toggle("hidden", places.length === 0);
+  if (!places.length) return;
+
+  atlasPlacesListEl.replaceChildren(
+    ...places.map(([name, count]) => {
+      const el = document.createElement("span");
+      el.className = "inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-borderNeon bg-darkBg/40 text-xs text-white";
+      el.innerHTML = `<i class="fa-solid fa-location-dot text-neonPurple text-[10px]"></i> ${name} <span class="text-textGray font-code">&times;${count}</span>`;
       return el;
     })
   );
@@ -423,11 +493,13 @@ async function loadProfile() {
     return;
   }
 
-  const [photos, journals, events, habits] = await Promise.all([
+  const [photos, journals, events, habits, careerExperiences, careerProjects] = await Promise.all([
     fetchPublicFor("photos", targetUid),
     fetchPublicFor("journals", targetUid),
     fetchPublicFor("life_events", targetUid),
     fetchPublicFor("habits", targetUid),
+    fetchPublicFor("career_experiences", targetUid),
+    fetchPublicFor("career_projects", targetUid),
   ]);
   photos.sort((a, b) => (b.uploadedAt?.toMillis?.() || 0) - (a.uploadedAt?.toMillis?.() || 0));
   allPublicPhotos = photos;
@@ -435,11 +507,13 @@ async function loadProfile() {
 
   contentSection.classList.remove("hidden");
   renderStats({ photos, journals, events, habits });
-  renderAchievements({ photos, journals, habits });
-  renderRecentActivity({ photos, journals, events });
+  renderCareer(careerExperiences, careerProjects);
   renderAlbumTiles(photos);
   renderPhotoGrid();
+  renderAtlasPlaces(photos, journals, events);
   renderTimelineList(events);
+  renderAchievements({ photos, journals, habits });
+  renderRecentActivity({ photos, journals, events });
   renderJournalList(journals);
 }
 
