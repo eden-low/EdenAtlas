@@ -86,13 +86,13 @@
 
     <section class="reveal bg-cardBg/90 neon-border-purple rounded-2xl p-3 flex flex-wrap items-center justify-between gap-3">
       <div id="timeline-filters" class="flex flex-wrap items-center gap-1.5 text-xs font-cyber font-bold tracking-wider text-textGray">
-        <button data-filter="all" class="filter-tab px-3 py-1.5 rounded-full hover:text-neonPurple hover:bg-neonPurple/10 transition-colors">All</button>
+        <button data-filter="all" class="filter-tab px-3 py-1.5 rounded-full hover:text-neonPurple hover:bg-neonPurple/10 transition-colors" data-i18n="common.all">All</button>
         <button data-filter="career" class="filter-tab px-3 py-1.5 rounded-full hover:text-neonPurple hover:bg-neonPurple/10 transition-colors">Career</button>
         <button data-filter="education" class="filter-tab px-3 py-1.5 rounded-full hover:text-neonPurple hover:bg-neonPurple/10 transition-colors">Education</button>
         <button data-filter="travel" class="filter-tab px-3 py-1.5 rounded-full hover:text-neonPurple hover:bg-neonPurple/10 transition-colors">Travel</button>
         <button data-filter="personal" class="filter-tab px-3 py-1.5 rounded-full hover:text-neonPurple hover:bg-neonPurple/10 transition-colors">Personal</button>
-        <button data-filter="public" class="filter-tab px-3 py-1.5 rounded-full hover:text-neonPurple hover:bg-neonPurple/10 transition-colors">Public</button>
-        <button data-filter="private" class="filter-tab hidden px-3 py-1.5 rounded-full hover:text-rose-400 hover:bg-rose-400/10 transition-colors">Private</button>
+        <button data-filter="public" class="filter-tab px-3 py-1.5 rounded-full hover:text-neonPurple hover:bg-neonPurple/10 transition-colors" data-i18n="common.public">Public</button>
+        <button data-filter="private" class="filter-tab hidden px-3 py-1.5 rounded-full hover:text-rose-400 hover:bg-rose-400/10 transition-colors" data-i18n="common.private">Private</button>
       </div>
       <button id="new-event-btn" class="hidden px-4 py-2 bg-gradient-to-r from-neonViolet to-neonPurple rounded-xl text-xs font-cyber font-bold tracking-wider text-white hover:scale-105 transition-all whitespace-nowrap">
         <i class="fa-solid fa-plus mr-1.5"></i> NEW EVENT
@@ -108,17 +108,17 @@
     <div id="event-modal-backdrop" class="absolute inset-0 bg-darkBg/80 backdrop-blur-sm"></div>
     <div class="relative w-full max-w-md bg-cardBg neon-border-purple rounded-2xl p-6">
       <div class="flex items-center justify-between mb-4">
-        <h2 class="font-cyber font-semibold text-lg">New Event</h2>
+        <h2 class="font-cyber font-semibold text-lg" data-i18n="journey.add_event">New Event</h2>
         <button id="event-modal-close" class="text-textGray hover:text-white text-xl leading-none">&times;</button>
       </div>
       <form id="event-form" class="space-y-4">
         <div>
           <label class="block text-xs font-code text-textGray mb-1.5" for="event-title">Title</label>
-          <input id="event-title" type="text" required placeholder="Graduated from UTAR" class="w-full bg-darkBg/60 border border-borderNeon rounded-lg px-3 py-2 text-sm text-white placeholder:text-textGray/60">
+          <input id="event-title" type="text" required placeholder="Graduated from UTAR" data-i18n-placeholder="journey.role_placeholder" class="w-full bg-darkBg/60 border border-borderNeon rounded-lg px-3 py-2 text-sm text-white placeholder:text-textGray/60">
         </div>
         <div>
           <label class="block text-xs font-code text-textGray mb-1.5" for="event-description">Description</label>
-          <textarea id="event-description" rows="3" placeholder="Optional details" class="w-full bg-darkBg/60 border border-borderNeon rounded-lg px-3 py-2 text-sm text-white placeholder:text-textGray/60"></textarea>
+          <textarea id="event-description" rows="3" placeholder="Optional details" data-i18n-placeholder="journey.details_placeholder" class="w-full bg-darkBg/60 border border-borderNeon rounded-lg px-3 py-2 text-sm text-white placeholder:text-textGray/60"></textarea>
         </div>
         <div class="flex items-center gap-4">
           <div class="flex-1">
@@ -136,8 +136,8 @@
           </div>
         </div>
         <div class="flex items-center gap-4 text-xs font-code text-textGray">
-          <label class="flex items-center gap-1.5"><input type="radio" name="event-visibility" value="public" checked> Public</label>
-          <label class="flex items-center gap-1.5"><input type="radio" name="event-visibility" value="private"> Private</label>
+          <label class="flex items-center gap-1.5"><input type="radio" name="event-visibility" value="public" checked> <span data-i18n="common.public">Public</span></label>
+          <label class="flex items-center gap-1.5"><input type="radio" name="event-visibility" value="private"> <span data-i18n="common.private">Private</span></label>
         </div>
         <div>
           <label class="block text-xs font-code text-textGray mb-1.5" for="event-collection" data-i18n="common.collection">Collection</label>
@@ -200,8 +200,8 @@
           </div>
         </div>
         <div class="flex items-center gap-4 text-xs font-code text-textGray">
-          <label class="flex items-center gap-1.5"><input type="radio" name="event-edit-visibility" value="public"> Public</label>
-          <label class="flex items-center gap-1.5"><input type="radio" name="event-edit-visibility" value="private"> Private</label>
+          <label class="flex items-center gap-1.5"><input type="radio" name="event-edit-visibility" value="public"> <span data-i18n="common.public">Public</span></label>
+          <label class="flex items-center gap-1.5"><input type="radio" name="event-edit-visibility" value="private"> <span data-i18n="common.private">Private</span></label>
         </div>
         <div>
           <label class="block text-xs font-code text-textGray mb-1.5" for="event-edit-collection" data-i18n="common.collection">Collection</label>

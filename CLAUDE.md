@@ -165,7 +165,7 @@ the Me merge; Collections deliberately has no sidebar/drawer entry of its own.
    `mobilenav.people`'s English *value* changed to "Connections" (Chinese "人脉" already read that
    way, so it was left as-is) — labels only, no key renames, no file renames.
 
-**"EdenAtlas v2.8" (most recent) — "Polish · Identity · Experience"** is a UX-only pass: no new
+**"EdenAtlas v2.8" — "Polish · Identity · Experience"** is a UX-only pass: no new
 pages, no Firestore/Storage schema changes, no rules changes. Four surfaces were touched:
 1. **Login** — `login.html` was rebuilt around one centered card (EA mark, "EdenAtlas," a
    tagline, a rounded-full "Continue with Google" button, a small privacy line) over a new
@@ -233,6 +233,77 @@ pages, no Firestore/Storage schema changes, no rules changes. Four surfaces were
    was updated to match). No `brand-book.md` exists in this repo — `design-system.md` remained
    the single source of truth for tokens/spacing/motion throughout this pass.
 
+**"EdenAtlas v2.9" (most recent) — "Living Memories"** finishes sitewide i18n and adds two
+always-private emotional-checkpoint features. No AI, no Firebase architecture changes, no schema
+changes to any pre-existing collection.
+1. **Full i18n completion.** The gap this pass closed: `js/i18n.js`'s `applyTranslations()` was
+   only ever called from `init()`/`setLanguage()` (global, whole-`document` passes) — no
+   page-level script called it or `t()` at all, so anything rendered by JS after page load
+   (list items, modals, status text, empty states, Chart.js labels, category/mood label maps)
+   was permanently English regardless of the selected language. Fixed by generalizing the one
+   existing precedent, `career.js`'s `bi()` helper + `eden:langchange` listener (previously
+   scoped only to Career's bilingual Firestore *content* fields), into a sitewide pattern: every
+   page-level script now does `import { t } from "./js/i18n.js"`, wraps UI-chrome strings in
+   `t("namespace.key")` *at render time*, and adds a `document.addEventListener("eden:langchange",
+   ...)` that re-runs its existing render function(s) against already-cached data — no refetch.
+   `collections.js`/`collection-detail.js` already had their own `bi()`/`curLang()` for bilingual
+   `title_en`/`title_zh` content but were missing the `eden:langchange` listener (titles never
+   updated on a live language switch) and read the pre-fix legacy `localStorage["eden:lang"]`
+   key instead of `getLang()` — both fixed. `js/i18n.js` itself gained `t(key, vars)`
+   `{placeholder}` interpolation (e.g. `t("time_capsule.locked_notice", { date })`), a fallback
+   chain (current language → English dict → raw key), and a `console.warn` on missing keys,
+   gated to `localhost`/`127.0.0.1` only. User-generated content (a person's own journal text,
+   photo captions, expense notes, etc.) is never passed through `t()` — only UI chrome, category/
+   mood label config objects, and static markup already covered by `data-i18n`.
+2. **Time Capsule** — [time-capsule.html](time-capsule.html)/[time-capsule.js](time-capsule.js),
+   a new page (closest template: `habits.html`/`habits.js`, the simplest single-collection CRUD
+   page) backed by a new `time_capsules/{id}` collection: `{uid, title, message, openAt,
+   createdAt, updatedAt, status: "sealed"|"opened", visibility: "private", attachmentUrl,
+   attachmentType}`. Always private — same owner-uid-only rules shape as `goals`/`expenses`, never
+   `isMineOrPublic()`. Three sections (Sealed / Ready to Open / Opened) are a client-side split of
+   one `where("uid","==",myUid)` query (this repo's index-avoidance convention): `status===
+   "opened"` → Opened; `status==="sealed" && openAt<=now` → Ready to Open; otherwise → Sealed.
+   Opening does `updateDoc(..., { status: "opened", updatedAt: serverTimestamp() })`. Optional
+   attachment uploads to a new Storage path `capsules/{uid}/...` (always-private, no `/public`
+   split — mirrors `career/{uid}/private`'s shape but scoped to the uploader instead of
+   Owner-only). Home shows a calm ready-notice card (`#capsule-ready-section`, same hidden-by-
+   default pattern as `#memories-section`) once any capsule is due; a best-effort
+   `checkCapsuleReadyNotifications()` (copied from `habits.js`'s streak-notification shape,
+   deduped via `localStorage`) writes a `notifications` doc (`capsule_ready`, added to
+   `notifications.js`'s `TYPE_META`). Nav: a secondary item in `js/sidebar.js`/
+   `js/mobile-nav.js` (not primary — the brief explicitly said not to crowd the main sidebar),
+   a `mobilenav.new_capsule` Quick Add entry deep-linking `time-capsule.html?new=1` (auto-opens
+   the create modal, same `maybeAutoOpenFromQuickAdd()` convention as every other Quick Add
+   target), a Home Quick Actions pill, and a compact sealed/ready-count summary card in Me →
+   Overview (not a duplicate CRUD UI — just a link out to the real page).
+3. **Daily Reflection** — no new page; lives entirely as a card on `index.html` next to Today's
+   Overview. New `daily_reflections/{id}` collection, doc ID = `${uid}_${dateKey}` (the app's
+   established "deterministic ID for structural uniqueness" trick, same idea as
+   `usernames/{username}`) so a same-day re-save is a `setDoc(..., {merge:true})` overwrite, never
+   a duplicate, with no query needed to check "does today's entry already exist." Six moods
+   (happy/neutral/tired/sad/excited/grateful), one text input, always private — same owner-uid-
+   only rules shape as Time Capsule. Reports gained a small summary block (mood count this month,
+   most common mood, reflection days) from one `fetchMine("daily_reflections")` call.
+4. **Monthly Story & Year in Review** — two new `reports.html` sections, rendered by new
+   functions in `insights.js`. Month/year picker copies `calendar.js`'s `viewDate` +
+   prev/next-button pattern. Template-based prose only (no AI, no external API) — a fixed
+   sentence skeleton per language with an opening qualifier chosen from a small deterministic
+   pool based on total activity volume, and clauses that only appear when their stat is > 0 (so
+   the paragraph never reads "0 capsules opened this month"). Data sources: `photos`, `journals`,
+   `expenses`, `habits`, `collections`, `career_projects` (Owner-only-populated, same as
+   elsewhere), `time_capsules`, `daily_reflections` — every query is `where("uid","==",myUid)`
+   only, the same personal-only shape as the rest of Reports/Calendar/Me-Overview, so neither
+   section can structurally expose another user's data to a Viewer or Friend. Export as Markdown
+   reuses `export.js`'s `downloadFile()` shape, duplicated locally in `insights.js` rather than
+   imported — importing `export.js` directly was tried first and reverted, since `export.js`'s
+   top-level code unconditionally wires click listeners onto Backup-tab buttons (`#export-
+   expenses-btn` etc.) that don't exist on `reports.html`, throwing on load; per this repo's
+   per-page-duplication convention, the small `downloadFile()` utility now lives in both files
+   independently instead of being a shared import with side effects.
+5. **Brand & navigation**: every page footer bumped from `Version 2.8` to `Version 2.9`
+   (including `login.html`'s stacked-footer variant). No nav *label* changes — Time Capsule is
+   the only new nav entry, added as a secondary item per the brief.
+
 ## Architecture
 
 ### Roles and the multi-tenant data model
@@ -249,7 +320,7 @@ pages, no Firestore/Storage schema changes, no rules changes. Four surfaces were
 
 ### Pages
 
-- **No shared layout/include system.** Every page (`index.html`, `resume.html`, `gallery.html`, `atlas.html`, `journal.html`, `expenses.html`, `timeline.html`, `habits.html`, `calendar.html`, `reports.html`, `dashboard.html`, `notifications.html`, `contact.html`, `collections.html`, `collection-detail.html`, `me.html`, `settings.html`, `profile.html`) is a fully standalone HTML file that repeats the same `<head>` (Tailwind CDN, Font Awesome, `styles.css`, PWA manifest/theme-color/apple-touch-icon tags, a theme-preload inline `<script>` — see Light mode below) and the same header/nav markup (14 links plus an unread-notification badge next to "Notifications"). `login.html` is the one page that intentionally does **not** follow the shared nav/auth-guard pattern; `profile.html` follows it fully (auth-guard, full nav) but — like `login.html` — is deliberately *not* one of the 14 linked pages, since it only makes sense with a `?uid=` param and is reached exclusively from a Search People result.
+- **No shared layout/include system.** Every page (`index.html`, `resume.html`, `gallery.html`, `atlas.html`, `journal.html`, `expenses.html`, `timeline.html`, `habits.html`, `calendar.html`, `reports.html`, `dashboard.html`, `notifications.html`, `contact.html`, `collections.html`, `collection-detail.html`, `me.html`, `settings.html`, `profile.html`, `time-capsule.html`) is a fully standalone HTML file that repeats the same `<head>` (Tailwind CDN, Font Awesome, `styles.css`, PWA manifest/theme-color/apple-touch-icon tags, a theme-preload inline `<script>` — see Light mode below) and the same header/nav markup (15 links plus an unread-notification badge next to "Notifications"). `login.html` is the one page that intentionally does **not** follow the shared nav/auth-guard pattern; `profile.html` follows it fully (auth-guard, full nav) but — like `login.html` — is deliberately *not* one of the linked pages, since it only makes sense with a `?uid=` param and is reached exclusively from a Search People result.
 - **Site-wide login gate.** [auth-guard.js](auth-guard.js) is a shared ES module — every protected page loads it via a single `<script type="module" src="auth-guard.js"></script>` tag (right after `scripts.js`). It calls `onAuthStateChanged`; redirects to `login.html?redirect=<currentPage>` if signed out, otherwise removes the `auth-check-pending` body class to reveal the page. Forces a reload on a bfcache `pageshow` so Back-navigation re-checks auth. UX convenience only — real access control is `firestore.rules`/`storage.rules`. It also owns the one cross-page UI concern: if the signed-in user `isOwner` and the page's nav has a `#notif-badge` element, it queries `notifications` for `uid == owner && read == false` and lights up the badge.
 - **Site-wide command palette.** [global-search.js](global-search.js) (v4.0) is the second shared ES module, loaded via `<script type="module" src="global-search.js"></script>` right after `auth-guard.js` on every protected page. Like `auth-guard.js`, it's self-contained — on `onAuthStateChanged`, it appends its own trigger button to `header nav` and its own modal to `document.body` rather than requiring any per-page markup, so wiring it up sitewide was a one-line-per-file addition. Opens on click or `Ctrl/Cmd-K`; queries `users` (role-gated like `dashboard.js`'s `searchableUsers()`), `photos`/`journals`/`life_events`/`habits` (mine+public merge), and `expenses` (mine-only, so other users' expenses are unreachable by construction of the query, not just by rules) and renders matches grouped by type with per-group counts.
 - **[login.html](login.html)** is the one page every visitor can reach while signed out. On a successful `signInWithPopup`, it: (1) resolves the user's role via `resolveUserMode()` (owner check, then `getDoc(friends/{email})`) and caches it to `localStorage` as `lfj:userMode`; (2) upserts the `users/{uid}` directory doc; (3) writes a `login_logs` doc; (4) writes a `notifications` doc for *whoever just signed in* (no longer owner-only — everyone has their own notifications now). A `signingIn` flag guards against `onAuthStateChanged`'s own redirect firing mid-click and tearing down the page before these writes finish. On a session-restore (not a fresh click), `onAuthStateChanged` still refreshes the cached role before redirecting, in case whitelist status changed since the last visit. The `?redirect=` param is validated against `^[a-zA-Z0-9_-]+\.html$` to prevent an open-redirect vector. On iPhone, an installed "Add to Home Screen" PWA can't reliably complete Google sign-in in its own standalone window (tried both `signInWithPopup` and `signInWithRedirect` — both strand the user on Google's page with no way back, most likely because the transient state Firebase Auth needs mid-flow doesn't survive the round trip through Google's origin inside a standalone WKWebView). The fix: `isStandalone()` (checks `matchMedia("(display-mode: standalone)")` / `navigator.standalone`) swaps the sign-in button for an "Open in Safari to Sign In" link (`target="_blank"`, which forces iOS to hand off to real Safari even from a standalone window); the user signs in there normally, then reopens the installed app, which picks up the persisted session via `browserLocalPersistence` without repeating sign-in.
@@ -275,7 +346,7 @@ pages, no Firestore/Storage schema changes, no rules changes. Four surfaces were
 
 ## Conventions to follow when editing
 
-- **Nav links (v2.7: two live navs, one dead one)**: the original `<nav>` inside each page's `<header>` (14 non-login/non-profile pages: Home, Career, Memories, Atlas, Journey, Finance, Journal, Calendar, Connections, Reports, Inbox, Me, Habits, Contact — `login.html` excluded, AI removed in v2.6, `profile.html` and `collections.html`/`collection-detail.html`/`me.html`/`atlas.html` are reached without ever being *in* this dead nav's link list, or in `collections.html`'s/`collection-detail.html`'s case have no dead-header nav block at all since they were built after the header was already retired) is now permanently inert — the `<header>` itself is `class="hidden"` on every breakpoint, superseded by `js/sidebar.js` (desktop) and `js/mobile-nav.js` (mobile). **When adding a new page, update three navs, not one**: `sidebar.js`'s `PRIMARY_LINKS`/`SECONDARY_LINKS`, `mobile-nav.js`'s `DRAWER_LINKS`, and (for completeness/history, even though it no longer renders) the dead `<header>` nav block, plus a quick-link card on `index.html` — unless, like Collections, the page deliberately has no sidebar/drawer entry of its own. The Notifications/Inbox link carries a `<span id="notif-badge">` in both the dead header nav and nowhere else — `auth-guard.js` looks it up by ID, and neither `sidebar.js` nor `mobile-nav.js` currently render an unread badge (a gap, not a deliberate omission — worth fixing if the badge matters going forward). When editing the *dead* header nav block identically across many files, a scripted find/replace (PowerShell loop matching the exact `<a href="...">` line text) beats manual edits — **always read the file back with explicit `-Encoding UTF8` (or `[System.IO.File]::ReadAllText(path, [System.Text.Encoding]::UTF8)`) on both read and write**. Windows PowerShell 5.1's `Get-Content`/`Set-Content` default to the system ANSI codepage when a file has no BOM, which silently mangles any existing non-ASCII character (em dashes, emoji) into mojibake (`â€”`, `ðŸ”¥`) that then gets baked into the file on write — this happened for real during the v2.0 pass and had to be cleaned up after the fact across several files.
+- **Nav links (v2.7: two live navs, one dead one)**: the original `<nav>` inside each page's `<header>` (15 non-login/non-profile pages as of v2.9: Home, Career, Memories, Atlas, Journey, Finance, Journal, Calendar, Connections, Reports, Inbox, Me, Habits, Time Capsule, Contact — `login.html` excluded, AI removed in v2.6, `profile.html` and `collections.html`/`collection-detail.html`/`me.html`/`atlas.html` are reached without ever being *in* this dead nav's link list, or in `collections.html`'s/`collection-detail.html`'s case have no dead-header nav block at all since they were built after the header was already retired) is now permanently inert — the `<header>` itself is `class="hidden"` on every breakpoint, superseded by `js/sidebar.js` (desktop) and `js/mobile-nav.js` (mobile). **When adding a new page, update three navs, not one**: `sidebar.js`'s `PRIMARY_LINKS`/`SECONDARY_LINKS`, `mobile-nav.js`'s `DRAWER_LINKS`, and (for completeness/history, even though it no longer renders) the dead `<header>` nav block, plus a quick-link card on `index.html` — unless, like Collections, the page deliberately has no sidebar/drawer entry of its own. The Notifications/Inbox link carries a `<span id="notif-badge">` in both the dead header nav and nowhere else — `auth-guard.js` looks it up by ID, and neither `sidebar.js` nor `mobile-nav.js` currently render an unread badge (a gap, not a deliberate omission — worth fixing if the badge matters going forward). When editing the *dead* header nav block identically across many files, a scripted find/replace (PowerShell loop matching the exact `<a href="...">` line text) beats manual edits — **always read the file back with explicit `-Encoding UTF8` (or `[System.IO.File]::ReadAllText(path, [System.Text.Encoding]::UTF8)`) on both read and write**. Windows PowerShell 5.1's `Get-Content`/`Set-Content` default to the system ANSI codepage when a file has no BOM, which silently mangles any existing non-ASCII character (em dashes, emoji) into mojibake (`â€”`, `ðŸ”¥`) that then gets baked into the file on write — this happened for real during the v2.0 pass and had to be cleaned up after the fact across several files.
 - **New protected pages need three things**: the theme-preload inline `<script>` as the first line of `<head>`, the PWA `<link rel="manifest">`/`theme-color`/`apple-touch-icon` tags, `auth-check-pending` in the `<body class="...">` string, and `<script type="module" src="auth-guard.js"></script>` right after `scripts.js`. Copy an existing page (e.g. `timeline.html` or `habits.html`) as the template.
 - **Color palette**: `darkBg`, `cardBg`, `borderNeon`, `neonPurple`, `neonBlue`, `neonViolet`, `textGray` — defined identically in each page's inline `tailwind.config`. No single source of truth; keep in sync manually.
 - **Fonts**: `font-cyber` (headings/labels), `font-code` (monospace, data/labels), `font-sans` (body, default) — system stacks only.

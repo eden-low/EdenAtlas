@@ -64,88 +64,99 @@
 
     <!-- Tabs -->
     <section class="reveal bg-cardBg/90 neon-border-purple rounded-2xl p-2 flex flex-wrap items-center gap-1 text-xs font-cyber font-bold tracking-wider text-textGray">
-      <button data-tab="overview" class="me-tab px-3 py-2 rounded-xl transition-colors">Overview</button>
-      <button data-tab="profile" class="me-tab px-3 py-2 rounded-xl transition-colors">Profile</button>
-      <button data-tab="preferences" class="me-tab px-3 py-2 rounded-xl transition-colors">Preferences</button>
-      <button data-tab="privacy" class="me-tab px-3 py-2 rounded-xl transition-colors">Privacy</button>
-      <button data-tab="connections" class="me-tab hidden px-3 py-2 rounded-xl transition-colors">Connections</button>
-      <button data-tab="backup" class="me-tab px-3 py-2 rounded-xl transition-colors">Backup</button>
-      <button data-tab="logs" class="me-tab hidden px-3 py-2 rounded-xl transition-colors">System Logs</button>
+      <button data-tab="overview" class="me-tab px-3 py-2 rounded-xl transition-colors" data-i18n="me.overview">Overview</button>
+      <button data-tab="profile" class="me-tab px-3 py-2 rounded-xl transition-colors" data-i18n="me.profile">Profile</button>
+      <button data-tab="preferences" class="me-tab px-3 py-2 rounded-xl transition-colors" data-i18n="me.preferences">Preferences</button>
+      <button data-tab="privacy" class="me-tab px-3 py-2 rounded-xl transition-colors" data-i18n="me.privacy">Privacy</button>
+      <button data-tab="connections" class="me-tab hidden px-3 py-2 rounded-xl transition-colors" data-i18n="me.connections">Connections</button>
+      <button data-tab="backup" class="me-tab px-3 py-2 rounded-xl transition-colors" data-i18n="me.backup">Backup</button>
+      <button data-tab="logs" class="me-tab hidden px-3 py-2 rounded-xl transition-colors" data-i18n="me.logs">System Logs</button>
     </section>
 
     <!-- Overview -->
     <div id="tab-overview" class="me-panel space-y-6">
       <section id="goals-section" class="hidden reveal bg-cardBg/90 neon-border-purple rounded-2xl p-6">
         <div class="flex items-center justify-between mb-4">
-          <p class="text-[10px] uppercase tracking-[0.2em] text-textGray font-code">Goals</p>
+          <p class="text-[10px] uppercase tracking-[0.2em] text-textGray font-code" data-i18n="people.goals">Goals</p>
           <button id="new-goal-btn" type="button" class="px-3 py-1.5 bg-neonPurple/15 text-neonPurple rounded-xl text-xs font-cyber font-bold tracking-wider hover:bg-neonPurple/25 transition-colors">
-            <i class="fa-solid fa-plus mr-1"></i> New Goal
+            <i class="fa-solid fa-plus mr-1"></i> <span data-i18n="people.new_goal">New Goal</span>
           </button>
         </div>
         <div id="goals-list" class="space-y-3"></div>
-        <p id="goals-empty" class="hidden text-center text-xs font-code text-textGray py-6">No goals yet &mdash; set one to start tracking progress.</p>
+        <p id="goals-empty" class="hidden text-center text-xs font-code text-textGray py-6" data-i18n="people.no_goals">No goals yet &mdash; set one to start tracking progress.</p>
+      </section>
+
+      <section id="capsules-summary-section" class="hidden reveal bg-cardBg/90 neon-border-purple rounded-2xl p-6">
+        <div class="flex items-center justify-between mb-3">
+          <p class="text-[10px] uppercase tracking-[0.2em] text-textGray font-code" data-i18n="me.capsules_title">Time Capsule</p>
+          <a href="time-capsule.html" class="text-xs font-code text-neonPurple hover:underline" data-i18n="me.open_time_capsule">Open Time Capsule</a>
+        </div>
+        <div class="grid grid-cols-2 gap-4 text-sm">
+          <div><p class="text-textGray text-xs" data-i18n="me.capsules_sealed_count">Sealed</p><p id="capsules-sealed-count" class="font-code font-semibold text-xl mt-1">&mdash;</p></div>
+          <div><p class="text-textGray text-xs" data-i18n="me.capsules_ready_count">Ready to open</p><p id="capsules-ready-count" class="font-code font-semibold text-xl mt-1">&mdash;</p></div>
+        </div>
       </section>
 
       <section class="reveal bg-cardBg/90 neon-border-purple rounded-2xl p-6">
-        <p class="text-[10px] uppercase tracking-[0.2em] text-textGray font-code mb-4">Achievements</p>
+        <p class="text-[10px] uppercase tracking-[0.2em] text-textGray font-code mb-4" data-i18n="people.achievements">Achievements</p>
         <div id="achievements-list" class="grid grid-cols-2 lg:grid-cols-4 gap-3"></div>
       </section>
 
       <section class="reveal bg-cardBg/90 neon-border-purple rounded-2xl p-6">
-        <p class="text-[10px] uppercase tracking-[0.2em] text-textGray font-code mb-4">Gallery Analytics</p>
+        <p class="text-[10px] uppercase tracking-[0.2em] text-textGray font-code mb-4" data-i18n="me.gallery_analytics">Gallery Analytics</p>
         <div class="grid grid-cols-2 lg:grid-cols-5 gap-4 text-sm">
-          <div><p class="text-textGray text-xs">Total photos</p><p id="gal-total" class="font-code font-semibold text-xl mt-1">&mdash;</p></div>
-          <div><p class="text-textGray text-xs">Public</p><p id="gal-public" class="font-code font-semibold text-xl mt-1">&mdash;</p></div>
-          <div><p class="text-textGray text-xs">Private</p><p id="gal-private" class="font-code font-semibold text-xl mt-1">&mdash;</p></div>
-          <div><p class="text-textGray text-xs">Top category</p><p id="gal-top-category" class="font-code font-semibold text-xl mt-1">&mdash;</p></div>
-          <div><p class="text-textGray text-xs">Last upload</p><p id="gal-last-upload" class="font-code font-semibold text-sm mt-1">&mdash;</p></div>
+          <div><p class="text-textGray text-xs" data-i18n="me.total_photos">Total photos</p><p id="gal-total" class="font-code font-semibold text-xl mt-1">&mdash;</p></div>
+          <div><p class="text-textGray text-xs" data-i18n="common.public">Public</p><p id="gal-public" class="font-code font-semibold text-xl mt-1">&mdash;</p></div>
+          <div><p class="text-textGray text-xs" data-i18n="common.private">Private</p><p id="gal-private" class="font-code font-semibold text-xl mt-1">&mdash;</p></div>
+          <div><p class="text-textGray text-xs" data-i18n="me.top_category">Top category</p><p id="gal-top-category" class="font-code font-semibold text-xl mt-1">&mdash;</p></div>
+          <div><p class="text-textGray text-xs" data-i18n="me.last_upload">Last upload</p><p id="gal-last-upload" class="font-code font-semibold text-sm mt-1">&mdash;</p></div>
         </div>
       </section>
 
       <section class="reveal bg-cardBg/90 neon-border-purple rounded-2xl p-6">
-        <p class="text-[10px] uppercase tracking-[0.2em] text-textGray font-code mb-4">Expense Analytics</p>
+        <p class="text-[10px] uppercase tracking-[0.2em] text-textGray font-code mb-4" data-i18n="me.expense_analytics">Expense Analytics</p>
         <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 text-sm mb-6">
-          <div><p class="text-textGray text-xs">This month</p><p id="exp-month-total" class="font-code font-semibold text-xl mt-1">&mdash;</p></div>
-          <div><p class="text-textGray text-xs">This year</p><p id="exp-year-total" class="font-code font-semibold text-xl mt-1">&mdash;</p></div>
-          <div><p class="text-textGray text-xs">Avg. daily (this month)</p><p id="exp-avg-daily" class="font-code font-semibold text-xl mt-1">&mdash;</p></div>
-          <div><p class="text-textGray text-xs">Top category</p><p id="exp-top-category" class="font-code font-semibold text-xl mt-1">&mdash;</p></div>
+          <div><p class="text-textGray text-xs" data-i18n="me.this_month">This month</p><p id="exp-month-total" class="font-code font-semibold text-xl mt-1">&mdash;</p></div>
+          <div><p class="text-textGray text-xs" data-i18n="me.this_year">This year</p><p id="exp-year-total" class="font-code font-semibold text-xl mt-1">&mdash;</p></div>
+          <div><p class="text-textGray text-xs" data-i18n="me.avg_daily">Avg. daily (this month)</p><p id="exp-avg-daily" class="font-code font-semibold text-xl mt-1">&mdash;</p></div>
+          <div><p class="text-textGray text-xs" data-i18n="me.top_category">Top category</p><p id="exp-top-category" class="font-code font-semibold text-xl mt-1">&mdash;</p></div>
         </div>
         <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
           <div class="bg-darkBg/40 border border-borderNeon rounded-xl p-4">
-            <p class="text-[10px] text-textGray font-code mb-2">Monthly Spending</p>
+            <p class="text-[10px] text-textGray font-code mb-2" data-i18n="me.monthly_spending">Monthly Spending</p>
             <div class="h-40"><canvas id="monthly-chart"></canvas></div>
           </div>
           <div class="bg-darkBg/40 border border-borderNeon rounded-xl p-4">
-            <p class="text-[10px] text-textGray font-code mb-2">By Category</p>
+            <p class="text-[10px] text-textGray font-code mb-2" data-i18n="me.by_category">By Category</p>
             <div class="h-40"><canvas id="category-pie-chart"></canvas></div>
           </div>
           <div class="bg-darkBg/40 border border-borderNeon rounded-xl p-4">
-            <p class="text-[10px] text-textGray font-code mb-2">Weekly Spending</p>
+            <p class="text-[10px] text-textGray font-code mb-2" data-i18n="me.weekly_spending">Weekly Spending</p>
             <div class="h-40"><canvas id="weekly-chart"></canvas></div>
           </div>
         </div>
       </section>
 
       <section class="reveal bg-cardBg/90 neon-border-purple rounded-2xl p-6">
-        <p class="text-[10px] uppercase tracking-[0.2em] text-textGray font-code mb-4">Journal Analytics</p>
+        <p class="text-[10px] uppercase tracking-[0.2em] text-textGray font-code mb-4" data-i18n="me.journal_analytics">Journal Analytics</p>
         <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 text-sm">
-          <div><p class="text-textGray text-xs">Total entries</p><p id="jnl-total" class="font-code font-semibold text-xl mt-1">&mdash;</p></div>
-          <div><p class="text-textGray text-xs">Public / Private</p><p id="jnl-visibility" class="font-code font-semibold text-xl mt-1">&mdash;</p></div>
-          <div><p class="text-textGray text-xs">Most common mood</p><p id="jnl-top-mood" class="font-code font-semibold text-xl mt-1">&mdash;</p></div>
-          <div><p class="text-textGray text-xs">Top tags</p><p id="jnl-top-tags" class="font-code font-semibold text-sm mt-1">&mdash;</p></div>
+          <div><p class="text-textGray text-xs" data-i18n="me.total_entries">Total entries</p><p id="jnl-total" class="font-code font-semibold text-xl mt-1">&mdash;</p></div>
+          <div><p class="text-textGray text-xs" data-i18n="me.public_private">Public / Private</p><p id="jnl-visibility" class="font-code font-semibold text-xl mt-1">&mdash;</p></div>
+          <div><p class="text-textGray text-xs" data-i18n="me.most_common_mood">Most common mood</p><p id="jnl-top-mood" class="font-code font-semibold text-xl mt-1">&mdash;</p></div>
+          <div><p class="text-textGray text-xs" data-i18n="me.top_tags">Top tags</p><p id="jnl-top-tags" class="font-code font-semibold text-sm mt-1">&mdash;</p></div>
         </div>
       </section>
 
       <section class="reveal bg-cardBg/90 neon-border-purple rounded-2xl p-6">
-        <p class="text-[10px] uppercase tracking-[0.2em] text-textGray font-code mb-4">Session</p>
+        <p class="text-[10px] uppercase tracking-[0.2em] text-textGray font-code mb-4" data-i18n="me.session">Session</p>
         <div class="divide-y divide-borderNeon/60 text-sm">
           <div class="flex items-center justify-between py-2.5">
-            <span class="text-textGray">Signed in as</span>
+            <span class="text-textGray" data-i18n="common.signed_in_as">Signed in as</span>
             <span id="sys-session" class="font-medium">&mdash;</span>
           </div>
           <div class="flex items-center justify-between py-2.5">
-            <span class="text-textGray">Current weather (Kuching)</span>
-            <span id="sys-weather" class="font-medium">Loading&hellip;</span>
+            <span class="text-textGray" data-i18n="me.current_weather">Current weather (Kuching)</span>
+            <span id="sys-weather" class="font-medium" data-i18n="common.loading">Loading&hellip;</span>
           </div>
         </div>
       </section>
@@ -156,43 +167,43 @@
       <section class="reveal bg-cardBg/90 neon-border-purple rounded-2xl p-6">
         <div class="divide-y divide-borderNeon/60 text-sm">
           <div class="flex items-center justify-between py-2.5">
-            <span class="text-textGray">Email</span>
+            <span class="text-textGray" data-i18n="me.email_label">Email</span>
             <span id="profile-email" class="font-medium">&mdash;</span>
           </div>
           <div class="flex items-center justify-between py-2.5">
-            <span class="text-textGray">Account created</span>
+            <span class="text-textGray" data-i18n="me.account_created">Account created</span>
             <span id="profile-created" class="font-medium">&mdash;</span>
           </div>
           <div class="flex items-center justify-between py-2.5">
-            <span class="text-textGray">Last sign-in</span>
+            <span class="text-textGray" data-i18n="me.last_sign_in">Last sign-in</span>
             <span id="profile-last-login" class="font-medium">&mdash;</span>
           </div>
         </div>
         <div class="mt-5 pt-5 border-t border-borderNeon/40">
-          <label for="username-input" class="text-xs text-textGray block mb-1.5">Username <span class="text-textGray/60">&mdash; lets people find you by @handle on Connections</span></label>
+          <label for="username-input" class="text-xs text-textGray block mb-1.5"><span data-i18n="me.username_label">Username</span> <span class="text-textGray/60" data-i18n="me.username_hint">&mdash; lets people find you by @handle on Connections</span></label>
           <div class="flex items-center gap-2">
             <span class="text-textGray font-code">@</span>
             <input id="username-input" type="text" maxlength="20" placeholder="yourhandle" class="flex-1 bg-darkBg/60 border border-borderNeon rounded-lg px-3 py-2 text-sm text-white placeholder:text-textGray/60 font-code">
-            <button id="save-username-btn" class="px-4 py-2 bg-neonPurple/15 text-neonPurple rounded-xl text-xs font-cyber font-bold tracking-wider hover:bg-neonPurple/25 transition-colors">SAVE</button>
+            <button id="save-username-btn" class="px-4 py-2 bg-neonPurple/15 text-neonPurple rounded-xl text-xs font-cyber font-bold tracking-wider hover:bg-neonPurple/25 transition-colors" data-i18n="me.save_username">SAVE</button>
           </div>
           <p id="username-status" class="mt-2 text-xs font-code text-textGray"></p>
         </div>
         <div class="mt-5 pt-5 border-t border-borderNeon/40 space-y-4">
           <div>
-            <label for="bio-input" class="text-xs text-textGray block mb-1.5">Bio <span class="text-textGray/60">&mdash; shown on your public profile</span></label>
-            <textarea id="bio-input" rows="2" maxlength="160" placeholder="A short line about you&hellip;" class="w-full bg-darkBg/60 border border-borderNeon rounded-lg px-3 py-2 text-sm text-white placeholder:text-textGray/60"></textarea>
+            <label for="bio-input" class="text-xs text-textGray block mb-1.5"><span data-i18n="me.bio_label">Bio</span> <span class="text-textGray/60" data-i18n="me.bio_hint">&mdash; shown on your public profile</span></label>
+            <textarea id="bio-input" rows="2" maxlength="160" data-i18n-placeholder="me.bio_placeholder" placeholder="A short line about you&hellip;" class="w-full bg-darkBg/60 border border-borderNeon rounded-lg px-3 py-2 text-sm text-white placeholder:text-textGray/60"></textarea>
           </div>
           <div>
-            <label for="location-input" class="text-xs text-textGray block mb-1.5">Location</label>
+            <label for="location-input" class="text-xs text-textGray block mb-1.5" data-i18n="me.location_label">Location</label>
             <input id="location-input" type="text" maxlength="60" placeholder="City, Country" class="w-full bg-darkBg/60 border border-borderNeon rounded-lg px-3 py-2 text-sm text-white placeholder:text-textGray/60">
           </div>
           <div class="flex items-center gap-3">
-            <button id="save-about-btn" class="px-4 py-2 bg-neonPurple/15 text-neonPurple rounded-xl text-xs font-cyber font-bold tracking-wider hover:bg-neonPurple/25 transition-colors">SAVE</button>
+            <button id="save-about-btn" class="px-4 py-2 bg-neonPurple/15 text-neonPurple rounded-xl text-xs font-cyber font-bold tracking-wider hover:bg-neonPurple/25 transition-colors" data-i18n="me.save_about">SAVE</button>
             <p id="about-status" class="text-xs font-code text-textGray"></p>
           </div>
         </div>
         <button id="signout-btn" class="mt-5 px-4 py-2 bg-cardBg/70 border border-borderNeon rounded-xl text-xs font-cyber font-bold tracking-wider text-white hover:border-rose-400 hover:text-rose-400 transition-all">
-          <i class="fa-solid fa-arrow-right-from-bracket mr-1.5"></i> SIGN OUT
+          <i class="fa-solid fa-arrow-right-from-bracket mr-1.5"></i> <span data-i18n="common.sign_out">SIGN OUT</span>
         </button>
       </section>
     </div>
@@ -203,18 +214,18 @@
         <div class="divide-y divide-borderNeon/60 text-sm">
           <div class="flex items-center justify-between py-3 gap-4">
             <div>
-              <p class="font-medium">Theme</p>
-              <p class="text-xs text-textGray mt-0.5">Applies on next reload.</p>
+              <p class="font-medium" data-i18n="me.theme_label">Theme</p>
+              <p class="text-xs text-textGray mt-0.5" data-i18n="me.theme_hint">Applies on next reload.</p>
             </div>
             <div id="theme-toggle" class="flex items-center gap-1 bg-darkBg/60 border border-borderNeon rounded-full p-1 text-xs font-code">
-              <button data-theme-choice="dark" class="theme-choice-btn px-3 py-1.5 rounded-full transition-colors">Dark</button>
-              <button data-theme-choice="light" class="theme-choice-btn px-3 py-1.5 rounded-full transition-colors">Light</button>
+              <button data-theme-choice="dark" class="theme-choice-btn px-3 py-1.5 rounded-full transition-colors" data-i18n="me.theme_dark">Dark</button>
+              <button data-theme-choice="light" class="theme-choice-btn px-3 py-1.5 rounded-full transition-colors" data-i18n="me.theme_light">Light</button>
             </div>
           </div>
           <div class="flex items-center justify-between py-3 gap-4">
             <div>
               <p class="font-medium" data-i18n="settings.language">Language</p>
-              <p class="text-xs text-textGray mt-0.5">Applies immediately, syncs across devices.</p>
+              <p class="text-xs text-textGray mt-0.5" data-i18n="me.language_hint">Applies immediately, syncs across devices.</p>
             </div>
             <div id="lang-toggle" class="flex items-center gap-1 bg-darkBg/60 border border-borderNeon rounded-full p-1 text-xs font-code">
               <button data-lang-choice="en" class="lang-choice-btn px-3 py-1.5 rounded-full transition-colors">EN</button>
@@ -223,23 +234,23 @@
           </div>
           <div class="flex items-center justify-between py-3 gap-4">
             <div class="flex-1">
-              <label for="default-city" class="font-medium block">Default weather city</label>
-              <p class="text-xs text-textGray mt-0.5">Fallback used if location access is denied.</p>
+              <label for="default-city" class="font-medium block" data-i18n="me.default_weather_city">Default weather city</label>
+              <p class="text-xs text-textGray mt-0.5" data-i18n="me.default_weather_city_hint">Fallback used if location access is denied.</p>
             </div>
             <input id="default-city" type="text" placeholder="Kuching,MY" class="w-40 bg-darkBg/60 border border-borderNeon rounded-lg px-3 py-2 text-sm text-white placeholder:text-textGray/60">
           </div>
           <div class="flex items-center justify-between py-3 gap-4">
             <div>
-              <p class="font-medium">Default privacy for new posts</p>
-              <p class="text-xs text-textGray mt-0.5">Pre-selected visibility in Memories/Journal/Journey forms.</p>
+              <p class="font-medium" data-i18n="me.default_privacy">Default privacy for new posts</p>
+              <p class="text-xs text-textGray mt-0.5" data-i18n="me.default_privacy_hint">Pre-selected visibility in Memories/Journal/Journey forms.</p>
             </div>
             <div id="visibility-toggle" class="flex items-center gap-1 bg-darkBg/60 border border-borderNeon rounded-full p-1 text-xs font-code">
-              <button data-visibility-choice="public" class="visibility-choice-btn px-3 py-1.5 rounded-full transition-colors">Public</button>
-              <button data-visibility-choice="private" class="visibility-choice-btn px-3 py-1.5 rounded-full transition-colors">Private</button>
+              <button data-visibility-choice="public" class="visibility-choice-btn px-3 py-1.5 rounded-full transition-colors" data-i18n="common.public">Public</button>
+              <button data-visibility-choice="private" class="visibility-choice-btn px-3 py-1.5 rounded-full transition-colors" data-i18n="common.private">Private</button>
             </div>
           </div>
         </div>
-        <button id="save-preferences-btn" class="mt-5 px-4 py-2 bg-gradient-to-r from-neonViolet to-neonPurple rounded-xl text-xs font-cyber font-bold tracking-wider text-white hover:scale-105 transition-all">
+        <button id="save-preferences-btn" class="mt-5 px-4 py-2 bg-gradient-to-r from-neonViolet to-neonPurple rounded-xl text-xs font-cyber font-bold tracking-wider text-white hover:scale-105 transition-all" data-i18n="me.save_preferences">
           SAVE PREFERENCES
         </button>
         <p id="preferences-status" class="mt-2 text-xs font-code text-textGray"></p>
@@ -249,17 +260,17 @@
     <!-- Privacy -->
     <div id="tab-privacy" class="me-panel hidden">
       <section class="reveal bg-cardBg/90 neon-border-purple rounded-2xl p-6 space-y-4 text-sm text-textGray">
-        <p class="text-[10px] uppercase tracking-[0.2em] text-textGray font-code">Privacy</p>
+        <p class="text-[10px] uppercase tracking-[0.2em] text-textGray font-code" data-i18n="me.privacy_title">Privacy</p>
         <div class="flex items-center justify-between py-2 border-b border-borderNeon/40">
-          <span>Default visibility for new posts</span>
+          <span data-i18n="me.privacy_default_visibility">Default visibility for new posts</span>
           <span id="privacy-default-visibility" class="font-medium text-white">&mdash;</span>
         </div>
-        <p>New Memories, Journal entries, and Journey events default to this visibility — change it from the Preferences tab.</p>
+        <p data-i18n="me.privacy_note">New Memories, Journal entries, and Journey events default to this visibility — change it from the Preferences tab.</p>
         <ul class="list-disc list-inside space-y-1.5 text-xs">
-          <li><span class="text-white font-medium">Owner</span> — full access everywhere, the only role that sees Connections/System Logs.</li>
-          <li><span class="text-white font-medium">Friend</span> — has their own private space for Memories/Journal/Finance/Journey/Habits.</li>
-          <li><span class="text-white font-medium">Viewer</span> — read-only, sees public content from the Owner and any Friend.</li>
-          <li><span class="text-white font-medium">Finance</span> is always private — it is never shown on anyone's public profile or Collection, regardless of role.</li>
+          <li><span class="text-white font-medium" data-i18n="me.role_owner">Owner</span> — <span data-i18n="me.role_owner_desc">full access everywhere, the only role that sees Connections/System Logs.</span></li>
+          <li><span class="text-white font-medium" data-i18n="me.role_friend">Friend</span> — <span data-i18n="me.role_friend_desc">has their own private space for Memories/Journal/Finance/Journey/Habits.</span></li>
+          <li><span class="text-white font-medium" data-i18n="me.role_viewer">Viewer</span> — <span data-i18n="me.role_viewer_desc">read-only, sees public content from the Owner and any Friend.</span></li>
+          <li><span class="text-white font-medium" data-i18n="nav.finance">Finance</span> <span data-i18n="me.role_finance_desc">is always private — it is never shown on anyone's public profile or Collection, regardless of role.</span></li>
         </ul>
       </section>
     </div>
@@ -267,33 +278,33 @@
     <!-- Connections (whitelist management, owner only) -->
     <div id="tab-connections" class="me-panel hidden">
       <section id="whitelist-section" class="reveal bg-cardBg/90 neon-border-purple rounded-2xl p-6">
-        <p class="text-[10px] uppercase tracking-[0.2em] text-textGray font-code mb-4">Whitelist &mdash; Friend Management</p>
-        <p class="text-xs text-textGray mb-4">Everyone who has ever signed in. Promote to Friend to give them their own private expenses/journal/photos/timeline/habits space; demote to make them a read-only Viewer again.</p>
+        <p class="text-[10px] uppercase tracking-[0.2em] text-textGray font-code mb-4" data-i18n="me.whitelist_title">Whitelist &mdash; Friend Management</p>
+        <p class="text-xs text-textGray mb-4" data-i18n="me.whitelist_desc">Everyone who has ever signed in. Promote to Friend to give them their own private expenses/journal/photos/timeline/habits space; demote to make them a read-only Viewer again.</p>
         <div id="whitelist-list" class="space-y-2 text-sm"></div>
-        <p id="whitelist-empty" class="hidden text-xs font-code text-textGray py-6 text-center">No signed-in users yet.</p>
+        <p id="whitelist-empty" class="hidden text-xs font-code text-textGray py-6 text-center" data-i18n="me.whitelist_empty">No signed-in users yet.</p>
       </section>
     </div>
 
     <!-- Backup -->
     <div id="tab-backup" class="me-panel hidden">
       <section id="export-section" class="reveal bg-cardBg/90 neon-border-purple rounded-2xl p-6">
-        <p class="text-[10px] uppercase tracking-[0.2em] text-textGray font-code mb-4">Export &amp; Backup</p>
-        <p class="text-xs text-textGray mb-4">Downloads your own data.</p>
+        <p class="text-[10px] uppercase tracking-[0.2em] text-textGray font-code mb-4" data-i18n="me.backup_title">Export &amp; Backup</p>
+        <p class="text-xs text-textGray mb-4" data-i18n="me.backup_desc">Downloads your own data.</p>
         <div class="flex flex-wrap gap-2.5">
           <button id="export-expenses-btn" class="px-4 py-2 bg-cardBg/70 border border-borderNeon rounded-xl text-xs font-cyber font-bold tracking-wider text-white hover:border-neonPurple transition-all">
-            <i class="fa-solid fa-file-csv mr-1.5"></i> Expenses (CSV)
+            <i class="fa-solid fa-file-csv mr-1.5"></i> <span data-i18n="me.export_expenses">Expenses (CSV)</span>
           </button>
           <button id="export-journal-btn" class="px-4 py-2 bg-cardBg/70 border border-borderNeon rounded-xl text-xs font-cyber font-bold tracking-wider text-white hover:border-neonPurple transition-all">
-            <i class="fa-solid fa-file-lines mr-1.5"></i> Journal (Markdown)
+            <i class="fa-solid fa-file-lines mr-1.5"></i> <span data-i18n="me.export_journal">Journal (Markdown)</span>
           </button>
           <button id="export-timeline-btn" class="px-4 py-2 bg-cardBg/70 border border-borderNeon rounded-xl text-xs font-cyber font-bold tracking-wider text-white hover:border-neonPurple transition-all">
-            <i class="fa-solid fa-timeline mr-1.5"></i> Timeline (JSON)
+            <i class="fa-solid fa-timeline mr-1.5"></i> <span data-i18n="me.export_timeline">Timeline (JSON)</span>
           </button>
           <button id="export-gallery-btn" class="px-4 py-2 bg-cardBg/70 border border-borderNeon rounded-xl text-xs font-cyber font-bold tracking-wider text-white hover:border-neonPurple transition-all">
-            <i class="fa-solid fa-images mr-1.5"></i> Gallery Metadata (JSON)
+            <i class="fa-solid fa-images mr-1.5"></i> <span data-i18n="me.export_gallery">Gallery Metadata (JSON)</span>
           </button>
           <button id="export-backup-btn" class="px-4 py-2 bg-gradient-to-r from-neonViolet to-neonPurple rounded-xl text-xs font-cyber font-bold tracking-wider text-white hover:scale-105 transition-all">
-            <i class="fa-solid fa-box-archive mr-1.5"></i> Full Backup
+            <i class="fa-solid fa-box-archive mr-1.5"></i> <span data-i18n="me.export_backup">Full Backup</span>
           </button>
         </div>
         <p id="export-status" class="mt-3 text-xs font-code text-textGray"></p>
@@ -303,9 +314,9 @@
     <!-- System Logs (owner only) -->
     <div id="tab-logs" class="me-panel hidden">
       <section id="system-logs-section" class="reveal bg-cardBg/90 neon-border-purple rounded-2xl p-6">
-        <p class="text-[10px] uppercase tracking-[0.2em] text-textGray font-code mb-4">System Logs &mdash; Login History</p>
+        <p class="text-[10px] uppercase tracking-[0.2em] text-textGray font-code mb-4" data-i18n="me.logs_title">System Logs &mdash; Login History</p>
         <div id="login-logs-list" class="space-y-2 text-sm"></div>
-        <p id="login-logs-empty" class="hidden text-xs font-code text-textGray py-6 text-center">No login history yet.</p>
+        <p id="login-logs-empty" class="hidden text-xs font-code text-textGray py-6 text-center" data-i18n="me.no_login_history">No login history yet.</p>
       </section>
     </div>
   </main>
@@ -315,12 +326,12 @@
     <div id="goal-modal-backdrop" class="absolute inset-0 bg-darkBg/80 backdrop-blur-sm"></div>
     <div class="relative w-full max-w-sm bg-cardBg neon-border-purple rounded-2xl p-6">
       <div class="flex items-center justify-between mb-4">
-        <h2 class="font-cyber font-bold text-lg text-white">New Goal</h2>
+        <h2 class="font-cyber font-bold text-lg text-white" data-i18n="people.new_goal">New Goal</h2>
         <button id="goal-modal-close" type="button" class="text-textGray hover:text-white text-xl leading-none">&times;</button>
       </div>
       <form id="goal-form" class="space-y-4">
         <div>
-          <label class="block text-xs font-code text-textGray mb-1.5" for="goal-title">Title</label>
+          <label class="block text-xs font-code text-textGray mb-1.5" for="goal-title" data-i18n="home.title_label">Title</label>
           <input id="goal-title" type="text" required placeholder="e.g. Read 12 books" class="w-full bg-darkBg/60 border border-borderNeon rounded-lg px-3 py-2 text-sm text-white placeholder:text-textGray/60">
         </div>
         <div class="flex items-center gap-3">
@@ -337,7 +348,7 @@
           <label class="block text-xs font-code text-textGray mb-1.5" for="goal-deadline">Deadline</label>
           <input id="goal-deadline" type="date" class="w-full bg-darkBg/60 border border-borderNeon rounded-lg px-3 py-2 text-sm text-white">
         </div>
-        <button type="submit" class="w-full px-5 py-2.5 bg-gradient-to-r from-neonViolet to-neonPurple rounded-xl text-xs font-cyber font-bold tracking-wider text-white hover:scale-105 transition-all">SAVE</button>
+        <button type="submit" class="w-full px-5 py-2.5 bg-gradient-to-r from-neonViolet to-neonPurple rounded-xl text-xs font-cyber font-bold tracking-wider text-white hover:scale-105 transition-all" data-i18n="common.save">SAVE</button>
         <p id="goal-status" class="text-xs font-code text-textGray text-center"></p>
       </form>
     </div>
@@ -345,7 +356,7 @@
 
   <script type="module" src="js/i18n.js"></script>
   <footer class="max-w-7xl mx-auto px-4 mt-10 pb-6 text-center">
-    <p class="text-[11px] font-code text-textGray/70">EdenAtlas &middot; by Jun &middot; Version 2.8</p>
+    <p class="text-[11px] font-code text-textGray/70" data-i18n="footer.line">EdenAtlas &middot; by Jun &middot; Version 2.9</p>
   </footer>
 
   <script src="scripts.js" defer></script>

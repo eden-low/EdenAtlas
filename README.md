@@ -2,7 +2,7 @@
 
 *A personal digital atlas for memories, growth, career, and life.*
 
-A 16-page **login-first**, **multi-tenant**, **bilingual (English/中文)** personal system built
+A 17-page **login-first**, **multi-tenant**, **bilingual (English/中文)** personal system built
 around Low Fang Jun ("Jun"), styled as a dark glassmorphism product (near-black canvas,
 translucent blurred cards, a single soft violet accent, Apple system fonts). The owner and any
 number of approved "friends" each get their own private expenses/journal/photos/timeline/habits
@@ -47,6 +47,21 @@ already clean. A sitewide EA-mark loading state now shows during the auth check 
 blank flash, several empty states got warmer copy, and hover/press micro-interactions were
 extended to the newly-touched surfaces.
 
+**v2.9 ("Living Memories")** is an i18n-completion + emotional-features pass — no Firebase
+architecture changes, no schema changes to existing collections. Full sitewide i18n: every
+button, modal, form, placeholder, empty state, status message, and Chart.js label now switches
+language, not just nav/titles — `js/i18n.js`'s `t()` gained `{placeholder}` interpolation and an
+English-dict fallback chain, and every page-level script now listens for `eden:langchange` to
+re-render its already-cached data instantly on a language switch. Two new always-private
+features: **Time Capsule** ([time-capsule.html](time-capsule.html), a new `time_capsules`
+collection) — write a message to your future self, sealed until a chosen date, with a calm
+"ready" notice on Home; and **Daily Reflection** (a new `daily_reflections` collection, one
+doc per day via a deterministic `${uid}_${dateKey}` ID) — a quick mood + one-sentence check-in
+card on Home, no full journal entry required. **Reports** gained **Monthly Story** and **Year in
+Review** — template-based (no AI) warm-prose recaps built from your own existing data, each with
+a Markdown export. Both new collections are owner-uid-only in `firestore.rules`, never exposed
+via `isMineOrPublic()`, and never surfaced on public profiles, Connections, or Collections.
+
 ## Roles
 
 - **Owner** (`jjun8647@gmail.com`) — full access everywhere, plus the only role that sees System Logs and Whitelist Management in Me → Connections/System Logs.
@@ -80,7 +95,8 @@ original build to avoid a risky site-wide route rename (see the Brand & navigati
 | Inbox | [notifications.html](notifications.html) | Your own notification center — login/expense/journal/habit/gallery alerts, unread badge in the nav, mark-as-read |
 | Contact | [contact.html](contact.html) | Email / phone / location, with a one-click "send message" CTA |
 | (via Atlas) | [collections.html](collections.html) / [collection-detail.html](collection-detail.html) | **Collections** — life chapters (e.g. "Japan Trip") that group existing Memories/Journal/Finance/Journey/Career records via a `collectionId` reference, never a copy. List page: create/edit/delete (blocked while non-empty) with per-type item counts; detail page: cover/title/description/visibility header, one section per record type plus a Reflection/Notes field, and a synthetic "Uncategorized" view for anything with no collection |
-| Me | [me.html](me.html) | Personal control center — merges the old Profile + Settings + Dashboard's personal analytics into one tabbed page: **Overview** (Goals/Achievements/Gallery/Expense/Journal analytics), **Profile** (@username/bio/location/account dates), **Preferences** (theme/language/default city/default visibility), **Privacy** (role/visibility explainer), **Connections** (Whitelist Friend Management, owner-only), **Backup** (Export & Backup), **System Logs** (owner-only). `settings.html` now just redirects here |
+| Me | [me.html](me.html) | Personal control center — merges the old Profile + Settings + Dashboard's personal analytics into one tabbed page: **Overview** (Goals/Time Capsule summary/Achievements/Gallery/Expense/Journal analytics), **Profile** (@username/bio/location/account dates), **Preferences** (theme/language/default city/default visibility), **Privacy** (role/visibility explainer), **Connections** (Whitelist Friend Management, owner-only), **Backup** (Export & Backup), **System Logs** (owner-only). `settings.html` now just redirects here |
+| Time Capsule | [time-capsule.html](time-capsule.html) | Write a message to your future self — title/message/open date/optional attachment, sealed until that date. Three sections: Sealed / Ready to Open / Opened. Always private (`time_capsules` collection, owner-uid-only). A secondary sidebar/drawer item (v2.9), also reachable from Home's Quick Actions and Me's Overview tab |
 
 ## Running locally
 
@@ -104,10 +120,15 @@ Simplified Chinese dictionaries live in [locales/en.json](locales/en.json) and
 `data-i18n-placeholder="..."` for inputs) gets its text swapped in automatically. Language is
 stored in `localStorage` (instant, no flash) and reconciled against `users/{uid}.lang` once auth
 resolves (Firestore wins if it differs, so a choice made on one device follows you to another).
-Switch it from Settings' Preferences or the mobile drawer — both call the same `setLang()`,
-which re-applies translations immediately (no reload) and fires an `eden:langchange` event that
-`career.js` listens for, since Career's bilingual **content** fields (`title_en`/`title_zh`,
-etc.) are a separate mechanism from `data-i18n` UI chrome.
+Switch it from Me → Preferences, the desktop sidebar footer, or the mobile drawer — all three
+call the same `setLang()`, which re-applies translations immediately (no reload) and fires an
+`eden:langchange` event. `career.js`, `collections.js`, and `collection-detail.js` listen for it
+to re-render their bilingual **content** fields (`title_en`/`title_zh`, etc. — a separate
+mechanism from `data-i18n` UI chrome, never auto-translated). As of v2.9, every page-level script
+listens for the same event to re-render its cached dynamic content (list items, status text,
+category/mood labels, chart labels) — full sitewide coverage, not just nav/titles. `t(key, vars)`
+supports `{placeholder}` interpolation and falls back to the English dict (then the raw key) if a
+translation is missing, with a `console.warn` on `localhost` only.
 
 ## Career CMS: `career.js`
 
@@ -152,9 +173,10 @@ create-and-edit forms; Finance/Career intentionally skip it.
 A fifth shared module (v2.6), self-injecting like the others. The old horizontal top-nav
 header is now permanently hidden on every breakpoint; on desktop, `js/sidebar.js` injects a
 fixed left sidebar instead — as of v2.7: Home/Career/Memories/Atlas/Journal/Finance/Calendar/
-Connections/Reports/Inbox as the primary list, Journey/Habits/Contact as a smaller secondary
-group (real pages that would otherwise have no nav entry — Journey moved here now that Atlas is
-the larger location/chapter module), then **Me**/Logout/Collapse pinned to the bottom (this row
+Connections/Reports/Inbox as the primary list, Journey/Habits/**Time Capsule**(v2.9)/Contact as
+a smaller secondary group (real pages that would otherwise have no nav entry — Journey moved here
+now that Atlas is the larger location/chapter module), then **Me**/Logout/Collapse pinned to the
+bottom (this row
 used to say "Profile" and link to Settings; both were folded into Me). Collections has no sidebar
 entry of its own — it's reached from inside Atlas. Collapses to an icon-only rail
 (`localStorage`-persisted) via a `--sidebar-w` CSS variable that `body`'s `padding-left` reads,
@@ -166,8 +188,8 @@ A fourth shared module. Below the `md` breakpoint, the sidebar and the old deskt
 stay hidden in favor of an injected fixed top bar (hamburger — brand — avatar, now linking to
 Me), a slide-in drawer (full page list, including Atlas, + language switcher + logout), a fixed
 bottom nav (Home / Memories / Quick Add / Connections / Me), and a **Quick Add** bottom sheet
-(Add Expense / Write Journal / Upload Photo / Add Timeline Event / Add Habit / New Collection,
-v2.7) that deep-links to `{page}.html?new=1` — each target page's own script auto-opens its
+(Add Expense / Write Journal / Upload Photo / Add Timeline Event / Add Habit / New Collection /
+New Capsule (v2.9)) that deep-links to `{page}.html?new=1` — each target page's own script auto-opens its
 existing "New X" modal when that param is present, rather than duplicating the form. All touch
 targets are ≥44px.
 
@@ -178,8 +200,10 @@ targets are ≥44px.
 ## Memories, Goals & Achievements
 
 - **Memories** ("On This Day," on the Home page) compares today's date against your own past photos/journal entries/timeline events from previous years and surfaces any matches as "N years ago" flashbacks.
-- **Goals** (Dashboard) — personal targets with a title, target/current amount, unit, and deadline; always private, same shape as Expenses.
-- **Achievements** (Dashboard, full set; Profile, public subset) are 100% computed from live Firestore counts — tiered badges for Photos Uploaded, Journal Entries, Expenses Recorded, and Longest Active Habit Streak. No hardcoded personal-history milestones. Profile only ever shows the badges derivable from *public* data (expenses are always private, so that badge never appears on anyone else's profile).
+- **Goals** (Me → Overview) — personal targets with a title, target/current amount, unit, and deadline; always private, same shape as Expenses.
+- **Achievements** (Me → Overview, full set; Profile, public subset) are 100% computed from live Firestore counts — tiered badges for Photos Uploaded, Journal Entries, Expenses Recorded, and Longest Active Habit Streak. No hardcoded personal-history milestones. Profile only ever shows the badges derivable from *public* data (expenses are always private, so that badge never appears on anyone else's profile).
+- **Daily Reflection** (v2.9, Home page) — a quick "How was today?" mood + one-sentence card, one entry per calendar day (`daily_reflections/{uid}_{dateKey}`, a `setDoc` merge so a same-day re-save overwrites instead of duplicating). Always private; Reports shows a monthly mood-count/most-common-mood/reflection-days summary built from the same collection.
+- **Time Capsule** (v2.9) — see the Pages table above. Home shows a calm "A message from your past self is ready" card once any sealed capsule's open date has passed.
 
 ## Tech stack
 
@@ -201,7 +225,7 @@ The site moved from a neon-cyber "hunter status" look to a dark glassmorphism da
 
 Every content collection (`expenses`, `journals`, `photos`, `life_events`, `habits`) is scoped by a `uid` field identifying its creator. The core fetch pattern, used identically across Gallery/Journal/Timeline/Habits: two Firestore queries merged by doc ID — `where("uid","==",myUid)` (all of *my* docs, any visibility) plus `where("visibility","==","public")` (everyone's public docs). Expenses skip the public half entirely (always private, no visibility concept). Every "New X" button and write is gated by `canParticipate()` (Owner or Friend) rather than a global owner check, and every new doc is written with `uid: auth.currentUser.uid`.
 
-`friends/{email}` (Me → Connections' Whitelist — Friend Management) grants Friend status; `users/{uid}` is a lightweight directory doc upserted on every login (now also carrying a public `role` field and an optional `username`), powering **Search People**. `usernames/{username}` is a one-doc-per-handle reservation collection (doc ID = the handle) that makes unique @usernames possible without a backend — Firestore's create-vs-update distinction means "claim if free" falls out of a plain `create` rule with no matching `update` rule. `collections/{id}` (v2.7) is a life-chapter container — same `isMineOrPublic` shape as `journals`/`life_events`/`habits` — that existing records reference via an optional `collectionId` field; `photos`/`journals`/`life_events`/`expenses`/`career_projects` also gained optional `tags`/`locationName`/`latitude`/`longitude` fields (expenses get `collectionId`/`tags` only — no location UI, no visibility, always private). [firestore.rules](firestore.rules) and [storage.rules](storage.rules) are the source of truth for all of this; after editing either, deploy with `npx firebase-tools deploy --only firestore:rules,storage` (see [firebase.json](firebase.json)/[.firebaserc](.firebaserc) — a dev-only CLI tool, the site itself stays buildless).
+`friends/{email}` (Me → Connections' Whitelist — Friend Management) grants Friend status; `users/{uid}` is a lightweight directory doc upserted on every login (now also carrying a public `role` field and an optional `username`), powering **Search People**. `usernames/{username}` is a one-doc-per-handle reservation collection (doc ID = the handle) that makes unique @usernames possible without a backend — Firestore's create-vs-update distinction means "claim if free" falls out of a plain `create` rule with no matching `update` rule. `collections/{id}` (v2.7) is a life-chapter container — same `isMineOrPublic` shape as `journals`/`life_events`/`habits` — that existing records reference via an optional `collectionId` field; `photos`/`journals`/`life_events`/`expenses`/`career_projects` also gained optional `tags`/`locationName`/`latitude`/`longitude` fields (expenses get `collectionId`/`tags` only — no location UI, no visibility, always private). `time_capsules` and `daily_reflections` (v2.9) are the two newest collections — always private, same owner-uid-only shape as `expenses`/`goals` (no `isMineOrPublic()`, ever): read/update/delete require `resource.data.uid == request.auth.uid`, create requires `canParticipate()`. [firestore.rules](firestore.rules) and [storage.rules](storage.rules) are the source of truth for all of this; after editing either, deploy with `npx firebase-tools deploy --only firestore:rules,storage` (see [firebase.json](firebase.json)/[.firebaserc](.firebaserc) — a dev-only CLI tool, the site itself stays buildless).
 
 ## Gallery: Instagram-style feed with social features
 
@@ -213,7 +237,14 @@ All four follow the same shape: your own entries (any visibility) plus everyone'
 
 ## Calendar & Reports
 
-[calendar.js](calendar.js) renders a monthly grid of your own expenses/photos/journal entries bucketed by day (fetched in full per collection, filtered client-side to the visible month — avoids needing a composite index for an equality-plus-date-range query). [insights.js](insights.js) computes a current-month recap: total spend, top category, a weekday-vs-weekend average-spend comparison with a warning banner, and photo/journal counts.
+[calendar.js](calendar.js) renders a monthly grid of your own expenses/photos/journal entries bucketed by day (fetched in full per collection, filtered client-side to the visible month — avoids needing a composite index for an equality-plus-date-range query). [insights.js](insights.js) computes a current-month recap: total spend, top category, a weekday-vs-weekend average-spend comparison with a warning banner, photo/journal counts, and a Daily Reflection summary (mood counts, most common mood, reflection days this month).
+
+**Monthly Story** and **Year in Review** (v2.9, both in `reports.html`) turn the same data into a
+warm, template-based paragraph — no AI, no external API — with a month/year picker (mirroring
+`calendar.js`'s prev/next pattern) and a "Export as Markdown" button. Data sources: Memories,
+Journal, Finance, Habits completion, Collections updated, Atlas locations visited, Career
+projects (Owner only), Time Capsules, and Daily Reflections — always `where("uid","==",myUid)`
+only, so neither section can ever surface another user's data, viewer or friend.
 
 ## Notifications
 
@@ -239,8 +270,8 @@ Dashboard→People, and as of v2.7, People→Connections, Settings→Me) but **f
 deliberately left unchanged** to avoid the risk of a site-wide route rename (broken bookmarks,
 PWA cache, internal links) for a purely cosmetic win — `dashboard.html` is "Connections" and
 `settings.html` is now a redirect to the new `me.html`. Every page footer reads
-`EdenAtlas · by Jun · Version 2.8` as of this pass (`login.html`'s footer is a stacked
-EdenAtlas / Built by Jun / Version 2.8 layout instead, part of its v2.8 rebuild; every other
+`EdenAtlas · by Jun · Version 2.9` as of this pass (`login.html`'s footer is a stacked
+EdenAtlas / Built by Jun / Version 2.9 layout instead, part of its v2.8 rebuild; every other
 page kept its existing single-line layout and just had the version number bumped).
 
 ## Structure notes

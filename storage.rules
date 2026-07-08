@@ -33,5 +33,12 @@ service firebase.storage {
       allow read: if request.auth != null && request.auth.uid == uid;
       allow write: if request.auth != null && request.auth.uid == uid && request.auth.token.email == 'jjun8647@gmail.com';
     }
+
+    // Time Capsule attachments (v2.9) — always private, no /public split (capsules are never
+    // shown to anyone but their own writer).
+    match /capsules/{uid}/{allPaths=**} {
+      allow read: if request.auth != null && request.auth.uid == uid;
+      allow write: if request.auth != null && request.auth.uid == uid && canParticipate(request.auth.token.email);
+    }
   }
 }

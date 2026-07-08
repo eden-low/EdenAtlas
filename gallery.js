@@ -1,5 +1,5 @@
 import { auth, googleProvider, db, storage, canParticipate } from "./firebase-init.js";
-import { t as i18nT } from "./js/i18n.js";
+import { t as i18nT, getLang } from "./js/i18n.js";
 import {
   onAuthStateChanged,
   signInWithPopup,
@@ -26,10 +26,10 @@ import {
 
 // Albums, replacing the old Personal/Event/Work/Project categories.
 const CATEGORY_META = {
-  travel: { label: "Travel", text: "text-neonBlue", bg: "bg-neonBlue/10", border: "border-neonBlue/30" },
-  projects: { label: "Projects", text: "text-emerald-400", bg: "bg-emerald-400/10", border: "border-emerald-400/30" },
-  events: { label: "Events", text: "text-amber-400", bg: "bg-amber-400/10", border: "border-amber-400/30" },
-  dailylife: { label: "Daily Life", text: "text-neonPurple", bg: "bg-neonPurple/10", border: "border-neonPurple/30" },
+  travel: { i18nKey: "memories.album_travel", text: "text-neonBlue", bg: "bg-neonBlue/10", border: "border-neonBlue/30" },
+  projects: { i18nKey: "memories.album_projects", text: "text-emerald-400", bg: "bg-emerald-400/10", border: "border-emerald-400/30" },
+  events: { i18nKey: "memories.album_events", text: "text-amber-400", bg: "bg-amber-400/10", border: "border-amber-400/30" },
+  dailylife: { i18nKey: "memories.album_dailylife", text: "text-neonPurple", bg: "bg-neonPurple/10", border: "border-neonPurple/30" },
 };
 
 // Photos uploaded before the album relabel still carry the old category values in Firestore —
@@ -60,7 +60,7 @@ function wireUseLocationBtn(btn, nameInput, latInput, lonInput) {
   btn.addEventListener("click", async () => {
     btn.disabled = true;
     const original = btn.textContent;
-    btn.textContent = "Locating...";
+    btn.textContent = i18nT("common.locating");
     const loc = await getBrowserLocation();
     btn.disabled = false;
     btn.textContent = original;
@@ -87,7 +87,7 @@ async function loadMyCollectionOptions() {
 }
 
 function collectionLabel(c) {
-  const lang = document.documentElement.lang === "zh" || localStorage.getItem("eden:lang") === "zh-CN" ? "zh" : "en";
+  const lang = getLang() === "zh-CN" ? "zh" : "en";
   return (lang === "zh" ? c.title_zh : c.title_en) || c.title_en || c.title_zh || "Untitled";
 }
 
@@ -160,9 +160,9 @@ function postCard(post) {
     <div class="p-4 space-y-3">
       ${post.caption ? `<p class="text-sm text-white">${post.caption}</p>` : ""}
       <div class="flex flex-wrap items-center gap-2 text-[10px] font-code">
-        <span class="px-2 py-0.5 rounded-full border ${meta.border} ${meta.bg} ${meta.text}">${meta.label}</span>
+        <span class="px-2 py-0.5 rounded-full border ${meta.border} ${meta.bg} ${meta.text}">${i18nT(meta.i18nKey)}</span>
         <span class="px-2 py-0.5 rounded-full border ${isPrivate ? "border-rose-400/30 bg-rose-400/10 text-rose-400" : "border-emerald-400/30 bg-emerald-400/10 text-emerald-400"}">
-          <i class="fa-solid ${isPrivate ? "fa-lock" : "fa-globe"} mr-1"></i>${isPrivate ? "Private" : "Public"}
+          <i class="fa-solid ${isPrivate ? "fa-lock" : "fa-globe"} mr-1"></i>${isPrivate ? i18nT("common.private") : i18nT("common.public")}
         </span>
         ${isMine ? `<span class="px-2 py-0.5 rounded-full border border-borderNeon bg-darkBg/60 text-textGray">me</span>` : ""}
         ${(post.tags || []).map((t) => `<span class="px-2 py-0.5 rounded-full border border-borderNeon bg-darkBg/40 text-textGray">#${t}</span>`).join("")}
@@ -180,7 +180,7 @@ function postCard(post) {
           <button class="featured-toggle-btn flex items-center gap-1.5 text-xs font-code ${post.featured ? "text-amber-400" : "text-textGray"} hover:text-amber-400 transition-colors" title="${post.featured ? "Remove from Favorites" : "Add to Favorites"}">
             <i class="fa-${post.featured ? "solid" : "regular"} fa-star"></i>
           </button>
-          <button class="edit-post-btn flex items-center gap-1.5 text-xs font-code text-textGray hover:text-neonPurple transition-colors" title="Edit metadata">
+          <button class="edit-post-btn flex items-center gap-1.5 text-xs font-code text-textGray hover:text-neonPurple transition-colors" title="${i18nT("common.edit_metadata")}">
             <i class="fa-solid fa-pen"></i>
           </button>
           <button class="analytics-toggle-btn ml-auto flex items-center gap-1.5 text-xs font-code text-textGray hover:text-neonBlue transition-colors">
@@ -447,7 +447,7 @@ postForm.addEventListener("submit", async (event) => {
   const lonRaw = document.getElementById("post-longitude").value;
   if (!file) return;
 
-  postStatus.textContent = "Uploading...";
+  postStatus.textContent = i18nT("common.uploading");
   try {
     const storagePath = `gallery/${user.uid}/${visibility}/${category}/${Date.now()}-${file.name}`;
     const fileRef = ref(storage, storagePath);
@@ -470,12 +470,12 @@ postForm.addEventListener("submit", async (event) => {
       longitude: lonRaw ? Number(lonRaw) : null,
     });
 
-    postStatus.textContent = "Posted.";
+    postStatus.textContent = i18nT("common.saved");
     await fetchVisiblePosts();
     closeModal();
   } catch (err) {
     console.error("Upload failed", err);
-    postStatus.textContent = "Upload failed — check console.";
+    postStatus.textContent = i18nT("common.upload_failed");
   }
 });
 
@@ -525,12 +525,12 @@ postEditForm.addEventListener("submit", async (event) => {
   };
   try {
     await updateDoc(doc(db, "photos", id), payload);
-    postEditStatus.textContent = "Saved.";
+    postEditStatus.textContent = i18nT("common.saved");
     await fetchVisiblePosts();
     closeEditModal();
   } catch (err) {
     console.error("[gallery] edit save failed:", err.code || err);
-    postEditStatus.textContent = "Couldn't save — check console.";
+    postEditStatus.textContent = i18nT("common.couldnt_save");
   }
 });
 
@@ -628,7 +628,7 @@ function toggleComments(post) {
 
 async function renderCommentsPanel(post, card) {
   const panel = card.querySelector(".comments-panel");
-  panel.innerHTML = `<p class="text-xs font-code text-textGray">Loading comments...</p>`;
+  panel.innerHTML = `<p class="text-xs font-code text-textGray">${i18nT("common.loading_comments")}</p>`;
 
   let comments = commentsCache.get(post.id);
   if (!comments) {
@@ -648,7 +648,7 @@ async function renderCommentsPanel(post, card) {
           <span class="font-semibold text-white">${c.email}</span>
           <span class="text-textGray ml-1.5">${c.text}</span>
         </div>`).join("")
-    : `<p class="text-xs font-code text-textGray">No comments yet.</p>`;
+    : `<p class="text-xs font-code text-textGray">${i18nT("common.no_comments_yet")}</p>`;
 
   const user = auth.currentUser;
   panel.innerHTML = `
@@ -656,7 +656,7 @@ async function renderCommentsPanel(post, card) {
     ${user ? `
       <form class="comment-form flex items-center gap-2 mt-2.5">
         <input type="text" placeholder="Add a comment..." class="comment-input flex-1 bg-darkBg/60 border border-borderNeon rounded-lg px-3 py-1.5 text-xs text-white placeholder:text-textGray/60">
-        <button type="submit" class="px-3 py-1.5 bg-neonPurple/15 text-neonPurple rounded-lg text-xs font-code hover:bg-neonPurple/25 transition-colors">Post</button>
+        <button type="submit" class="px-3 py-1.5 bg-neonPurple/15 text-neonPurple rounded-lg text-xs font-code hover:bg-neonPurple/25 transition-colors">${i18nT("common.post")}</button>
       </form>` : ""}`;
 
   const form = panel.querySelector(".comment-form");
@@ -696,7 +696,7 @@ function toggleAnalytics(post) {
 
 async function renderAnalyticsPanel(post, card) {
   const panel = card.querySelector(".analytics-panel");
-  panel.innerHTML = `<p class="text-xs font-code text-textGray">Loading analytics...</p>`;
+  panel.innerHTML = `<p class="text-xs font-code text-textGray">${i18nT("common.loading")}</p>`;
   try {
     const snap = await getDocs(collection(db, "photos", post.id, "views"));
     const views = snap.docs.map((d) => d.data());
@@ -706,8 +706,8 @@ async function renderAnalyticsPanel(post, card) {
       .slice(0, 5);
     panel.innerHTML = `
       <div class="bg-darkBg/40 border border-borderNeon/60 rounded-xl p-3 text-xs font-code space-y-1.5">
-        <div class="flex items-center justify-between"><span class="text-textGray">Total Views</span><span class="text-white font-semibold">${views.length}</span></div>
-        <div class="flex items-center justify-between"><span class="text-textGray">Unique Visitors</span><span class="text-white font-semibold">${uniqueVisitors}</span></div>
+        <div class="flex items-center justify-between"><span class="text-textGray">${i18nT("common.total_views")}</span><span class="text-white font-semibold">${views.length}</span></div>
+        <div class="flex items-center justify-between"><span class="text-textGray">${i18nT("common.unique_visitors")}</span><span class="text-white font-semibold">${uniqueVisitors}</span></div>
         ${recent.length ? `
           <div class="pt-1.5 border-t border-borderNeon/40">
             <p class="text-textGray mb-1">Recent Visitors</p>
@@ -719,3 +719,9 @@ async function renderAnalyticsPanel(post, card) {
     panel.innerHTML = `<p class="text-xs font-code text-textGray">Couldn't load analytics.</p>`;
   }
 }
+
+// Re-render from the already-fetched cachedPosts whenever the language switcher fires — album
+// labels, Public/Private badges, and the "Edit metadata" title all read through i18nT().
+document.addEventListener("eden:langchange", () => {
+  renderFeed();
+});

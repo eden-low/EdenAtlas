@@ -5,7 +5,7 @@
 // hidden (see the sitewide `<header class="hidden ...">` → `<header class="hidden">` pass).
 import { auth } from "../firebase-init.js";
 import { onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-auth.js";
-import { getLang, setLang, init as initI18n } from "./i18n.js";
+import { getLang, setLang, init as initI18n, applyTranslations } from "./i18n.js";
 
 const COLLAPSE_KEY = "eden:sidebarCollapsed";
 const EXPANDED_W = "240px";
@@ -33,6 +33,7 @@ const PRIMARY_LINKS = [
 const SECONDARY_LINKS = [
   { href: "timeline.html", icon: "compass", key: "nav.journey", label: "Journey" },
   { href: "habits.html", icon: "list-checks", key: "nav.habits", label: "Habits" },
+  { href: "time-capsule.html", icon: "hourglass", key: "nav.time_capsule", label: "Time Capsule" },
   { href: "contact.html", icon: "mail", key: "nav.contact", label: "Contact" },
 ];
 
@@ -87,7 +88,7 @@ function sidebarHTML() {
           <i data-lucide="log-out" class="w-[18px] h-[18px] flex-shrink-0"></i><span class="eden-sidebar-label truncate" data-i18n="nav.logout">Log Out</span>
         </button>
         <button id="eden-sidebar-collapse" type="button" title="Collapse sidebar" class="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-textGray hover:bg-darkBg/40 hover:text-white transition-colors">
-          <i data-lucide="panel-left-close" class="w-[18px] h-[18px] flex-shrink-0"></i><span class="eden-sidebar-label truncate">Collapse</span>
+          <i data-lucide="panel-left-close" class="w-[18px] h-[18px] flex-shrink-0"></i><span class="eden-sidebar-label truncate" data-i18n="common.collapse">Collapse</span>
         </button>
       </div>
     </aside>`;
@@ -118,7 +119,10 @@ function injectUI() {
       btn.classList.toggle("text-textGray", !active);
     });
   };
-  initI18n().then(paintActiveLang);
+  initI18n().then(() => {
+    applyTranslations(document);
+    paintActiveLang();
+  });
   langButtons.forEach((btn) => btn.addEventListener("click", async () => {
     await setLang(btn.dataset.langChoice);
     paintActiveLang();

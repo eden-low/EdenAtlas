@@ -131,7 +131,7 @@ function wireOwnerControls(root, onEdit) {
   });
   root.querySelectorAll(".career-delete-btn").forEach((btn) => {
     btn.addEventListener("click", async () => {
-      if (!confirm("Delete this item?")) return;
+      if (!confirm(i18nT("common.delete_confirm"))) return;
       try {
         await deleteDoc(doc(db, btn.dataset.collection, btn.dataset.id));
         await loadAll();

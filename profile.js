@@ -1,4 +1,5 @@
 import { auth, db, getUserMode } from "./firebase-init.js";
+import { t as i18nT } from "./js/i18n.js";
 import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-auth.js";
 import {
   collection,
@@ -15,13 +16,17 @@ import {
 } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-firestore.js";
 
 // Albums, mirroring gallery.js's taxonomy (kept in sync manually — see CLAUDE.md's
-// per-page duplication convention, no shared module for this small a helper).
-const CATEGORY_META = {
-  travel: { label: "Travel", icon: "fa-plane" },
-  projects: { label: "Projects", icon: "fa-code" },
-  events: { label: "Events", icon: "fa-champagne-glasses" },
-  dailylife: { label: "Daily Life", icon: "fa-sun" },
-};
+// per-page duplication convention, no shared module for this small a helper). A function, not a
+// static object, so labels stay correct across a language switch (reuses the same memories.*
+// keys gallery.js's locale entries define for the same taxonomy).
+function categoryMeta() {
+  return {
+    travel: { label: i18nT("memories.album_travel"), icon: "fa-plane" },
+    projects: { label: i18nT("memories.album_projects"), icon: "fa-code" },
+    events: { label: i18nT("memories.album_events"), icon: "fa-champagne-glasses" },
+    dailylife: { label: i18nT("memories.album_dailylife"), icon: "fa-sun" },
+  };
+}
 const LEGACY_CATEGORY_ALIAS = { personal: "dailylife", event: "events", work: "projects", project: "projects" };
 function albumOf(post) {
   return LEGACY_CATEGORY_ALIAS[post.category] || post.category;
@@ -80,7 +85,7 @@ function renderHeader(person) {
     ${person.bio ? `<p class="mt-4 text-sm text-white">${person.bio}</p>` : ""}
     <div class="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-textGray font-code">
       ${person.location ? `<span><i class="fa-solid fa-location-dot mr-1"></i>${person.location}</span>` : ""}
-      ${joined ? `<span><i class="fa-solid fa-calendar mr-1"></i>Joined ${joined}</span>` : ""}
+      ${joined ? `<span><i class="fa-solid fa-calendar mr-1"></i>${i18nT("profile.joined").replace("{date}", joined)}</span>` : ""}
     </div>`;
 }
 
@@ -109,10 +114,10 @@ function habitCompletionPct(habits) {
 
 function renderStats({ photos, journals, events, habits }) {
   statsEl.innerHTML = `
-    <div><p class="text-textGray text-xs">Photos</p><p class="font-code font-semibold text-lg mt-1">${photos.length}</p></div>
-    <div><p class="text-textGray text-xs">Journal entries</p><p class="font-code font-semibold text-lg mt-1">${journals.length}</p></div>
-    <div><p class="text-textGray text-xs">Journey events</p><p class="font-code font-semibold text-lg mt-1">${events.length}</p></div>
-    <div><p class="text-textGray text-xs">Habit completion</p><p class="font-code font-semibold text-lg mt-1">${habitCompletionPct(habits)}%</p></div>`;
+    <div><p class="text-textGray text-xs">${i18nT("profile.photos")}</p><p class="font-code font-semibold text-lg mt-1">${photos.length}</p></div>
+    <div><p class="text-textGray text-xs">${i18nT("profile.journal_entries")}</p><p class="font-code font-semibold text-lg mt-1">${journals.length}</p></div>
+    <div><p class="text-textGray text-xs">${i18nT("profile.journey_events")}</p><p class="font-code font-semibold text-lg mt-1">${events.length}</p></div>
+    <div><p class="text-textGray text-xs">${i18nT("profile.habit_completion")}</p><p class="font-code font-semibold text-lg mt-1">${habitCompletionPct(habits)}%</p></div>`;
 }
 
 // ---- Albums ----
@@ -130,8 +135,8 @@ function albumCounts(photos) {
 function renderAlbumTiles(photos) {
   const counts = albumCounts(photos);
   const tiles = [
-    ...Object.entries(CATEGORY_META).map(([key, meta]) => ({ key, ...meta, count: counts[key] })),
-    { key: "featured", label: "Favorites", icon: "fa-star", count: counts.featured },
+    ...Object.entries(categoryMeta()).map(([key, meta]) => ({ key, ...meta, count: counts[key] })),
+    { key: "featured", label: i18nT("memories.album_favorites"), icon: "fa-star", count: counts.featured },
   ];
   albumTilesEl.replaceChildren(
     ...tiles.map((t) => {
@@ -170,7 +175,7 @@ function renderPhotoGrid() {
       const el = document.createElement("button");
       el.className = "aspect-square overflow-hidden bg-darkBg/40 relative";
       el.innerHTML = `
-        <img src="${post.url}" alt="${post.caption || "Photo"}" class="w-full h-full object-cover hover:opacity-80 transition-opacity">
+        <img src="${post.url}" alt="${post.caption || i18nT("profile.photo_alt")}" class="w-full h-full object-cover hover:opacity-80 transition-opacity">
         ${post.featured ? '<i class="fa-solid fa-star absolute top-1.5 right-1.5 text-amber-400 text-xs drop-shadow"></i>' : ""}`;
       el.addEventListener("click", () => openPhotoModal(post));
       return el;
@@ -279,11 +284,14 @@ function renderAtlasPlaces(photos, journals, events) {
 // Mirrors dashboard.js's tiered badges, but only for metrics derivable from PUBLIC data —
 // the expenses-based badge is deliberately never computed here, since expenses are always
 // private and unreadable for any uid other than the signed-in user's own.
-const PUBLIC_ACHIEVEMENTS = [
-  { key: "photos", label: "Photos", icon: "fa-image", tiers: [10, 50, 100, 500] },
-  { key: "journals", label: "Journal Entries", icon: "fa-book", tiers: [10, 50, 100, 365] },
-  { key: "streak", label: "Longest Streak", icon: "fa-fire", tiers: [7, 30, 100, 365] },
-];
+// A function, not a static array, so labels stay correct across a language switch.
+function publicAchievements() {
+  return [
+    { key: "photos", label: i18nT("profile.photos"), icon: "fa-image", tiers: [10, 50, 100, 500] },
+    { key: "journals", label: i18nT("profile.journal_entries"), icon: "fa-book", tiers: [10, 50, 100, 365] },
+    { key: "streak", label: i18nT("profile.longest_streak"), icon: "fa-fire", tiers: [7, 30, 100, 365] },
+  ];
+}
 
 function computeStreak(completedDates) {
   const set = new Set(completedDates || []);
@@ -317,19 +325,20 @@ function renderAchievements({ photos, journals, habits }) {
   const section = document.getElementById("achievements-section");
   const bestStreak = habits.length ? Math.max(...habits.map((h) => computeStreak(h.completedDates))) : 0;
   const counts = { photos: photos.length, journals: journals.length, streak: bestStreak };
-  const anyUnlocked = PUBLIC_ACHIEVEMENTS.some((def) => counts[def.key] >= def.tiers[0]);
+  const defs = publicAchievements();
+  const anyUnlocked = defs.some((def) => counts[def.key] >= def.tiers[0]);
   section.classList.toggle("hidden", !anyUnlocked);
   if (!anyUnlocked) return;
-  document.getElementById("achievements-list").replaceChildren(...PUBLIC_ACHIEVEMENTS.map((def) => achievementTile(def, counts[def.key])));
+  document.getElementById("achievements-list").replaceChildren(...defs.map((def) => achievementTile(def, counts[def.key])));
 }
 
 // ---- Recent Activity ----
 
 function renderRecentActivity({ photos, journals, events }) {
   const items = [
-    ...photos.map((p) => ({ icon: "fa-image", text: `Uploaded ${p.caption || "a photo"}`, at: p.uploadedAt })),
-    ...journals.map((j) => ({ icon: "fa-book", text: `Wrote "${j.title || "Untitled"}"`, at: j.createdAt })),
-    ...events.map((e) => ({ icon: "fa-timeline", text: `Logged "${e.title || "Untitled"}"`, at: e.date })),
+    ...photos.map((p) => ({ icon: "fa-image", text: `${i18nT("profile.activity_uploaded")} ${p.caption || i18nT("profile.a_photo")}`, at: p.uploadedAt })),
+    ...journals.map((j) => ({ icon: "fa-book", text: `${i18nT("profile.activity_wrote")} "${j.title || "Untitled"}"`, at: j.createdAt })),
+    ...events.map((e) => ({ icon: "fa-timeline", text: `${i18nT("profile.activity_logged")} "${e.title || "Untitled"}"`, at: e.date })),
   ]
     .filter((i) => i.at?.toMillis)
     .sort((a, b) => b.at.toMillis() - a.at.toMillis())
@@ -365,7 +374,7 @@ async function openPhotoModal(post) {
   photoModalImg.src = post.url;
   photoModalCaption.textContent = post.caption || "";
   photoModalLikeBtn.innerHTML = `<i class="fa-regular fa-heart"></i> <span id="photo-modal-like-count">&hellip;</span>`;
-  photoModalComments.innerHTML = `<p class="text-xs font-code text-textGray">Loading comments&hellip;</p>`;
+  photoModalComments.innerHTML = `<p class="text-xs font-code text-textGray">${i18nT("common.loading_comments")}</p>`;
 
   const user = auth.currentUser;
   let likedByMe = false;
@@ -417,15 +426,15 @@ function renderComments(post, comments) {
           <span class="font-semibold text-white">${c.email}</span>
           <span class="text-textGray ml-1.5">${c.text}</span>
         </div>`).join("")
-    : `<p class="text-xs font-code text-textGray">No comments yet.</p>`;
+    : `<p class="text-xs font-code text-textGray">${i18nT("common.no_comments_yet")}</p>`;
 
   const user = auth.currentUser;
   photoModalComments.innerHTML = `
     <div class="space-y-1.5">${list}</div>
     ${user ? `
       <form class="comment-form flex items-center gap-2 mt-2.5">
-        <input type="text" placeholder="Add a comment..." class="comment-input flex-1 bg-darkBg/60 border border-borderNeon rounded-lg px-3 py-1.5 text-xs text-white placeholder:text-textGray/60">
-        <button type="submit" class="px-3 py-1.5 bg-neonPurple/15 text-neonPurple rounded-lg text-xs font-code hover:bg-neonPurple/25 transition-colors">Post</button>
+        <input type="text" placeholder="${i18nT("common.add_comment_placeholder")}" class="comment-input flex-1 bg-darkBg/60 border border-borderNeon rounded-lg px-3 py-1.5 text-xs text-white placeholder:text-textGray/60">
+        <button type="submit" class="px-3 py-1.5 bg-neonPurple/15 text-neonPurple rounded-lg text-xs font-code hover:bg-neonPurple/25 transition-colors">${i18nT("common.post")}</button>
       </form>` : ""}`;
 
   const form = photoModalComments.querySelector(".comment-form");
@@ -466,9 +475,28 @@ function canViewProfile(targetRole) {
   return targetRole === "owner";
 }
 
+// Cached last-fetched data, so an eden:langchange re-render (stat labels, album/career/joined
+// text, etc. are all JS-set, not data-i18n) never needs to refetch.
+let cachedProfileData = null;
+let cachedProfilePerson = null;
+
+function rerenderAll() {
+  if (!cachedProfileData) return;
+  const { photos, journals, events, habits, careerExperiences, careerProjects } = cachedProfileData;
+  renderStats({ photos, journals, events, habits });
+  renderCareer(careerExperiences, careerProjects);
+  renderAlbumTiles(photos);
+  renderPhotoGrid();
+  renderAtlasPlaces(photos, journals, events);
+  renderTimelineList(events);
+  renderAchievements({ photos, journals, habits });
+  renderRecentActivity({ photos, journals, events });
+  renderJournalList(journals);
+}
+
 async function loadProfile() {
   if (!targetUid) {
-    headerEl.innerHTML = `<p class="text-sm text-textGray">No profile specified.</p>`;
+    headerEl.innerHTML = `<p class="text-sm text-textGray">${i18nT("profile.no_profile_specified")}</p>`;
     return;
   }
 
@@ -476,16 +504,17 @@ async function loadProfile() {
   try {
     const snap = await getDoc(doc(db, "users", targetUid));
     if (!snap.exists()) {
-      headerEl.innerHTML = `<p class="text-sm text-textGray">User not found.</p>`;
+      headerEl.innerHTML = `<p class="text-sm text-textGray">${i18nT("profile.user_not_found")}</p>`;
       return;
     }
     person = snap.data();
   } catch (err) {
     console.error("[profile] user fetch failed:", err.code || err);
-    headerEl.innerHTML = `<p class="text-sm text-textGray">Couldn't load this profile.</p>`;
+    headerEl.innerHTML = `<p class="text-sm text-textGray">${i18nT("profile.could_not_load")}</p>`;
     return;
   }
 
+  cachedProfilePerson = person;
   renderHeader(person);
 
   if (!canViewProfile(person.role || "viewer")) {
@@ -504,19 +533,19 @@ async function loadProfile() {
   photos.sort((a, b) => (b.uploadedAt?.toMillis?.() || 0) - (a.uploadedAt?.toMillis?.() || 0));
   allPublicPhotos = photos;
   activeAlbum = null;
+  cachedProfileData = { photos, journals, events, habits, careerExperiences, careerProjects };
 
   contentSection.classList.remove("hidden");
-  renderStats({ photos, journals, events, habits });
-  renderCareer(careerExperiences, careerProjects);
-  renderAlbumTiles(photos);
-  renderPhotoGrid();
-  renderAtlasPlaces(photos, journals, events);
-  renderTimelineList(events);
-  renderAchievements({ photos, journals, habits });
-  renderRecentActivity({ photos, journals, events });
-  renderJournalList(journals);
+  rerenderAll();
 }
 
 onAuthStateChanged(auth, (user) => {
   if (user) loadProfile();
+});
+
+// Re-render bilingual/translated content from the cached fetch — stat labels, album labels,
+// career items, "Joined {date}", comment-modal chrome — none of it is plain data-i18n markup.
+document.addEventListener("eden:langchange", () => {
+  if (cachedProfilePerson) renderHeader(cachedProfilePerson);
+  rerenderAll();
 });

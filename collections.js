@@ -15,7 +15,7 @@ import {
   deleteDoc,
   serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-firestore.js";
-import { t as i18nT } from "./js/i18n.js";
+import { getLang, t as i18nT } from "./js/i18n.js";
 
 const authControl = document.getElementById("auth-control");
 const accessNote = document.getElementById("collections-access-note");
@@ -39,7 +39,7 @@ let cachedEvents = [];
 let cachedProjects = [];
 
 function curLang() {
-  return document.documentElement.lang === "zh" || localStorage.getItem("eden:lang") === "zh-CN" ? "zh" : "en";
+  return getLang() === "zh-CN" ? "zh" : "en";
 }
 function bi(obj, field) {
   const lang = curLang();
@@ -131,8 +131,8 @@ function collectionCard(c, isUncategorized = false) {
     </a>
     ${isMine && !isUncategorized ? `
       <div class="flex items-center gap-2 px-4 pb-4">
-        <button class="edit-collection-btn text-[11px] font-code text-textGray hover:text-neonPurple transition-colors"><i class="fa-solid fa-pen mr-1"></i>Edit</button>
-        <button class="delete-collection-btn text-[11px] font-code text-textGray hover:text-rose-400 transition-colors"><i class="fa-solid fa-trash mr-1"></i>Delete</button>
+        <button class="edit-collection-btn text-[11px] font-code text-textGray hover:text-neonPurple transition-colors"><i class="fa-solid fa-pen mr-1"></i>${i18nT("common.edit")}</button>
+        <button class="delete-collection-btn text-[11px] font-code text-textGray hover:text-rose-400 transition-colors"><i class="fa-solid fa-trash mr-1"></i>${i18nT("common.delete")}</button>
       </div>` : ""}`;
 
   const editBtn = card.querySelector(".edit-collection-btn");
@@ -167,13 +167,21 @@ async function loadAll() {
   renderGrid();
 }
 
+// Re-render bilingual titles/descriptions (not just chrome — see js/i18n.js's applyTranslations
+// for that) from the already-fetched cachedCollections whenever the language switcher fires, so
+// an open Collections page updates instantly instead of only picking up the new language on the
+// next page load. Mirrors career.js's eden:langchange listener.
+document.addEventListener("eden:langchange", () => {
+  renderGrid();
+});
+
 async function deleteCollection(c, counts) {
   const total = Object.values(counts).reduce((a, b) => a + b, 0);
   if (total > 0) {
-    alert(`This collection still has ${total} item(s). Move them to another collection (or Uncategorized) before deleting.`);
+    alert(i18nT("collections.delete_blocked", { count: total }));
     return;
   }
-  if (!confirm(`Delete "${bi(c, "title")}"? This cannot be undone.`)) return;
+  if (!confirm(i18nT("common.delete_confirm"))) return;
   try {
     await deleteDoc(doc(db, "collections", c.id));
     await loadAll();
@@ -277,7 +285,7 @@ coverPickBtn.addEventListener("click", () => {
   const mine = cachedPhotos.filter((p) => user && p.uid === user.uid);
   coverPicker.innerHTML = mine.length
     ? mine.slice(0, 30).map((p) => `<img src="${p.url}" data-url="${p.url}" class="cover-pick-thumb w-full h-14 object-cover rounded-md cursor-pointer border border-borderNeon hover:border-neonPurple transition-colors">`).join("")
-    : `<p class="col-span-5 text-xs font-code text-textGray">No Memories yet.</p>`;
+    : `<p class="col-span-5 text-xs font-code text-textGray">${i18nT("common.none_yet")}</p>`;
   coverPicker.classList.toggle("hidden");
   coverPicker.querySelectorAll(".cover-pick-thumb").forEach((img) => {
     img.addEventListener("click", () => {
@@ -308,18 +316,18 @@ form.addEventListener("submit", async (event) => {
   };
   if (!payload.title_en) return;
 
-  statusEl.textContent = "Saving...";
+  statusEl.textContent = i18nT("common.saving");
   try {
     if (id) {
       await updateDoc(doc(db, "collections", id), payload);
     } else {
       await addDoc(collection(db, "collections"), { ...payload, createdAt: serverTimestamp() });
     }
-    statusEl.textContent = "Saved.";
+    statusEl.textContent = i18nT("common.saved");
     await loadAll();
     closeForm();
   } catch (err) {
     console.error("[collections] save failed:", err.code || err);
-    statusEl.textContent = "Couldn't save — check console.";
+    statusEl.textContent = i18nT("common.couldnt_save");
   }
 });

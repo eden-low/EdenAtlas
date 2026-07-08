@@ -88,9 +88,9 @@
     <section class="reveal bg-cardBg/90 neon-border-purple rounded-2xl p-3 flex flex-wrap items-center justify-between gap-3">
       <div class="flex flex-wrap items-center gap-3">
         <div id="journal-filters" class="flex flex-wrap items-center gap-1.5 text-xs font-cyber font-bold tracking-wider text-textGray">
-          <button data-filter="all" class="filter-tab px-3 py-1.5 rounded-full hover:text-neonPurple hover:bg-neonPurple/10 transition-colors">All</button>
-          <button data-filter="public" class="filter-tab px-3 py-1.5 rounded-full hover:text-neonPurple hover:bg-neonPurple/10 transition-colors">Public</button>
-          <button data-filter="private" class="filter-tab hidden px-3 py-1.5 rounded-full hover:text-rose-400 hover:bg-rose-400/10 transition-colors">Private</button>
+          <button data-filter="all" class="filter-tab px-3 py-1.5 rounded-full hover:text-neonPurple hover:bg-neonPurple/10 transition-colors" data-i18n="common.all">All</button>
+          <button data-filter="public" class="filter-tab px-3 py-1.5 rounded-full hover:text-neonPurple hover:bg-neonPurple/10 transition-colors" data-i18n="common.public">Public</button>
+          <button data-filter="private" class="filter-tab hidden px-3 py-1.5 rounded-full hover:text-rose-400 hover:bg-rose-400/10 transition-colors" data-i18n="common.private">Private</button>
         </div>
         <div class="w-px h-4 bg-borderNeon"></div>
         <div id="mood-filters" class="flex flex-wrap items-center gap-1.5 text-xs font-cyber font-bold tracking-wider text-textGray">
@@ -111,7 +111,7 @@
     <div id="journal-modal-backdrop" class="absolute inset-0 bg-darkBg/80 backdrop-blur-sm"></div>
     <div class="relative w-full max-w-lg bg-cardBg neon-border-purple rounded-2xl p-6 my-8">
       <div class="flex items-center justify-between mb-4">
-        <h2 class="font-cyber font-semibold text-lg">New Entry</h2>
+        <h2 class="font-cyber font-semibold text-lg" data-i18n="journal.new_entry">New Entry</h2>
         <button id="journal-modal-close" class="text-textGray hover:text-white text-xl leading-none">&times;</button>
       </div>
       <form id="journal-form" class="space-y-4">
@@ -129,8 +129,8 @@
             <select id="journal-mood" class="w-full bg-darkBg/60 border border-borderNeon rounded-lg px-3 py-2 text-xs text-white"></select>
           </div>
           <div class="flex items-center gap-4 text-xs font-code text-textGray">
-            <label class="flex items-center gap-1.5"><input type="radio" name="journal-visibility" value="public" checked> Public</label>
-            <label class="flex items-center gap-1.5"><input type="radio" name="journal-visibility" value="private"> Private</label>
+            <label class="flex items-center gap-1.5"><input type="radio" name="journal-visibility" value="public" checked> <span data-i18n="common.public">Public</span></label>
+            <label class="flex items-center gap-1.5"><input type="radio" name="journal-visibility" value="private"> <span data-i18n="common.private">Private</span></label>
           </div>
         </div>
         <div>
@@ -183,8 +183,8 @@
           <textarea id="journal-edit-content" rows="6" required class="w-full bg-darkBg/60 border border-borderNeon rounded-lg px-3 py-2 text-sm text-white font-code"></textarea>
         </div>
         <div class="flex items-center gap-4 text-xs font-code text-textGray">
-          <label class="flex items-center gap-1.5"><input type="radio" name="journal-edit-visibility" value="public"> Public</label>
-          <label class="flex items-center gap-1.5"><input type="radio" name="journal-edit-visibility" value="private"> Private</label>
+          <label class="flex items-center gap-1.5"><input type="radio" name="journal-edit-visibility" value="public"> <span data-i18n="common.public">Public</span></label>
+          <label class="flex items-center gap-1.5"><input type="radio" name="journal-edit-visibility" value="private"> <span data-i18n="common.private">Private</span></label>
         </div>
         <div>
           <label class="block text-xs font-code text-textGray mb-1.5" for="journal-edit-tags">Tags</label>

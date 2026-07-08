@@ -1,5 +1,5 @@
 import { auth, db, isOwner, OWNER_EMAIL, canParticipate } from "./firebase-init.js";
-import { getLang, setLang, init as initI18n } from "./js/i18n.js";
+import { getLang, setLang, init as initI18n, t } from "./js/i18n.js";
 import { onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-auth.js";
 import {
   collection,
@@ -176,7 +176,7 @@ saveUsernameBtn.addEventListener("click", async () => {
     return;
   }
 
-  usernameStatus.textContent = "Saving…";
+  usernameStatus.textContent = t("common.saving");
   saveUsernameBtn.disabled = true;
   try {
     await setDoc(doc(db, "usernames", next), { uid: user.uid, createdAt: serverTimestamp() });
@@ -198,7 +198,7 @@ saveUsernameBtn.addEventListener("click", async () => {
   try {
     await setDoc(doc(db, "users", user.uid), { uid: user.uid, username: next }, { merge: true });
     currentUsername = next;
-    usernameStatus.textContent = "Saved.";
+    usernameStatus.textContent = t("common.saved");
     renderHeader(user);
   } catch (err) {
     console.error("[me] username profile update failed:", err);
@@ -226,7 +226,7 @@ async function loadAbout(user) {
 saveAboutBtn.addEventListener("click", async () => {
   const user = auth.currentUser;
   if (!user) return;
-  aboutStatus.textContent = "Saving…";
+  aboutStatus.textContent = t("common.saving");
   saveAboutBtn.disabled = true;
   try {
     await setDoc(doc(db, "users", user.uid), {
@@ -234,11 +234,11 @@ saveAboutBtn.addEventListener("click", async () => {
       bio: bioInput.value.trim(),
       location: locationInput.value.trim(),
     }, { merge: true });
-    aboutStatus.textContent = "Saved.";
+    aboutStatus.textContent = t("common.saved");
     renderHeader(user);
   } catch (err) {
     console.error("[me] about save failed:", err);
-    aboutStatus.textContent = "Couldn't save — check console.";
+    aboutStatus.textContent = t("common.couldnt_save");
   }
   saveAboutBtn.disabled = false;
 });
@@ -571,11 +571,11 @@ function renderGoals() {
         </div>
         <div class="flex items-center justify-between mt-2 text-[11px] font-code text-textGray">
           <span>${g.current || 0} / ${g.target} ${g.unit || ""} &middot; ${pct}%</span>
-          ${deadline ? `<span>Due ${deadline}</span>` : ""}
+          ${deadline ? `<span>${deadline}</span>` : ""}
         </div>
         <div class="flex items-center gap-2 mt-3">
-          <input type="number" step="any" class="goal-progress-input w-24 bg-darkBg/60 border border-borderNeon rounded-lg px-2 py-1 text-xs text-white" placeholder="Update">
-          <button class="goal-progress-btn px-3 py-1 bg-neonPurple/15 text-neonPurple rounded-lg text-[11px] font-code hover:bg-neonPurple/25 transition-colors">Update progress</button>
+          <input type="number" step="any" class="goal-progress-input w-24 bg-darkBg/60 border border-borderNeon rounded-lg px-2 py-1 text-xs text-white">
+          <button class="goal-progress-btn px-3 py-1 bg-neonPurple/15 text-neonPurple rounded-lg text-[11px] font-code hover:bg-neonPurple/25 transition-colors">${t("me.update_progress")}</button>
         </div>`;
 
       el.querySelector(".goal-delete-btn").addEventListener("click", async () => {
@@ -615,7 +615,7 @@ document.getElementById("goal-form").addEventListener("submit", async (event) =>
   if (!user || !canParticipate()) return;
   const statusEl = document.getElementById("goal-status");
   const deadlineVal = document.getElementById("goal-deadline").value;
-  statusEl.textContent = "Saving…";
+  statusEl.textContent = t("common.saving");
   try {
     await addDoc(collection(db, "goals"), {
       title: document.getElementById("goal-title").value.trim(),
@@ -626,15 +626,29 @@ document.getElementById("goal-form").addEventListener("submit", async (event) =>
       createdAt: serverTimestamp(),
       uid: user.uid,
     });
-    statusEl.textContent = "Saved.";
+    statusEl.textContent = t("common.saved");
     event.target.reset();
     setTimeout(() => goalModal.classList.add("hidden"), 500);
     loadGoals();
   } catch (err) {
     console.error("[me] goal create failed:", err.code || err);
-    statusEl.textContent = "Couldn't save — check console.";
+    statusEl.textContent = t("common.couldnt_save");
   }
 });
+
+// ---- Time Capsule summary ----
+
+async function loadCapsulesSummary() {
+  const section = document.getElementById("capsules-summary-section");
+  section.classList.toggle("hidden", !canParticipate());
+  if (!canParticipate()) return;
+  const capsules = await fetchMyCollection("time_capsules");
+  const now = new Date();
+  const sealed = capsules.filter((c) => c.status === "sealed" && !(c.openAt?.toDate && c.openAt.toDate() <= now));
+  const ready = capsules.filter((c) => c.status === "sealed" && c.openAt?.toDate && c.openAt.toDate() <= now);
+  document.getElementById("capsules-sealed-count").textContent = sealed.length;
+  document.getElementById("capsules-ready-count").textContent = ready.length;
+}
 
 // ---- Achievements ----
 
@@ -660,27 +674,27 @@ function computeStreak(completedDates) {
 }
 
 const ACHIEVEMENTS = [
-  { key: "photos", label: "Photos Uploaded", icon: "fa-image", tiers: [10, 50, 100, 500] },
-  { key: "journals", label: "Journal Entries", icon: "fa-book", tiers: [10, 50, 100, 365] },
-  { key: "expenses", label: "Expenses Recorded", icon: "fa-wallet", tiers: [10, 100, 250, 500] },
-  { key: "streak", label: "Longest Active Streak", icon: "fa-fire", tiers: [7, 30, 100, 365] },
+  { key: "photos", labelKey: "me.achievement_photos", icon: "fa-image", tiers: [10, 50, 100, 500] },
+  { key: "journals", labelKey: "me.achievement_journals", icon: "fa-book", tiers: [10, 50, 100, 365] },
+  { key: "expenses", labelKey: "me.achievement_expenses", icon: "fa-wallet", tiers: [10, 100, 250, 500] },
+  { key: "streak", labelKey: "me.achievement_streak", icon: "fa-fire", tiers: [7, 30, 100, 365] },
 ];
 
 function achievementTile(def, count) {
-  const unlockedTier = [...def.tiers].reverse().find((t) => count >= t) || null;
-  const nextTier = def.tiers.find((t) => count < t);
+  const unlockedTier = [...def.tiers].reverse().find((tier) => count >= tier) || null;
+  const nextTier = def.tiers.find((tier) => count < tier);
   const pct = nextTier ? Math.round((count / nextTier) * 100) : 100;
   const el = document.createElement("div");
   el.className = `rounded-xl p-4 border ${unlockedTier ? "border-neonPurple/40 bg-neonPurple/5" : "border-borderNeon bg-darkBg/40"}`;
   el.innerHTML = `
     <div class="w-9 h-9 rounded-lg ${unlockedTier ? "bg-neonPurple/15 text-neonPurple" : "bg-darkBg/60 text-textGray"} flex items-center justify-center mb-2"><i class="fa-solid ${def.icon}"></i></div>
-    <p class="text-sm font-semibold text-white">${def.label}</p>
-    <p class="text-[11px] font-code text-textGray mt-0.5">${unlockedTier ? `${unlockedTier}+ reached` : "Not started"}</p>
+    <p class="text-sm font-semibold text-white">${t(def.labelKey)}</p>
+    <p class="text-[11px] font-code text-textGray mt-0.5">${unlockedTier ? `${unlockedTier}+ ${t("me.reached_suffix")}` : t("me.not_started")}</p>
     ${nextTier ? `
       <div class="h-1.5 rounded-full bg-borderNeon/60 overflow-hidden mt-2">
         <div class="h-full bg-neonPurple" style="width:${pct}%"></div>
       </div>
-      <p class="text-[10px] font-code text-textGray mt-1">${count} / ${nextTier}</p>` : `<p class="text-[10px] font-code text-emerald-400 mt-2">Max tier reached</p>`}`;
+      <p class="text-[10px] font-code text-textGray mt-1">${count} / ${nextTier}</p>` : `<p class="text-[10px] font-code text-emerald-400 mt-2">${t("me.max_tier_reached")}</p>`}`;
   return el;
 }
 
@@ -697,7 +711,7 @@ async function renderAchievements() {
 
 function renderSignedIn(user) {
   authControl.innerHTML = `
-    <span class="text-xs text-textGray font-code hidden sm:inline">Signed in as <span class="text-white">${user.displayName || user.email}</span></span>`;
+    <span class="text-xs text-textGray font-code hidden sm:inline">${t("common.signed_in_as")} <span class="text-white">${user.displayName || user.email}</span></span>`;
 }
 
 onAuthStateChanged(auth, (user) => {
@@ -712,6 +726,7 @@ onAuthStateChanged(auth, (user) => {
   renderExpenseAnalytics();
   renderJournalAnalytics();
   loadGoals();
+  loadCapsulesSummary();
   renderAchievements();
 
   if (isOwner(user)) {
@@ -720,6 +735,13 @@ onAuthStateChanged(auth, (user) => {
     loadWhitelistManagement();
     loadSystemLogs();
   }
+});
+
+document.addEventListener("eden:langchange", () => {
+  renderGoals();
+  renderAchievements();
+  const user = auth.currentUser;
+  if (user) renderSignedIn(user);
 });
 
 loadWeather();

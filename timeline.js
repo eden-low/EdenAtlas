@@ -1,5 +1,5 @@
 import { auth, googleProvider, db, canParticipate } from "./firebase-init.js";
-import { t as i18nT } from "./js/i18n.js";
+import { t as i18nT, getLang } from "./js/i18n.js";
 import {
   onAuthStateChanged,
   signInWithPopup,
@@ -66,7 +66,7 @@ function wireUseLocationBtn(btn, nameInput, latInput, lonInput) {
   btn.addEventListener("click", async () => {
     btn.disabled = true;
     const original = btn.textContent;
-    btn.textContent = "Locating...";
+    btn.textContent = i18nT("common.locating");
     const loc = await getBrowserLocation();
     btn.disabled = false;
     btn.textContent = original;
@@ -93,7 +93,7 @@ async function loadMyCollectionOptions() {
 }
 
 function collectionLabel(c) {
-  const lang = document.documentElement.lang === "zh" || localStorage.getItem("eden:lang") === "zh-CN" ? "zh" : "en";
+  const lang = getLang() === "zh-CN" ? "zh" : "en";
   return (lang === "zh" ? c.title_zh : c.title_en) || c.title_en || c.title_zh || "Untitled";
 }
 
@@ -161,7 +161,7 @@ function eventRow(event) {
           <span class="text-[10px] font-code px-2 py-0.5 rounded-full border ${isPrivate ? "border-rose-400/30 bg-rose-400/10 text-rose-400" : "border-emerald-400/30 bg-emerald-400/10 text-emerald-400"}">
             <i class="fa-solid ${isPrivate ? "fa-lock" : "fa-globe"}"></i>
           </span>
-          ${isMine ? `<button class="edit-event-btn text-textGray hover:text-neonPurple transition-colors" title="Edit metadata"><i class="fa-solid fa-pen text-xs"></i></button>` : ""}
+          ${isMine ? `<button class="edit-event-btn text-textGray hover:text-neonPurple transition-colors" title="${i18nT("common.edit_metadata")}"><i class="fa-solid fa-pen text-xs"></i></button>` : ""}
         </div>
       </div>
       ${event.description ? `<p class="text-xs text-textGray mt-2 leading-relaxed ${expanded ? "" : "hidden"}">${event.description}</p>` : ""}
@@ -367,7 +367,7 @@ eventForm.addEventListener("submit", async (event) => {
   const lonRaw = document.getElementById("event-longitude").value;
   if (!title || !dateValue) return;
 
-  eventStatus.textContent = "Saving...";
+  eventStatus.textContent = i18nT("common.saving");
   try {
     const [year, month, day] = dateValue.split("-").map(Number);
     const date = Timestamp.fromDate(new Date(year, month - 1, day));
@@ -386,12 +386,12 @@ eventForm.addEventListener("submit", async (event) => {
       longitude: lonRaw ? Number(lonRaw) : null,
     });
 
-    eventStatus.textContent = "Saved.";
+    eventStatus.textContent = i18nT("common.saved");
     await fetchVisibleEvents();
     closeModal();
   } catch (err) {
     console.error("Save failed", err);
-    eventStatus.textContent = "Save failed — check console.";
+    eventStatus.textContent = i18nT("common.couldnt_save");
   }
 });
 
@@ -447,11 +447,17 @@ eventEditForm.addEventListener("submit", async (evt) => {
   };
   try {
     await updateDoc(doc(db, "life_events", id), payload);
-    eventEditStatus.textContent = "Saved.";
+    eventEditStatus.textContent = i18nT("common.saved");
     await fetchVisibleEvents();
     closeEditModal();
   } catch (err) {
     console.error("[timeline] edit save failed:", err.code || err);
-    eventEditStatus.textContent = "Couldn't save — check console.";
+    eventEditStatus.textContent = i18nT("common.couldnt_save");
   }
+});
+
+// Re-render from the already-fetched cachedEvents ("Edit metadata" title, and anything else
+// read through i18nT()) whenever the language switcher fires.
+document.addEventListener("eden:langchange", () => {
+  renderTimeline();
 });

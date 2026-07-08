@@ -10,13 +10,13 @@ import {
   updateDoc,
   serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-firestore.js";
-import { t as i18nT } from "./js/i18n.js";
+import { getLang, t as i18nT } from "./js/i18n.js";
 
 const id = new URLSearchParams(location.search).get("id");
 const isUncategorized = id === "uncategorized";
 
 function curLang() {
-  return document.documentElement.lang === "zh" || localStorage.getItem("eden:lang") === "zh-CN" ? "zh" : "en";
+  return getLang() === "zh-CN" ? "zh" : "en";
 }
 function bi(obj, field) {
   const lang = curLang();
@@ -26,6 +26,18 @@ function formatTimestamp(ts) {
   if (!ts?.toDate) return "";
   return ts.toDate().toLocaleDateString(undefined, { month: "long", day: "numeric", year: "numeric" });
 }
+
+// Cached from the last successful fetch, so the eden:langchange listener below can re-render
+// bilingual content (the collection's own title/description, and career.js-style title_en/zh
+// project fields) without re-querying Firestore — same "re-render from cached data" contract
+// collections.js and career.js follow.
+let cachedC = null;
+let cachedIsOwner = false;
+let cachedPhotos = [];
+let cachedJournals = [];
+let cachedEvents = [];
+let cachedProjects = [];
+let cachedExpenses = [];
 
 async function mergeMinePublic(name) {
   const user = auth.currentUser;
@@ -114,8 +126,26 @@ function renderCareer(projects) {
   emptyEl.classList.toggle("hidden", projects.length > 0);
 }
 
+function filterByCollection(list) {
+  return list.filter((item) => (item.collectionId || null) === (isUncategorized ? null : id));
+}
+
+// Pure re-render from whatever's already cached — no refetch. Used both right after a fetch and
+// from the eden:langchange listener (bilingual career project titles/summaries are the only
+// language-dependent part of these sections, but re-running all of them is cheap and keeps this
+// in one place rather than special-casing just renderCareer).
+function renderAllSections() {
+  renderMemories(filterByCollection(cachedPhotos));
+  renderJournal(filterByCollection(cachedJournals));
+  renderJourney(filterByCollection(cachedEvents));
+  renderCareer(filterByCollection(cachedProjects));
+  if (isUncategorized || cachedIsOwner) {
+    renderFinance(filterByCollection(cachedExpenses));
+  }
+}
+
 async function loadSections(isOwner) {
-  const filterBy = (list) => list.filter((item) => (item.collectionId || null) === (isUncategorized ? null : id));
+  cachedIsOwner = isOwner;
 
   if (isUncategorized) {
     const [photos, journals, events, projects, expenses] = await Promise.all([
@@ -125,11 +155,12 @@ async function loadSections(isOwner) {
       fetchMyOnly("career_projects"),
       fetchMyOnly("expenses"),
     ]);
-    renderMemories(filterBy(photos));
-    renderJournal(filterBy(journals));
-    renderJourney(filterBy(events));
-    renderCareer(filterBy(projects));
-    renderFinance(filterBy(expenses));
+    cachedPhotos = photos;
+    cachedJournals = journals;
+    cachedEvents = events;
+    cachedProjects = projects;
+    cachedExpenses = expenses;
+    renderAllSections();
     document.getElementById("section-finance").classList.remove("hidden");
     return;
   }
@@ -140,22 +171,44 @@ async function loadSections(isOwner) {
     mergeMinePublic("life_events"),
     mergeMinePublic("career_projects"),
   ]);
-  renderMemories(filterBy(photos));
-  renderJournal(filterBy(journals));
-  renderJourney(filterBy(events));
-  renderCareer(filterBy(projects));
+  cachedPhotos = photos;
+  cachedJournals = journals;
+  cachedEvents = events;
+  cachedProjects = projects;
+  renderMemories(filterByCollection(photos));
+  renderJournal(filterByCollection(journals));
+  renderJourney(filterByCollection(events));
+  renderCareer(filterByCollection(projects));
 
   // Expenses are always private and never shown on anyone else's collection.
   document.getElementById("section-finance").classList.toggle("hidden", !isOwner);
   if (isOwner) {
     const expenses = await fetchMyOnly("expenses");
-    renderFinance(filterBy(expenses));
+    cachedExpenses = expenses;
+    renderFinance(filterByCollection(expenses));
   }
 }
 
-function renderHeader(c, isOwner) {
+// Re-render the collection header's bilingual title/description and the bilingual career
+// project cards from cache whenever the language switcher fires — mirrors career.js's
+// eden:langchange listener and collections.js's own (added alongside this fix).
+document.addEventListener("eden:langchange", () => {
+  if (!cachedC) return;
+  renderHeaderText(cachedC);
+  renderAllSections();
+});
+
+// Just the language-dependent bit of the header — split out so the eden:langchange listener can
+// re-render it alone, without re-wiring the edit/save-notes button listeners renderHeader() below
+// also sets up (those must only ever be wired once per page load, not once per language switch).
+function renderHeaderText(c) {
   document.getElementById("collection-title").textContent = isUncategorized ? i18nT("common.uncategorized") : bi(c, "title");
   document.getElementById("collection-description").textContent = isUncategorized ? "" : bi(c, "description");
+}
+
+function renderHeader(c, isOwner) {
+  cachedC = c;
+  renderHeaderText(c);
   const cover = document.getElementById("collection-cover");
   if (!isUncategorized && c.coverImageUrl) {
     cover.innerHTML = `<img src="${c.coverImageUrl}" alt="" class="w-full h-full object-cover">`;
@@ -189,8 +242,8 @@ function renderHeader(c, isOwner) {
       saveNotesBtn.addEventListener("click", async () => {
         try {
           await updateDoc(doc(db, "collections", c.id), { notes: notesTextarea.value.trim(), updatedAt: serverTimestamp() });
-          saveNotesBtn.textContent = "Saved";
-          setTimeout(() => { saveNotesBtn.textContent = "Save"; }, 1500);
+          saveNotesBtn.textContent = i18nT("common.saved");
+          setTimeout(() => { saveNotesBtn.textContent = i18nT("common.save"); }, 1500);
         } catch (err) {
           console.error("[collection-detail] notes save failed:", err.code || err);
         }

@@ -6,17 +6,20 @@
 import { auth, db, getUserMode } from "./firebase-init.js";
 import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-auth.js";
 import { collection, query, where, getDocs } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-firestore.js";
+import { init as initI18n, applyTranslations, t } from "./js/i18n.js";
 
 // "Reports" isn't its own searchable collection (reports.html/insights.js has no documents of
 // its own — it's a derived analytics view over `expenses`), so that bucket is mapped to the
 // actual underlying collection, Expenses, rather than inventing a duplicate result type.
+// Labels reuse the existing sidebar/nav translation keys (each of these result types maps
+// cleanly onto one nav section) rather than inventing parallel global_search.category_* keys.
 const GROUPS = [
-  { key: "users", label: "People", icon: "fa-user", href: (r) => `profile.html?uid=${encodeURIComponent(r.uid)}` },
-  { key: "photos", label: "Gallery", icon: "fa-image", href: () => "gallery.html" },
-  { key: "journals", label: "Journal", icon: "fa-book", href: () => "journal.html" },
-  { key: "life_events", label: "Timeline", icon: "fa-timeline", href: () => "timeline.html" },
-  { key: "habits", label: "Habits", icon: "fa-list-check", href: () => "habits.html" },
-  { key: "expenses", label: "Expenses", icon: "fa-wallet", href: () => "expenses.html" },
+  { key: "users", labelKey: "nav.people", icon: "fa-user", href: (r) => `profile.html?uid=${encodeURIComponent(r.uid)}` },
+  { key: "photos", labelKey: "nav.memories", icon: "fa-image", href: () => "gallery.html" },
+  { key: "journals", labelKey: "nav.journal", icon: "fa-book", href: () => "journal.html" },
+  { key: "life_events", labelKey: "nav.journey", icon: "fa-timeline", href: () => "timeline.html" },
+  { key: "habits", labelKey: "nav.habits", icon: "fa-list-check", href: () => "habits.html" },
+  { key: "expenses", labelKey: "nav.finance", icon: "fa-wallet", href: () => "expenses.html" },
 ];
 
 let injected = false;
@@ -31,7 +34,7 @@ function injectUI() {
   const trigger = document.createElement("button");
   trigger.type = "button";
   trigger.className = "flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-borderNeon bg-darkBg/60 text-textGray text-xs font-code hover:text-neonPurple hover:border-neonPurple/40 transition-colors";
-  trigger.innerHTML = `<i class="fa-solid fa-magnifying-glass"></i> <span class="hidden sm:inline">Search</span> <span class="hidden sm:inline text-[10px] text-textGray/60 border border-borderNeon rounded px-1">Ctrl K</span>`;
+  trigger.innerHTML = `<i class="fa-solid fa-magnifying-glass"></i> <span class="hidden sm:inline" data-i18n="common.search">Search</span> <span class="hidden sm:inline text-[10px] text-textGray/60 border border-borderNeon rounded px-1" data-i18n="global_search.shortcut_hint">Ctrl K</span>`;
   nav.appendChild(trigger);
 
   const overlay = document.createElement("div");
@@ -42,13 +45,18 @@ function injectUI() {
     <div class="relative w-full max-w-xl bg-cardBg neon-border-purple rounded-2xl overflow-hidden max-h-[70vh] flex flex-col">
       <div class="flex items-center gap-3 px-4 py-3 border-b border-borderNeon/60 flex-shrink-0">
         <i class="fa-solid fa-magnifying-glass text-textGray text-sm"></i>
-        <input id="global-search-input" type="text" placeholder="Search people, gallery, journal, timeline, habits, expenses&hellip;" class="flex-1 bg-transparent text-sm text-white placeholder:text-textGray/60 focus:outline-none">
+        <input id="global-search-input" type="text" data-i18n-placeholder="global_search.placeholder" placeholder="Search people, gallery, journal, timeline, habits, expenses&hellip;" class="flex-1 bg-transparent text-sm text-white placeholder:text-textGray/60 focus:outline-none">
         <button id="global-search-close" class="text-textGray hover:text-white text-lg leading-none">&times;</button>
       </div>
       <div id="global-search-results" class="overflow-y-auto p-2 space-y-3"></div>
-      <p id="global-search-empty" class="hidden text-center text-xs font-code text-textGray py-10">No results.</p>
+      <p id="global-search-empty" class="hidden text-center text-xs font-code text-textGray py-10" data-i18n="common.no_results">No results.</p>
     </div>`;
   document.body.appendChild(overlay);
+
+  // This module self-injects its DOM after js/i18n.js's initial applyTranslations(document) pass
+  // has already run, so the trigger/modal need their own pass — same pattern sidebar.js and
+  // mobile-nav.js use for their own self-injected markup.
+  initI18n().then(() => applyTranslations(document));
 
   trigger.addEventListener("click", openPalette);
   document.getElementById("global-search-close").addEventListener("click", closePalette);
@@ -187,7 +195,7 @@ function renderResults(raw) {
       const hits = matches[g.key];
       const wrap = document.createElement("div");
       wrap.innerHTML = `
-        <p class="px-2 text-[10px] uppercase tracking-[0.2em] text-textGray font-code mb-1.5">${g.label} &middot; ${hits.length} result${hits.length === 1 ? "" : "s"}</p>
+        <p class="px-2 text-[10px] uppercase tracking-[0.2em] text-textGray font-code mb-1.5">${t(g.labelKey)} &middot; ${hits.length} result${hits.length === 1 ? "" : "s"}</p>
         <div class="space-y-1">
           ${hits.slice(0, 5).map((r) => `
             <a href="${g.href(r)}" class="flex items-center gap-3 px-2.5 py-2 rounded-xl hover:bg-darkBg/40 transition-colors">

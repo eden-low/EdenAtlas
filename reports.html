@@ -70,7 +70,7 @@
   <main class="max-w-5xl mx-auto px-4 mt-8 space-y-6">
     <section class="reveal bg-cardBg/90 neon-border-purple rounded-2xl p-6">
       <h1 id="report-month-label" class="font-cyber font-semibold text-2xl">Monthly Report</h1>
-      <p class="text-textGray mt-2 text-sm">Your own spending, photos, and journal activity this month &mdash; a quick recap, not a public leaderboard.</p>
+      <p class="text-textGray mt-2 text-sm" data-i18n="reports.subtitle">Your own spending, photos, and journal activity this month &mdash; a quick recap, not a public leaderboard.</p>
     </section>
 
     <p id="weekend-warning" class="hidden reveal text-xs font-code text-amber-400 bg-amber-500/10 border border-amber-500/20 rounded-xl px-4 py-3">
@@ -79,38 +79,88 @@
 
     <section class="reveal-group grid grid-cols-2 lg:grid-cols-4 gap-4">
       <div class="reveal bg-cardBg/90 neon-border-purple rounded-2xl p-5">
-        <p class="text-textGray text-xs">Total spend</p>
+        <p class="text-textGray text-xs" data-i18n="reports.total_spend">Total spend</p>
         <p id="rpt-total" class="font-code font-semibold text-2xl mt-1">&mdash;</p>
       </div>
       <div class="reveal bg-cardBg/90 neon-border-purple rounded-2xl p-5">
-        <p class="text-textGray text-xs">Top category</p>
+        <p class="text-textGray text-xs" data-i18n="reports.top_category">Top category</p>
         <p id="rpt-top-category" class="font-code font-semibold text-2xl mt-1">&mdash;</p>
       </div>
       <div class="reveal bg-cardBg/90 neon-border-purple rounded-2xl p-5">
-        <p class="text-textGray text-xs">Photos uploaded</p>
+        <p class="text-textGray text-xs" data-i18n="reports.photos_uploaded">Photos uploaded</p>
         <p id="rpt-photos" class="font-code font-semibold text-2xl mt-1">&mdash;</p>
       </div>
       <div class="reveal bg-cardBg/90 neon-border-purple rounded-2xl p-5">
-        <p class="text-textGray text-xs">Journal entries</p>
+        <p class="text-textGray text-xs" data-i18n="reports.journal_entries">Journal entries</p>
         <p id="rpt-journals" class="font-code font-semibold text-2xl mt-1">&mdash;</p>
       </div>
     </section>
 
     <section class="reveal-group grid grid-cols-1 md:grid-cols-2 gap-4">
       <div class="reveal bg-cardBg/90 neon-border-purple rounded-2xl p-5">
-        <p class="text-[10px] uppercase tracking-[0.2em] text-textGray font-code mb-3">Spending by Category</p>
+        <p class="text-[10px] uppercase tracking-[0.2em] text-textGray font-code mb-3" data-i18n="reports.spending_by_category">Spending by Category</p>
         <div class="h-52"><canvas id="report-category-chart"></canvas></div>
       </div>
       <div class="reveal bg-cardBg/90 neon-border-purple rounded-2xl p-5">
-        <p class="text-[10px] uppercase tracking-[0.2em] text-textGray font-code mb-3">Weekday vs. Weekend Spending</p>
+        <p class="text-[10px] uppercase tracking-[0.2em] text-textGray font-code mb-3" data-i18n="reports.weekday_vs_weekend">Weekday vs. Weekend Spending</p>
         <div class="h-52"><canvas id="report-weekday-chart"></canvas></div>
+      </div>
+    </section>
+
+    <!-- Daily Reflection summary -->
+    <section id="reflection-summary-section" class="hidden reveal bg-cardBg/90 neon-border-purple rounded-2xl p-6">
+      <p class="text-[10px] uppercase tracking-[0.2em] text-textGray font-code mb-4" data-i18n="reflection.summary_title">Reflections</p>
+      <div class="grid grid-cols-3 gap-4 text-sm">
+        <div><p class="text-textGray text-xs" data-i18n="reflection.reflection_days">Reflection days</p><p id="reflection-days-count" class="font-code font-semibold text-xl mt-1">&mdash;</p></div>
+        <div><p class="text-textGray text-xs" data-i18n="reflection.most_common_mood">Most common mood</p><p id="reflection-top-mood" class="font-code font-semibold text-xl mt-1">&mdash;</p></div>
+      </div>
+    </section>
+
+    <!-- Monthly Story -->
+    <section class="reveal bg-cardBg/90 neon-border-purple rounded-2xl p-6">
+      <div class="flex items-center justify-between mb-1">
+        <p class="text-[10px] uppercase tracking-[0.2em] text-textGray font-code" data-i18n="reports.monthly_story.title">Monthly Story</p>
+        <div class="flex items-center gap-1.5">
+          <button id="story-prev" type="button" class="w-7 h-7 rounded-lg border border-borderNeon text-textGray hover:border-neonPurple/40 transition-colors"><i class="fa-solid fa-chevron-left text-xs"></i></button>
+          <span id="story-month-label" class="text-xs font-code text-white w-28 text-center"></span>
+          <button id="story-next" type="button" class="w-7 h-7 rounded-lg border border-borderNeon text-textGray hover:border-neonPurple/40 transition-colors"><i class="fa-solid fa-chevron-right text-xs"></i></button>
+        </div>
+      </div>
+      <p class="text-xs text-textGray mb-4" data-i18n="reports.monthly_story.subtitle">A warm recap of your month, not just numbers.</p>
+      <p id="story-paragraph" class="text-sm text-white/90 leading-relaxed"></p>
+      <div id="story-stats" class="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-4 text-xs font-code text-textGray"></div>
+      <button id="story-export-btn" type="button" class="mt-4 px-4 py-2 bg-cardBg/70 border border-borderNeon rounded-xl text-xs font-cyber font-bold tracking-wider text-white hover:border-neonPurple transition-all">
+        <i class="fa-solid fa-download mr-1.5"></i> <span data-i18n="reports.monthly_story.export_markdown">Export as Markdown</span>
+      </button>
+    </section>
+
+    <!-- Year in Review -->
+    <section class="reveal bg-cardBg/90 neon-border-purple rounded-2xl p-6">
+      <div class="flex items-center justify-between mb-1">
+        <p class="text-[10px] uppercase tracking-[0.2em] text-textGray font-code" data-i18n="reports.year_review.title">Year in Review</p>
+        <div class="flex items-center gap-1.5">
+          <button id="review-prev" type="button" class="w-7 h-7 rounded-lg border border-borderNeon text-textGray hover:border-neonPurple/40 transition-colors"><i class="fa-solid fa-chevron-left text-xs"></i></button>
+          <span id="review-year-label" class="text-xs font-code text-white w-16 text-center"></span>
+          <button id="review-next" type="button" class="w-7 h-7 rounded-lg border border-borderNeon text-textGray hover:border-neonPurple/40 transition-colors"><i class="fa-solid fa-chevron-right text-xs"></i></button>
+        </div>
+      </div>
+      <p class="text-xs text-textGray mb-4" data-i18n="reports.year_review.subtitle">A quiet look back at your year.</p>
+      <p id="review-paragraph" class="text-sm text-white/90 leading-relaxed"></p>
+      <div id="review-stats" class="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-4 text-xs font-code text-textGray"></div>
+      <div class="flex flex-wrap gap-2.5 mt-4">
+        <button id="review-export-btn" type="button" class="px-4 py-2 bg-cardBg/70 border border-borderNeon rounded-xl text-xs font-cyber font-bold tracking-wider text-white hover:border-neonPurple transition-all">
+          <i class="fa-solid fa-download mr-1.5"></i> <span data-i18n="reports.year_review.export_markdown">Export as Markdown</span>
+        </button>
+        <button id="review-print-btn" type="button" class="px-4 py-2 bg-cardBg/70 border border-borderNeon rounded-xl text-xs font-cyber font-bold tracking-wider text-white hover:border-neonPurple transition-all">
+          <i class="fa-solid fa-print mr-1.5"></i> <span data-i18n="reports.year_review.print">Print</span>
+        </button>
       </div>
     </section>
   </main>
 
   <script type="module" src="js/i18n.js"></script>
   <footer class="max-w-7xl mx-auto px-4 mt-10 pb-6 text-center">
-    <p class="text-[11px] font-code text-textGray/70">EdenAtlas &middot; by Jun &middot; Version 2.8</p>
+    <p class="text-[11px] font-code text-textGray/70" data-i18n="footer.line">EdenAtlas &middot; by Jun &middot; Version 2.9</p>
   </footer>
 
   <script src="scripts.js" defer></script>

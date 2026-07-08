@@ -77,6 +77,8 @@
     </nav>
   </div>
 
+  <div id="auth-control" class="hidden"></div>
+
   <main class="max-w-6xl mx-auto px-4 mt-6 space-y-6">
 
     <!-- Profile: slim header + essentials (education folded in, no charts/percentages) -->
@@ -98,14 +100,14 @@
 
       <div class="mt-8 grid grid-cols-1 md:grid-cols-2 gap-6">
         <div class="bg-darkBg/60 border border-borderNeon rounded-xl p-6 text-sm text-textGray space-y-3">
-          <h2 class="font-cyber font-bold text-white text-sm tracking-wider mb-1">Contact</h2>
-          <div class="flex justify-between"><span>Email</span><a href="mailto:jjun8647@gmail.com" class="text-white hover:text-neonPurple">jjun8647@gmail.com</a></div>
-          <div class="flex justify-between"><span>Phone</span><span class="text-white">011-10574969</span></div>
-          <div class="flex justify-between"><span>Location</span><span class="text-white text-right">Kuching, Sarawak, Malaysia</span></div>
+          <h2 class="font-cyber font-bold text-white text-sm tracking-wider mb-1" data-i18n="career.contact_header">Contact</h2>
+          <div class="flex justify-between"><span data-i18n="contact.email">Email</span><a href="mailto:jjun8647@gmail.com" class="text-white hover:text-neonPurple">jjun8647@gmail.com</a></div>
+          <div class="flex justify-between"><span data-i18n="contact.phone">Phone</span><span class="text-white">011-10574969</span></div>
+          <div class="flex justify-between"><span data-i18n="common.location">Location</span><span class="text-white text-right">Kuching, Sarawak, Malaysia</span></div>
         </div>
 
         <div class="bg-darkBg/60 border border-borderNeon rounded-xl p-6 text-sm text-textGray space-y-3">
-          <h2 class="font-cyber font-bold text-white text-sm tracking-wider mb-1">Education</h2>
+          <h2 class="font-cyber font-bold text-white text-sm tracking-wider mb-1" data-i18n="career.education_header">Education</h2>
           <div>
             <p class="text-white font-medium">Universiti Tunku Abdul Rahman (UTAR)</p>
             <p class="text-xs mt-0.5">Bachelor of Information Systems (Honours), Business Information Systems &middot; 2023–2026 &middot; CGPA 2.86</p>
@@ -128,7 +130,7 @@
 
     <!-- Leadership & Events: slimmed to a compact list, no per-item paragraphs -->
     <section id="events" class="reveal scroll-mt-24 bg-cardBg/90 backdrop-blur-sm p-6 rounded-2xl neon-border-purple">
-      <h1 class="font-cyber font-black text-3xl text-white">Leadership & Events</h1>
+      <h1 class="font-cyber font-black text-3xl text-white" data-i18n="career.leadership_header">Leadership & Events</h1>
       <div class="mt-5 divide-y divide-borderNeon/40">
         <div class="flex items-center gap-3 py-3">
           <i data-lucide="users" class="w-4 h-4 text-neonPurple flex-shrink-0"></i>
@@ -194,12 +196,12 @@
       </div>
 
       <div class="flex flex-wrap items-center gap-1.5 text-xs font-cyber font-bold tracking-wider text-textGray mt-4">
-        <button data-category="all" class="project-category-tab text-neonPurple px-3 py-1.5 rounded-full hover:bg-neonPurple/10 transition-colors">All</button>
-        <button data-category="personal" class="project-category-tab px-3 py-1.5 rounded-full hover:text-neonPurple hover:bg-neonPurple/10 transition-colors">Personal</button>
-        <button data-category="internship" class="project-category-tab px-3 py-1.5 rounded-full hover:text-neonPurple hover:bg-neonPurple/10 transition-colors">Internship</button>
+        <button data-category="all" class="project-category-tab text-neonPurple px-3 py-1.5 rounded-full hover:bg-neonPurple/10 transition-colors" data-i18n="common.all">All</button>
+        <button data-category="personal" class="project-category-tab px-3 py-1.5 rounded-full hover:text-neonPurple hover:bg-neonPurple/10 transition-colors" data-i18n="career.category_personal">Personal</button>
+        <button data-category="internship" class="project-category-tab px-3 py-1.5 rounded-full hover:text-neonPurple hover:bg-neonPurple/10 transition-colors" data-i18n="career.category_internship">Internship</button>
         <button data-category="fyp" class="project-category-tab px-3 py-1.5 rounded-full hover:text-neonPurple hover:bg-neonPurple/10 transition-colors">FYP</button>
-        <button data-category="coursework" class="project-category-tab px-3 py-1.5 rounded-full hover:text-neonPurple hover:bg-neonPurple/10 transition-colors">Coursework</button>
-        <button data-category="work" class="project-category-tab px-3 py-1.5 rounded-full hover:text-neonPurple hover:bg-neonPurple/10 transition-colors">Work</button>
+        <button data-category="coursework" class="project-category-tab px-3 py-1.5 rounded-full hover:text-neonPurple hover:bg-neonPurple/10 transition-colors" data-i18n="career.category_coursework">Coursework</button>
+        <button data-category="work" class="project-category-tab px-3 py-1.5 rounded-full hover:text-neonPurple hover:bg-neonPurple/10 transition-colors" data-i18n="career.category_work">Work</button>
       </div>
 
       <div id="featured-projects-section" class="hidden mt-6">
@@ -586,7 +588,7 @@
 
   <script type="module" src="js/i18n.js"></script>
   <footer class="max-w-7xl mx-auto px-4 mt-10 pb-6 text-center">
-    <p class="text-[11px] font-code text-textGray/70">EdenAtlas &middot; by Jun &middot; Version 2.8</p>
+    <p class="text-[11px] font-code text-textGray/70" data-i18n="footer.line">EdenAtlas &middot; by Jun &middot; Version 2.9</p>
   </footer>
 
   <script src="scripts.js" defer></script>

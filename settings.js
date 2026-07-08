@@ -1,5 +1,5 @@
 import { auth, db, isOwner, OWNER_EMAIL } from "./firebase-init.js";
-import { getLang, setLang, init as initI18n } from "./js/i18n.js";
+import { getLang, setLang, init as initI18n, t } from "./js/i18n.js";
 import { onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-auth.js";
 import {
   collection,
@@ -96,10 +96,10 @@ async function loadUsername(user) {
 // apart: a read is allowed for any signed-in user under the *intended* rules, so if reading
 // the doc also comes back permission-denied, the rules themselves aren't live yet.
 async function describeUsernameFailure(username, err) {
-  if (err.code !== "permission-denied") return "Couldn't save — check console.";
+  if (err.code !== "permission-denied") return t("common.couldnt_save");
   try {
     const snap = await getDoc(doc(db, "usernames", username));
-    return snap.exists() ? "That username is already taken." : "Couldn't save — check console.";
+    return snap.exists() ? "That username is already taken." : t("common.couldnt_save");
   } catch {
     return "Couldn't save — check that firestore.rules has been deployed to the Firebase Console.";
   }
@@ -117,7 +117,7 @@ saveUsernameBtn.addEventListener("click", async () => {
     return;
   }
 
-  usernameStatus.textContent = "Saving…";
+  usernameStatus.textContent = t("common.saving");
   saveUsernameBtn.disabled = true;
   try {
     // Doc ID = the handle itself, so this create fails with permission-denied if it's
@@ -144,7 +144,7 @@ saveUsernameBtn.addEventListener("click", async () => {
     // so this can't be a bare `{ username: next }` merge.
     await setDoc(doc(db, "users", user.uid), { uid: user.uid, username: next }, { merge: true });
     currentUsername = next;
-    usernameStatus.textContent = "Saved.";
+    usernameStatus.textContent = t("common.saved");
   } catch (err) {
     console.error("[settings] username profile update failed:", err);
     usernameStatus.textContent = "Handle reserved, but profile update failed — check console.";
@@ -173,7 +173,7 @@ async function loadAbout(user) {
 saveAboutBtn.addEventListener("click", async () => {
   const user = auth.currentUser;
   if (!user) return;
-  aboutStatus.textContent = "Saving…";
+  aboutStatus.textContent = t("common.saving");
   saveAboutBtn.disabled = true;
   try {
     await setDoc(doc(db, "users", user.uid), {
@@ -181,10 +181,10 @@ saveAboutBtn.addEventListener("click", async () => {
       bio: bioInput.value.trim(),
       location: locationInput.value.trim(),
     }, { merge: true });
-    aboutStatus.textContent = "Saved.";
+    aboutStatus.textContent = t("common.saved");
   } catch (err) {
     console.error("[settings] about save failed:", err);
-    aboutStatus.textContent = "Couldn't save — check console.";
+    aboutStatus.textContent = t("common.couldnt_save");
   }
   saveAboutBtn.disabled = false;
 });

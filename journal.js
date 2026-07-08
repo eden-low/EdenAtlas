@@ -1,5 +1,5 @@
 import { auth, googleProvider, db, storage, canParticipate } from "./firebase-init.js";
-import { t as i18nT } from "./js/i18n.js";
+import { t as i18nT, getLang, init as initI18n } from "./js/i18n.js";
 import {
   onAuthStateChanged,
   signInWithPopup,
@@ -22,12 +22,12 @@ import {
 } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-storage.js";
 
 const MOOD_META = {
-  happy: { emoji: "😊", label: "Happy" },
-  calm: { emoji: "😌", label: "Calm" },
-  excited: { emoji: "🎉", label: "Excited" },
-  sad: { emoji: "😔", label: "Sad" },
-  frustrated: { emoji: "😤", label: "Frustrated" },
-  tired: { emoji: "😴", label: "Tired" },
+  happy: { emoji: "😊", i18nKey: "journal.mood_happy" },
+  calm: { emoji: "😌", i18nKey: "journal.mood_calm" },
+  excited: { emoji: "🎉", i18nKey: "journal.mood_excited" },
+  sad: { emoji: "😔", i18nKey: "journal.mood_sad" },
+  frustrated: { emoji: "😤", i18nKey: "journal.mood_frustrated" },
+  tired: { emoji: "😴", i18nKey: "journal.mood_tired" },
 };
 
 const authControl = document.getElementById("auth-control");
@@ -98,7 +98,7 @@ async function loadMyCollectionOptions() {
 }
 
 function collectionLabel(c) {
-  const lang = document.documentElement.lang === "zh" || localStorage.getItem("eden:lang") === "zh-CN" ? "zh" : "en";
+  const lang = getLang() === "zh-CN" ? "zh" : "en";
   return (lang === "zh" ? c.title_zh : c.title_en) || c.title_en || c.title_zh || "Untitled";
 }
 
@@ -115,19 +115,33 @@ let activeMood = "all";
 let searchQuery = "";
 const expandedIds = new Set();
 
-// Populate the mood <select> in the compose form and the mood filter chips from one source of truth.
-Object.entries(MOOD_META).forEach(([key, meta]) => {
-  const opt = document.createElement("option");
-  opt.value = key;
-  opt.textContent = `${meta.emoji} ${meta.label}`;
-  moodSelect.appendChild(opt);
+// Populate the mood <select> in the compose form and the mood filter chips from one source of
+// truth. Re-run on language change (see eden:langchange listener below) since the labels are
+// baked into these elements' textContent at creation time, not read live via data-i18n.
+function renderMoodOptions() {
+  const prevMoodValue = moodSelect.value;
+  moodSelect.innerHTML = "";
+  moodFilterContainer.querySelectorAll(".mood-tab[data-mood]:not([data-mood='all'])").forEach((b) => b.remove());
 
-  const btn = document.createElement("button");
-  btn.dataset.mood = key;
-  btn.className = "mood-tab px-3 py-1.5 rounded-full hover:text-neonPurple hover:bg-neonPurple/10 transition-colors";
-  btn.textContent = `${meta.emoji} ${meta.label}`;
-  moodFilterContainer.appendChild(btn);
-});
+  Object.entries(MOOD_META).forEach(([key, meta]) => {
+    const opt = document.createElement("option");
+    opt.value = key;
+    opt.textContent = `${meta.emoji} ${i18nT(meta.i18nKey)}`;
+    moodSelect.appendChild(opt);
+
+    const btn = document.createElement("button");
+    btn.dataset.mood = key;
+    btn.className = "mood-tab px-3 py-1.5 rounded-full hover:text-neonPurple hover:bg-neonPurple/10 transition-colors";
+    btn.textContent = `${meta.emoji} ${i18nT(meta.i18nKey)}`;
+    moodFilterContainer.appendChild(btn);
+  });
+  if (prevMoodValue) moodSelect.value = prevMoodValue;
+}
+// Wait for the dictionary to be ready before the first render — this runs synchronously at
+// module load, ahead of any Firestore fetch, so (unlike postCard/journalCard/etc., which only
+// ever render after an async auth+Firestore round trip has already given i18n.js time to load)
+// it would otherwise have a real chance of painting raw "journal.mood_happy"-style keys.
+initI18n().then(renderMoodOptions);
 
 function formatTimestamp(ts) {
   if (!ts?.toDate) return "";
@@ -203,7 +217,7 @@ function journalCard(entry) {
           <span class="text-[10px] font-code px-2 py-0.5 rounded-full border ${isPrivate ? "border-rose-400/30 bg-rose-400/10 text-rose-400" : "border-emerald-400/30 bg-emerald-400/10 text-emerald-400"}">
             <i class="fa-solid ${isPrivate ? "fa-lock" : "fa-globe"}"></i>
           </span>
-          ${isMine ? `<button class="edit-entry-btn text-textGray hover:text-neonPurple transition-colors" title="Edit metadata"><i class="fa-solid fa-pen text-xs"></i></button>` : ""}
+          ${isMine ? `<button class="edit-entry-btn text-textGray hover:text-neonPurple transition-colors" title="${i18nT("common.edit_metadata")}"><i class="fa-solid fa-pen text-xs"></i></button>` : ""}
         </div>
       </div>
       <div class="text-sm text-textGray leading-relaxed journal-body">${expanded ? marked.parse(entry.content || "") : snippet(entry.content || "")}</div>
@@ -409,7 +423,7 @@ journalForm.addEventListener("submit", async (event) => {
   const lonRaw = document.getElementById("journal-longitude").value;
   if (!title || !content) return;
 
-  journalStatus.textContent = "Saving...";
+  journalStatus.textContent = i18nT("common.saving");
   try {
     let imageUrl = null;
     if (file) {
@@ -434,12 +448,12 @@ journalForm.addEventListener("submit", async (event) => {
       longitude: lonRaw ? Number(lonRaw) : null,
     });
 
-    journalStatus.textContent = "Saved.";
+    journalStatus.textContent = i18nT("common.saved");
     await fetchVisibleEntries();
     closeModal();
   } catch (err) {
     console.error("Save failed", err);
-    journalStatus.textContent = "Save failed — check console.";
+    journalStatus.textContent = i18nT("common.couldnt_save");
   }
 });
 
@@ -489,11 +503,19 @@ journalEditForm.addEventListener("submit", async (event) => {
   };
   try {
     await updateDoc(doc(db, "journals", id), payload);
-    journalEditStatus.textContent = "Saved.";
+    journalEditStatus.textContent = i18nT("common.saved");
     await fetchVisibleEntries();
     closeEditModal();
   } catch (err) {
     console.error("[journal] edit save failed:", err.code || err);
-    journalEditStatus.textContent = "Couldn't save — check console.";
+    journalEditStatus.textContent = i18nT("common.couldnt_save");
   }
+});
+
+// Re-render mood options/chips and cached entries (labels, "Edit metadata" title) whenever the
+// language switcher fires.
+document.addEventListener("eden:langchange", () => {
+  renderMoodOptions();
+  setMoodFilter(activeMood);
+  renderGrid();
 });

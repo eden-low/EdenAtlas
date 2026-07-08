@@ -1,4 +1,5 @@
 import { auth, googleProvider, db, canParticipate } from "./firebase-init.js";
+import { t as i18nT } from "./js/i18n.js";
 import {
   onAuthStateChanged,
   signInWithPopup,
@@ -97,7 +98,7 @@ function habitCard(habit) {
         <div>
           <p class="font-semibold text-sm">${habit.title}</p>
           <p class="text-[11px] font-code text-textGray mt-0.5">
-            <i class="fa-solid ${isPrivate ? "fa-lock" : "fa-globe"} mr-1"></i>${isPrivate ? "Private" : "Public"}
+            <i class="fa-solid ${isPrivate ? "fa-lock" : "fa-globe"} mr-1"></i>${isPrivate ? i18nT("common.private") : i18nT("common.public")}
           </p>
         </div>
       </div>
@@ -255,7 +256,7 @@ habitForm.addEventListener("submit", async (event) => {
   const visibility = habitForm.querySelector('input[name="habit-visibility"]:checked').value;
   if (!title || !icon) return;
 
-  habitStatus.textContent = "Saving...";
+  habitStatus.textContent = i18nT("common.saving");
   try {
     await addDoc(collection(db, "habits"), {
       uid: user.uid,
@@ -266,12 +267,12 @@ habitForm.addEventListener("submit", async (event) => {
       createdAt: serverTimestamp(),
     });
 
-    habitStatus.textContent = "Saved.";
+    habitStatus.textContent = i18nT("common.saved");
     await fetchVisibleHabits();
     closeModal();
   } catch (err) {
     console.error("[habits] save failed:", err);
-    habitStatus.textContent = "Save failed — check console.";
+    habitStatus.textContent = i18nT("common.couldnt_save");
   }
 });
 
@@ -322,3 +323,9 @@ async function toggleCheckIn(habit) {
     console.error("[habits] check-in failed:", err.code || err);
   }
 }
+
+// Re-render from the already-fetched cachedHabits (Public/Private label) whenever the language
+// switcher fires.
+document.addEventListener("eden:langchange", () => {
+  renderHabits();
+});

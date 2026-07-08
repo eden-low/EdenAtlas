@@ -39,6 +39,20 @@ service cloud.firestore {
       allow create: if canParticipate() && request.resource.data.uid == request.auth.uid;
     }
 
+    // Always-private (v2.9): messages sealed for the writer's own future self. Same
+    // owner-only shape as goals/expenses — never readable via isMineOrPublic(), by design.
+    match /time_capsules/{capsuleId} {
+      allow read, update, delete: if request.auth != null && resource.data.uid == request.auth.uid;
+      allow create: if canParticipate() && request.resource.data.uid == request.auth.uid;
+    }
+
+    // Always-private (v2.9): one-per-day mood/note checkpoint. Doc ID is `${uid}_${dateKey}`
+    // (enforced client-side, see index.html) so a same-day save is a merge, not a duplicate.
+    match /daily_reflections/{reflectionId} {
+      allow read, update, delete: if request.auth != null && resource.data.uid == request.auth.uid;
+      allow create: if canParticipate() && request.resource.data.uid == request.auth.uid;
+    }
+
     match /journals/{journalId} {
       allow read: if isMineOrPublic(resource.data);
       allow update, delete: if request.auth != null && resource.data.uid == request.auth.uid;

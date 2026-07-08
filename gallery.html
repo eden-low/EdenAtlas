@@ -82,14 +82,14 @@
 
     <section class="reveal bg-cardBg/90 backdrop-blur-sm p-3 rounded-2xl neon-border-purple flex flex-wrap items-center justify-between gap-3">
       <div id="feed-filters" class="flex flex-wrap items-center gap-1.5 text-xs font-cyber font-bold tracking-wider text-textGray">
-        <button data-filter="all" class="filter-tab px-3 py-1.5 rounded-full hover:text-neonPurple hover:bg-neonPurple/10 transition-colors">All</button>
-        <button data-filter="travel" class="filter-tab px-3 py-1.5 rounded-full hover:text-neonPurple hover:bg-neonPurple/10 transition-colors">Travel</button>
-        <button data-filter="projects" class="filter-tab px-3 py-1.5 rounded-full hover:text-neonPurple hover:bg-neonPurple/10 transition-colors">Projects</button>
-        <button data-filter="events" class="filter-tab px-3 py-1.5 rounded-full hover:text-neonPurple hover:bg-neonPurple/10 transition-colors">Events</button>
-        <button data-filter="dailylife" class="filter-tab px-3 py-1.5 rounded-full hover:text-neonPurple hover:bg-neonPurple/10 transition-colors">Daily Life</button>
-        <button data-filter="featured" class="filter-tab px-3 py-1.5 rounded-full hover:text-amber-400 hover:bg-amber-400/10 transition-colors"><i class="fa-solid fa-star mr-1"></i>Favorites</button>
-        <button data-filter="public" class="filter-tab px-3 py-1.5 rounded-full hover:text-neonPurple hover:bg-neonPurple/10 transition-colors">Public</button>
-        <button data-filter="private" class="filter-tab hidden px-3 py-1.5 rounded-full hover:text-rose-400 hover:bg-rose-400/10 transition-colors">Private</button>
+        <button data-filter="all" class="filter-tab px-3 py-1.5 rounded-full hover:text-neonPurple hover:bg-neonPurple/10 transition-colors" data-i18n="common.all">All</button>
+        <button data-filter="travel" class="filter-tab px-3 py-1.5 rounded-full hover:text-neonPurple hover:bg-neonPurple/10 transition-colors" data-i18n="memories.album_travel">Travel</button>
+        <button data-filter="projects" class="filter-tab px-3 py-1.5 rounded-full hover:text-neonPurple hover:bg-neonPurple/10 transition-colors" data-i18n="memories.album_projects">Projects</button>
+        <button data-filter="events" class="filter-tab px-3 py-1.5 rounded-full hover:text-neonPurple hover:bg-neonPurple/10 transition-colors" data-i18n="memories.album_events">Events</button>
+        <button data-filter="dailylife" class="filter-tab px-3 py-1.5 rounded-full hover:text-neonPurple hover:bg-neonPurple/10 transition-colors" data-i18n="memories.album_dailylife">Daily Life</button>
+        <button data-filter="featured" class="filter-tab px-3 py-1.5 rounded-full hover:text-amber-400 hover:bg-amber-400/10 transition-colors"><i class="fa-solid fa-star mr-1"></i><span data-i18n="memories.album_favorites">Favorites</span></button>
+        <button data-filter="public" class="filter-tab px-3 py-1.5 rounded-full hover:text-neonPurple hover:bg-neonPurple/10 transition-colors" data-i18n="common.public">Public</button>
+        <button data-filter="private" class="filter-tab hidden px-3 py-1.5 rounded-full hover:text-rose-400 hover:bg-rose-400/10 transition-colors" data-i18n="common.private">Private</button>
       </div>
       <div class="flex items-center gap-2">
         <button id="select-mode-btn" class="hidden px-4 py-2 bg-cardBg/70 border border-borderNeon rounded-xl text-xs font-cyber font-bold tracking-wider text-white hover:border-neonPurple transition-all whitespace-nowrap">
@@ -110,7 +110,7 @@
     <div id="post-modal-backdrop" class="absolute inset-0 bg-darkBg/80 backdrop-blur-sm"></div>
     <div class="relative w-full max-w-md bg-cardBg neon-border-purple rounded-2xl p-6">
       <div class="flex items-center justify-between mb-4">
-        <h2 class="font-cyber font-bold text-lg text-white">New Post</h2>
+        <h2 class="font-cyber font-bold text-lg text-white" data-i18n="memories.new_post">New Post</h2>
         <button id="post-modal-close" class="text-textGray hover:text-white text-xl leading-none">&times;</button>
       </div>
       <form id="post-form" class="space-y-4">
@@ -126,15 +126,15 @@
           <div class="flex-1">
             <label class="block text-xs font-code text-textGray mb-1.5" for="post-category">Category</label>
             <select id="post-category" class="w-full bg-darkBg/60 border border-borderNeon rounded-lg px-3 py-2 text-xs text-white">
-              <option value="travel">Travel</option>
-              <option value="projects">Projects</option>
-              <option value="events">Events</option>
-              <option value="dailylife">Daily Life</option>
+              <option value="travel" data-i18n="memories.album_travel">Travel</option>
+              <option value="projects" data-i18n="memories.album_projects">Projects</option>
+              <option value="events" data-i18n="memories.album_events">Events</option>
+              <option value="dailylife" data-i18n="memories.album_dailylife">Daily Life</option>
             </select>
           </div>
           <div class="flex items-center gap-4 text-xs font-code text-textGray">
-            <label class="flex items-center gap-1.5"><input type="radio" name="post-visibility" value="public" checked> Public</label>
-            <label class="flex items-center gap-1.5"><input type="radio" name="post-visibility" value="private"> Private</label>
+            <label class="flex items-center gap-1.5"><input type="radio" name="post-visibility" value="public" checked> <span data-i18n="common.public">Public</span></label>
+            <label class="flex items-center gap-1.5"><input type="radio" name="post-visibility" value="private"> <span data-i18n="common.private">Private</span></label>
           </div>
         </div>
         <div>
@@ -182,15 +182,15 @@
           <div class="flex-1">
             <label class="block text-xs font-code text-textGray mb-1.5" for="post-edit-category">Category</label>
             <select id="post-edit-category" class="w-full bg-darkBg/60 border border-borderNeon rounded-lg px-3 py-2 text-xs text-white">
-              <option value="travel">Travel</option>
-              <option value="projects">Projects</option>
-              <option value="events">Events</option>
-              <option value="dailylife">Daily Life</option>
+              <option value="travel" data-i18n="memories.album_travel">Travel</option>
+              <option value="projects" data-i18n="memories.album_projects">Projects</option>
+              <option value="events" data-i18n="memories.album_events">Events</option>
+              <option value="dailylife" data-i18n="memories.album_dailylife">Daily Life</option>
             </select>
           </div>
           <div class="flex items-center gap-4 text-xs font-code text-textGray">
-            <label class="flex items-center gap-1.5"><input type="radio" name="post-edit-visibility" value="public"> Public</label>
-            <label class="flex items-center gap-1.5"><input type="radio" name="post-edit-visibility" value="private"> Private</label>
+            <label class="flex items-center gap-1.5"><input type="radio" name="post-edit-visibility" value="public"> <span data-i18n="common.public">Public</span></label>
+            <label class="flex items-center gap-1.5"><input type="radio" name="post-edit-visibility" value="private"> <span data-i18n="common.private">Private</span></label>
           </div>
         </div>
         <div>

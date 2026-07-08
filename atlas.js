@@ -1,4 +1,5 @@
 import { auth, db, getUserMode } from "./firebase-init.js";
+import { getLang, t as i18nT } from "./js/i18n.js";
 import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-auth.js";
 import {
   collection,
@@ -19,13 +20,11 @@ let activeScope = "mine";
 let mineClusters = null;
 let connectionsClusters = null;
 let cachedCollections = [];
+let activeDetailCluster = null;
 
-function curLang() {
-  return document.documentElement.lang === "zh" || localStorage.getItem("eden:lang") === "zh-CN" ? "zh" : "en";
-}
 function bi(obj, field) {
-  const lang = curLang();
-  return (lang === "zh" ? obj[field + "_zh"] : obj[field + "_en"]) || obj[field + "_en"] || obj[field + "_zh"] || "";
+  const suffix = getLang() === "zh-CN" ? "_zh" : "_en";
+  return obj[field + suffix] || obj[field + "_en"] || obj[field + "_zh"] || "";
 }
 
 function itemMillis(item) {
@@ -160,11 +159,12 @@ function collectionChips(collectionIds) {
 }
 
 function openDetailPanel(cluster) {
+  activeDetailCluster = cluster;
   document.getElementById("location-detail-name").textContent = cluster.name;
   document.getElementById("location-detail-counts").innerHTML = `
-    <span><i class="fa-solid fa-images mr-1"></i>${cluster.memories} <span data-i18n="nav.memories">Memories</span></span>
-    <span><i class="fa-solid fa-book mr-1"></i>${cluster.journal} <span data-i18n="nav.journal">Journal</span></span>
-    <span><i class="fa-solid fa-timeline mr-1"></i>${cluster.journey} <span data-i18n="nav.journey">Journey</span></span>`;
+    <span><i class="fa-solid fa-images mr-1"></i>${cluster.memories} ${i18nT("atlas.legend_memories")}</span>
+    <span><i class="fa-solid fa-book mr-1"></i>${cluster.journal} ${i18nT("atlas.legend_journal")}</span>
+    <span><i class="fa-solid fa-timeline mr-1"></i>${cluster.journey} ${i18nT("atlas.legend_journey")}</span>`;
   document.getElementById("location-detail-collections").innerHTML = collectionChips(cluster.collectionIds);
   document.getElementById("location-detail-photos").innerHTML = cluster.photos.slice(0, 6)
     .map((url) => `<img src="${url}" alt="" class="w-full h-16 object-cover rounded-lg">`).join("");
@@ -172,11 +172,15 @@ function openDetailPanel(cluster) {
   detailPanel.scrollIntoView({ behavior: "smooth", block: "nearest" });
 }
 
-detailClose.addEventListener("click", () => detailPanel.classList.add("hidden"));
+detailClose.addEventListener("click", () => {
+  activeDetailCluster = null;
+  detailPanel.classList.add("hidden");
+});
 
 function renderClusters(clusters, color) {
   markers.forEach((m) => map.removeLayer(m));
   markers = [];
+  activeDetailCluster = null;
   detailPanel.classList.add("hidden");
 
   atlasEmpty.classList.toggle("hidden", clusters.length > 0);
@@ -203,7 +207,7 @@ async function setScope(scope) {
     btn.classList.toggle("text-white", active);
   });
 
-  atlasCount.textContent = "Loading…";
+  atlasCount.textContent = i18nT("common.loading");
   const clusters = scope === "mine" ? await loadMineClusters() : await loadConnectionsClusters();
   renderClusters(clusters, scope === "mine" ? "#a78bfa" : "#6ea8fe");
 }
@@ -214,7 +218,7 @@ function initMap() {
   const isLight = document.documentElement.getAttribute("data-theme") === "light";
   map = L.map("atlas-map", { zoomControl: true }).setView([20, 0], 2);
   L.tileLayer(`https://{s}.basemaps.cartocdn.com/${isLight ? "light_all" : "dark_all"}/{z}/{x}/{y}{r}.png`, {
-    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
+    attribution: `&copy; <a href="https://www.openstreetmap.org/copyright">${i18nT("atlas.provider_osm")}</a> contributors &copy; <a href="https://carto.com/attributions">${i18nT("atlas.provider_carto")}</a>`,
     maxZoom: 19,
     subdomains: "abcd",
   }).addTo(map);
@@ -224,4 +228,14 @@ onAuthStateChanged(auth, async (user) => {
   if (!map) initMap();
   cachedCollections = await mergeMinePublic("collections");
   await setScope("mine");
+});
+
+// Re-render whatever's already on screen — the collection chips (bilingual title_en/title_zh)
+// and the open detail panel's legend labels both depend on the current language, and neither
+// re-renders on its own from a plain data-i18n walk since they're injected via innerHTML.
+document.addEventListener("eden:langchange", () => {
+  const clusters = activeScope === "mine" ? mineClusters : connectionsClusters;
+  const reopen = activeDetailCluster;
+  if (clusters) renderClusters(clusters, activeScope === "mine" ? "#a78bfa" : "#6ea8fe");
+  if (reopen) openDetailPanel(reopen);
 });

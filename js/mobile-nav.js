@@ -5,7 +5,7 @@
 // slide-in drawer, a fixed bottom nav, and a Quick Add action sheet.
 import { auth } from "../firebase-init.js";
 import { onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-auth.js";
-import { getLang, setLang, init as initI18n } from "./i18n.js";
+import { getLang, setLang, init as initI18n, applyTranslations } from "./i18n.js";
 
 const DRAWER_LINKS = [
   { href: "index.html", icon: "fa-house", key: "nav.home", label: "Home" },
@@ -19,6 +19,7 @@ const DRAWER_LINKS = [
   { href: "reports.html", icon: "fa-chart-pie", key: "nav.reports", label: "Reports" },
   { href: "notifications.html", icon: "fa-bell", key: "nav.inbox", label: "Inbox" },
   { href: "timeline.html", icon: "fa-timeline", key: "nav.journey", label: "Journey" },
+  { href: "time-capsule.html", icon: "fa-box-archive", key: "nav.time_capsule", label: "Time Capsule" },
   { href: "me.html", icon: "fa-circle-user", key: "nav.me", label: "Me" },
 ];
 
@@ -37,6 +38,7 @@ const QUICK_ADD_ITEMS = [
   { href: "timeline.html?new=1", icon: "fa-timeline", key: "mobilenav.add_timeline_event", label: "Add Timeline Event" },
   { href: "habits.html?new=1", icon: "fa-list-check", key: "mobilenav.add_habit", label: "Add Habit" },
   { href: "collections.html?new=1", icon: "fa-layer-group", key: "mobilenav.new_collection", label: "New Collection" },
+  { href: "time-capsule.html?new=1", icon: "fa-box-archive", key: "mobilenav.new_capsule", label: "New Capsule" },
 ];
 
 const here = location.pathname.split("/").pop() || "index.html";
@@ -174,7 +176,10 @@ function wireDrawer() {
   // Await init() (safe to call repeatedly) so the initial paint reflects the fully-resolved
   // language (localStorage → Firestore → browser) rather than whatever currentLang defaulted
   // to before init() finished — the same ordering fix applied to Settings' own toggle.
-  initI18n().then(paintActive);
+  initI18n().then(() => {
+    applyTranslations(document);
+    paintActive();
+  });
   langButtons.forEach((btn) => btn.addEventListener("click", async () => {
     await setLang(btn.dataset.langChoice);
     paintActive();

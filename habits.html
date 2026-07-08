@@ -82,9 +82,9 @@
 
     <section class="reveal bg-cardBg/90 neon-border-purple rounded-2xl p-3 flex flex-wrap items-center justify-between gap-3">
       <div id="habit-filters" class="flex flex-wrap items-center gap-1.5 text-xs font-cyber font-bold tracking-wider text-textGray">
-        <button data-filter="all" class="filter-tab px-3 py-1.5 rounded-full hover:text-neonPurple hover:bg-neonPurple/10 transition-colors">All</button>
-        <button data-filter="public" class="filter-tab px-3 py-1.5 rounded-full hover:text-neonPurple hover:bg-neonPurple/10 transition-colors">Public</button>
-        <button data-filter="private" class="filter-tab hidden px-3 py-1.5 rounded-full hover:text-rose-400 hover:bg-rose-400/10 transition-colors">Private</button>
+        <button data-filter="all" class="filter-tab px-3 py-1.5 rounded-full hover:text-neonPurple hover:bg-neonPurple/10 transition-colors" data-i18n="common.all">All</button>
+        <button data-filter="public" class="filter-tab px-3 py-1.5 rounded-full hover:text-neonPurple hover:bg-neonPurple/10 transition-colors" data-i18n="common.public">Public</button>
+        <button data-filter="private" class="filter-tab hidden px-3 py-1.5 rounded-full hover:text-rose-400 hover:bg-rose-400/10 transition-colors" data-i18n="common.private">Private</button>
       </div>
       <button id="new-habit-btn" class="hidden px-4 py-2 bg-gradient-to-r from-neonViolet to-neonPurple rounded-xl text-xs font-cyber font-bold tracking-wider text-white hover:scale-105 transition-all whitespace-nowrap">
         <i class="fa-solid fa-plus mr-1.5"></i> NEW HABIT
@@ -100,7 +100,7 @@
     <div id="habit-modal-backdrop" class="absolute inset-0 bg-darkBg/80 backdrop-blur-sm"></div>
     <div class="relative w-full max-w-md bg-cardBg neon-border-purple rounded-2xl p-6">
       <div class="flex items-center justify-between mb-4">
-        <h2 class="font-cyber font-semibold text-lg">New Habit</h2>
+        <h2 class="font-cyber font-semibold text-lg" data-i18n="habits.add_habit">New Habit</h2>
         <button id="habit-modal-close" class="text-textGray hover:text-white text-xl leading-none">&times;</button>
       </div>
       <form id="habit-form" class="space-y-4">
@@ -119,8 +119,8 @@
           </div>
         </div>
         <div class="flex items-center gap-4 text-xs font-code text-textGray">
-          <label class="flex items-center gap-1.5"><input type="radio" name="habit-visibility" value="public" checked> Public</label>
-          <label class="flex items-center gap-1.5"><input type="radio" name="habit-visibility" value="private"> Private</label>
+          <label class="flex items-center gap-1.5"><input type="radio" name="habit-visibility" value="public" checked> <span data-i18n="common.public">Public</span></label>
+          <label class="flex items-center gap-1.5"><input type="radio" name="habit-visibility" value="private"> <span data-i18n="common.private">Private</span></label>
         </div>
         <button type="submit" class="w-full px-5 py-2.5 bg-gradient-to-r from-neonViolet to-neonPurple rounded-xl text-xs font-cyber font-bold tracking-wider text-white hover:scale-105 transition-all">
           SAVE HABIT

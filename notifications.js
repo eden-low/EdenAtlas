@@ -1,4 +1,5 @@
 import { auth, db, isOwner } from "./firebase-init.js";
+import { t } from "./js/i18n.js";
 import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-auth.js";
 import {
   collection,
@@ -15,6 +16,7 @@ export const TYPE_META = {
   journal_reminder: { icon: "fa-book", color: "text-amber-400", bg: "bg-amber-400/10" },
   habit_streak: { icon: "fa-fire", color: "text-amber-400", bg: "bg-amber-400/10" },
   gallery: { icon: "fa-heart", color: "text-neonPurple", bg: "bg-neonPurple/10" },
+  capsule_ready: { icon: "fa-box-archive", color: "text-neonPurple", bg: "bg-neonPurple/10" },
 };
 
 const accessNote = document.getElementById("notif-access-note");
@@ -43,7 +45,7 @@ function notifCard(n) {
       <p class="text-xs text-textGray mt-1">${n.message}</p>
       <p class="text-[10px] font-code text-textGray/70 mt-1.5">${formatTimestamp(n.createdAt)}</p>
     </div>
-    ${!n.read ? `<button class="mark-read-btn flex-shrink-0 px-2.5 py-1 rounded-lg text-[10px] font-code text-textGray hover:text-neonPurple border border-borderNeon hover:border-neonPurple/50 transition-colors">Mark read</button>` : ""}`;
+    ${!n.read ? `<button class="mark-read-btn flex-shrink-0 px-2.5 py-1 rounded-lg text-[10px] font-code text-textGray hover:text-neonPurple border border-borderNeon hover:border-neonPurple/50 transition-colors">${t("common.mark_read")}</button>` : ""}`;
 
   const btn = el.querySelector(".mark-read-btn");
   if (btn) btn.addEventListener("click", () => markRead(n));
@@ -96,4 +98,10 @@ async function fetchNotifications(user) {
 onAuthStateChanged(auth, (user) => {
   if (!user) return;
   fetchNotifications(user);
+});
+
+// Re-render from the already-fetched cachedNotifs — no refetch — since notifCard() embeds a
+// translated "Mark read" button per unread item.
+document.addEventListener("eden:langchange", () => {
+  renderNotifs();
 });

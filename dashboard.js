@@ -1,4 +1,5 @@
 import { auth, googleProvider, db, getUserMode } from "./firebase-init.js";
+import { t } from "./js/i18n.js";
 import {
   onAuthStateChanged,
   signInWithPopup,
@@ -78,7 +79,7 @@ function personCard(person) {
     <div class="min-w-0 flex-1">
       <div class="flex items-center gap-1.5 min-w-0">
         <p class="text-sm font-semibold text-white truncate">${person.displayName || person.email}</p>
-        ${person.role === "owner" ? '<i class="fa-solid fa-star text-neonPurple text-[10px]" title="Owner"></i>' : ""}
+        ${person.role === "owner" ? `<i class="fa-solid fa-star text-neonPurple text-[10px]" title="${t("people.owner_badge")}"></i>` : ""}
       </div>
       <p class="text-[11px] text-textGray font-code truncate">${person.username ? "@" + person.username : person.email}</p>
       ${person.bio ? `<p class="text-xs text-white/80 mt-1.5 line-clamp-2">${person.bio}</p>` : ""}
@@ -93,7 +94,7 @@ function personCard(person) {
 
   const countSlot = el.querySelector(".collections-count-slot");
   publicCollectionsCount(person.uid).then((count) => {
-    countSlot.innerHTML = `<i class="fa-solid fa-layer-group mr-1"></i>${count} ${count === 1 ? "collection" : "collections"}`;
+    countSlot.innerHTML = `<i class="fa-solid fa-layer-group mr-1"></i>${count} ${count === 1 ? t("people.collection") : t("people.collections")}`;
   });
 
   return el;
@@ -149,7 +150,7 @@ function renderSignedOut() {
 
 function renderSignedIn(user) {
   authControl.innerHTML = `
-    <span class="text-xs text-textGray font-code hidden sm:inline">Signed in as <span class="text-white">${user.displayName || user.email}</span></span>`;
+    <span class="text-xs text-textGray font-code hidden sm:inline">${t("common.signed_in_as")} <span class="text-white">${user.displayName || user.email}</span></span>`;
 }
 
 onAuthStateChanged(auth, (user) => {
@@ -159,4 +160,15 @@ onAuthStateChanged(auth, (user) => {
     renderSignedOut();
   }
   loadUserDirectory();
+});
+
+// Re-render browse sections (person cards carry a translated collections-count label) and the
+// search results (if a search is currently active) whenever the language switches — cheap,
+// since allUsers is already cached and no refetch is needed.
+document.addEventListener("eden:langchange", () => {
+  if (auth.currentUser) renderSignedIn(auth.currentUser);
+  renderBrowseSections();
+  if (peopleSearchInput.value.trim()) {
+    peopleSearchInput.dispatchEvent(new Event("input"));
+  }
 });

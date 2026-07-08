@@ -1,20 +1,39 @@
 import { auth, db } from "./firebase-init.js";
+import { getLang } from "./js/i18n.js";
 import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-auth.js";
 import { collection, query, where, getDocs } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-firestore.js";
 
 const monthLabel = document.getElementById("cal-month-label");
 const calGrid = document.getElementById("cal-grid");
+const calWeekdays = document.getElementById("cal-weekdays");
 const prevBtn = document.getElementById("cal-prev");
 const nextBtn = document.getElementById("cal-next");
 
 let viewDate = new Date();
 viewDate.setDate(1);
 
+// Every other page's toLocaleDateString/toLocaleString call still passes `undefined` (browser
+// default) rather than reading the app's own language choice — this is the one page asked to
+// fix that, since a month grid full of English weekday/month names while the rest of the UI is
+// in Chinese would be the most visible mismatch in the app.
+function dateLocale() {
+  return getLang() === "zh-CN" ? "zh-CN" : undefined;
+}
+
 function toDateKey(d) {
   const y = d.getFullYear();
   const m = String(d.getMonth() + 1).padStart(2, "0");
   const day = String(d.getDate()).padStart(2, "0");
   return `${y}-${m}-${day}`;
+}
+
+// Renders short weekday headers (Sun..Sat) in the app's current language. 1970-01-04 was a
+// Sunday, so offsetting from it sidesteps needing today's actual weekday.
+function renderWeekdayHeaders() {
+  if (!calWeekdays) return;
+  const fmt = new Intl.DateTimeFormat(dateLocale(), { weekday: "short" });
+  const labels = Array.from({ length: 7 }, (_, i) => fmt.format(new Date(1970, 0, 4 + i)));
+  calWeekdays.innerHTML = labels.map((l) => `<span>${l}</span>`).join("");
 }
 
 // Fetches the signed-in user's own docs only — no date-range filter server-side (an
@@ -31,15 +50,25 @@ async function fetchMine(collectionName) {
   }
 }
 
-async function renderMonth() {
-  monthLabel.textContent = viewDate.toLocaleDateString(undefined, { month: "long", year: "numeric" });
+let cachedMonthData = { expenses: [], photos: [], journals: [] };
 
+async function loadMonth() {
   const [expenses, photos, journals] = await Promise.all([
     fetchMine("expenses"),
     fetchMine("photos"),
     fetchMine("journals"),
   ]);
+  cachedMonthData = { expenses, photos, journals };
+  renderMonth();
+}
 
+// Pure render from cachedMonthData — safe to call again on a language switch without
+// re-fetching from Firestore.
+function renderMonth() {
+  monthLabel.textContent = viewDate.toLocaleDateString(dateLocale(), { month: "long", year: "numeric" });
+  renderWeekdayHeaders();
+
+  const { expenses, photos, journals } = cachedMonthData;
   const byDay = new Map();
   function addItem(dateField, item, render) {
     const d = item[dateField]?.toDate?.();
@@ -80,14 +109,20 @@ async function renderMonth() {
 
 prevBtn.addEventListener("click", () => {
   viewDate.setMonth(viewDate.getMonth() - 1);
-  renderMonth();
+  loadMonth();
 });
 nextBtn.addEventListener("click", () => {
   viewDate.setMonth(viewDate.getMonth() + 1);
-  renderMonth();
+  loadMonth();
 });
 
 onAuthStateChanged(auth, (user) => {
   if (!user) return;
+  loadMonth();
+});
+
+// Re-render the month label, weekday headers, and grid from the already-fetched
+// cachedMonthData whenever the language switcher fires — no Firestore re-fetch needed.
+document.addEventListener("eden:langchange", () => {
   renderMonth();
 });

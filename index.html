@@ -80,92 +80,119 @@
 
         <!-- Today's Overview: one consolidated card, not five -->
         <section class="reveal bg-cardBg/90 neon-border-purple rounded-2xl p-6">
-            <p class="text-[10px] uppercase tracking-[0.2em] text-textGray font-code mb-4">Today's Overview</p>
+            <p class="text-[10px] uppercase tracking-[0.2em] text-textGray font-code mb-4" data-i18n="home.today_overview">Today's Overview</p>
             <div>
-                <p class="text-xs text-textGray mb-2 flex items-center gap-1.5"><i data-lucide="list-checks" class="w-3.5 h-3.5"></i> Habits</p>
-                <div id="today-habits" class="space-y-1.5 text-sm"><p class="text-textGray text-xs">Loading&hellip;</p></div>
+                <p class="text-xs text-textGray mb-2 flex items-center gap-1.5"><i data-lucide="list-checks" class="w-3.5 h-3.5"></i> <span data-i18n="home.habits_label">Habits</span></p>
+                <div id="today-habits" class="space-y-1.5 text-sm"><p class="text-textGray text-xs" data-i18n="common.loading">Loading&hellip;</p></div>
             </div>
             <div class="divide-y divide-borderNeon/50 text-sm mt-4 pt-1 border-t border-borderNeon/40">
                 <div class="flex items-center justify-between py-2.5">
-                    <span class="text-textGray flex items-center gap-1.5"><i data-lucide="wallet" class="w-3.5 h-3.5"></i> Spending</span>
+                    <span class="text-textGray flex items-center gap-1.5"><i data-lucide="wallet" class="w-3.5 h-3.5"></i> <span data-i18n="home.spending_label">Spending</span></span>
                     <span id="today-spending" class="font-code font-semibold">&mdash;</span>
                 </div>
                 <div class="flex items-center justify-between py-2.5">
-                    <span class="text-textGray flex items-center gap-1.5"><i data-lucide="book-open" class="w-3.5 h-3.5"></i> Journal</span>
+                    <span class="text-textGray flex items-center gap-1.5"><i data-lucide="book-open" class="w-3.5 h-3.5"></i> <span data-i18n="home.journal_label">Journal</span></span>
                     <span id="today-journal" class="text-sm">&mdash;</span>
                 </div>
                 <div class="flex items-center justify-between py-2.5">
-                    <span class="text-textGray flex items-center gap-1.5"><i data-lucide="image" class="w-3.5 h-3.5"></i> Photos</span>
+                    <span class="text-textGray flex items-center gap-1.5"><i data-lucide="image" class="w-3.5 h-3.5"></i> <span data-i18n="home.photos_label">Photos</span></span>
                     <span id="today-photos" class="text-sm">&mdash;</span>
                 </div>
                 <div class="flex items-center justify-between py-2.5">
-                    <span class="text-textGray flex items-center gap-1.5"><i data-lucide="bell" class="w-3.5 h-3.5"></i> Notifications</span>
+                    <span class="text-textGray flex items-center gap-1.5"><i data-lucide="bell" class="w-3.5 h-3.5"></i> <span data-i18n="home.notifications_label">Notifications</span></span>
                     <span id="today-notifs" class="text-sm">&mdash;</span>
                 </div>
             </div>
         </section>
 
+        <!-- Daily Reflection -->
+        <section id="reflection-section" class="reveal bg-cardBg/90 neon-border-purple rounded-2xl p-6 hidden">
+            <p class="text-[10px] uppercase tracking-[0.2em] text-textGray font-code mb-4" data-i18n="reflection.prompt">How was today?</p>
+            <div id="reflection-form-view" class="space-y-3">
+                <div id="reflection-mood-row" class="flex flex-wrap gap-2"></div>
+                <input id="reflection-note" type="text" maxlength="140" data-i18n-placeholder="reflection.note_placeholder" placeholder="Write one sentence about today…" class="w-full bg-darkBg/60 border border-borderNeon rounded-lg px-3 py-2 text-sm text-white placeholder:text-textGray/60">
+                <button id="reflection-save-btn" type="button" class="px-4 py-2 bg-gradient-to-r from-neonViolet to-neonPurple rounded-xl text-xs font-cyber font-bold tracking-wider text-white hover:scale-105 transition-all" data-i18n="reflection.save">Save</button>
+                <span id="reflection-status" class="text-xs font-code text-textGray ml-2"></span>
+            </div>
+            <div id="reflection-done-view" class="hidden flex items-center justify-between gap-3">
+                <p class="text-sm text-white flex items-center gap-2"><span id="reflection-done-emoji" class="text-lg"></span><span id="reflection-done-note" class="truncate"></span></p>
+                <button id="reflection-edit-btn" type="button" class="text-xs font-code text-neonPurple hover:underline flex-shrink-0" data-i18n="reflection.edit">Edit</button>
+            </div>
+        </section>
+
+        <!-- Time Capsule ready notice -->
+        <section id="capsule-ready-section" class="hidden reveal bg-cardBg/90 neon-border-purple rounded-2xl p-6">
+            <a href="time-capsule.html" class="flex items-center gap-3 text-sm text-white hover:text-neonPurple transition-colors">
+                <span class="w-9 h-9 rounded-lg bg-neonPurple/10 text-neonPurple flex items-center justify-center flex-shrink-0"><i data-lucide="mail-open" class="w-4 h-4"></i></span>
+                <span data-i18n="time_capsule.home_ready_card">A message from your past self is ready.</span>
+            </a>
+        </section>
+
         <!-- On This Day -->
         <section id="memories-section" class="hidden reveal bg-cardBg/90 neon-border-purple rounded-2xl p-6">
-            <p class="text-[10px] uppercase tracking-[0.2em] text-textGray font-code mb-4">On This Day</p>
+            <p class="text-[10px] uppercase tracking-[0.2em] text-textGray font-code mb-4" data-i18n="home.on_this_day">On This Day</p>
             <div id="memories-list" class="space-y-1"></div>
         </section>
 
         <!-- Recent Memories -->
         <section id="recent-memories-section" class="hidden">
-            <p class="text-[10px] uppercase tracking-[0.2em] text-textGray font-code mb-3 px-1">Recent Memories</p>
+            <p class="text-[10px] uppercase tracking-[0.2em] text-textGray font-code mb-3 px-1" data-i18n="home.recent_memories">Recent Memories</p>
             <div id="recent-memories-list" class="reveal-group grid grid-cols-1 sm:grid-cols-2 gap-3"></div>
         </section>
 
         <!-- Continue Working: today's not-yet-done habits, an actionable nudge -->
         <section id="continue-working-section" class="hidden reveal bg-cardBg/90 neon-border-purple rounded-2xl p-6">
-            <p class="text-[10px] uppercase tracking-[0.2em] text-textGray font-code mb-4">Continue Working</p>
+            <p class="text-[10px] uppercase tracking-[0.2em] text-textGray font-code mb-4" data-i18n="home.continue_working">Continue Working</p>
             <div id="continue-working-list" class="space-y-2"></div>
         </section>
 
         <!-- Monthly Summary -->
         <section class="reveal bg-cardBg/90 neon-border-purple rounded-2xl p-6">
-            <p class="text-[10px] uppercase tracking-[0.2em] text-textGray font-code mb-4">Monthly Summary</p>
+            <p class="text-[10px] uppercase tracking-[0.2em] text-textGray font-code mb-4" data-i18n="home.monthly_summary">Monthly Summary</p>
             <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 text-sm">
-                <div><p class="text-textGray text-xs">Expenses</p><p id="month-expenses" class="font-code font-semibold text-xl mt-1">&mdash;</p></div>
-                <div><p class="text-textGray text-xs">Habit completion</p><p id="month-habits" class="font-code font-semibold text-xl mt-1">&mdash;</p></div>
-                <div><p class="text-textGray text-xs">Journal entries</p><p id="month-journal" class="font-code font-semibold text-xl mt-1">&mdash;</p></div>
-                <div><p class="text-textGray text-xs">Photos uploaded</p><p id="month-photos" class="font-code font-semibold text-xl mt-1">&mdash;</p></div>
+                <div><p class="text-textGray text-xs" data-i18n="home.expenses_stat">Expenses</p><p id="month-expenses" class="font-code font-semibold text-xl mt-1">&mdash;</p></div>
+                <div><p class="text-textGray text-xs" data-i18n="home.habit_completion_stat">Habit completion</p><p id="month-habits" class="font-code font-semibold text-xl mt-1">&mdash;</p></div>
+                <div><p class="text-textGray text-xs" data-i18n="home.journal_entries_stat">Journal entries</p><p id="month-journal" class="font-code font-semibold text-xl mt-1">&mdash;</p></div>
+                <div><p class="text-textGray text-xs" data-i18n="home.photos_uploaded_stat">Photos uploaded</p><p id="month-photos" class="font-code font-semibold text-xl mt-1">&mdash;</p></div>
             </div>
         </section>
 
         <!-- Quick Actions: one row of pills, not three cards -->
         <section id="quick-actions-section" class="hidden">
-            <p class="text-[10px] uppercase tracking-[0.2em] text-textGray font-code mb-3 px-1">Quick Actions</p>
+            <p class="text-[10px] uppercase tracking-[0.2em] text-textGray font-code mb-3 px-1" data-i18n="home.quick_actions">Quick Actions</p>
             <div class="flex flex-wrap gap-2">
                 <button id="qa-expense-btn" type="button" class="flex items-center gap-2 px-4 py-2.5 bg-cardBg/90 neon-border-purple rounded-xl text-sm text-white hover:border-neonPurple/40 transition-all">
-                    <i data-lucide="plus" class="w-4 h-4 text-emerald-400"></i> Add Expense
+                    <i data-lucide="plus" class="w-4 h-4 text-emerald-400"></i> <span data-i18n="home.add_expense">Add Expense</span>
                 </button>
                 <button id="qa-journal-btn" type="button" class="flex items-center gap-2 px-4 py-2.5 bg-cardBg/90 neon-border-purple rounded-xl text-sm text-white hover:border-neonPurple/40 transition-all">
-                    <i data-lucide="plus" class="w-4 h-4 text-amber-400"></i> Journal
+                    <i data-lucide="plus" class="w-4 h-4 text-amber-400"></i> <span data-i18n="home.journal">Journal</span>
                 </button>
                 <button id="qa-photo-btn" type="button" class="flex items-center gap-2 px-4 py-2.5 bg-cardBg/90 neon-border-purple rounded-xl text-sm text-white hover:border-neonPurple/40 transition-all">
-                    <i data-lucide="plus" class="w-4 h-4 text-neonBlue"></i> Upload Photo
+                    <i data-lucide="plus" class="w-4 h-4 text-neonBlue"></i> <span data-i18n="home.upload_photo">Upload Photo</span>
                 </button>
+                <a id="qa-capsule-btn" href="time-capsule.html?new=1" class="flex items-center gap-2 px-4 py-2.5 bg-cardBg/90 neon-border-purple rounded-xl text-sm text-white hover:border-neonPurple/40 transition-all">
+                    <i data-lucide="plus" class="w-4 h-4 text-neonViolet"></i> <span data-i18n="nav.time_capsule">Time Capsule</span>
+                </a>
             </div>
         </section>
 
         <!-- All pages -->
         <section class="reveal flex flex-wrap items-center gap-x-5 gap-y-2 text-xs font-code text-textGray px-1 pt-2 border-t border-borderNeon/40">
-            <a href="resume.html" class="hover:text-neonPurple transition-colors">Career</a>
-            <a href="gallery.html" class="hover:text-neonPurple transition-colors">Memories</a>
-            <a href="atlas.html" class="hover:text-neonPurple transition-colors">Atlas</a>
-            <a href="collections.html" class="hover:text-neonPurple transition-colors">Collections</a>
-            <a href="journal.html" class="hover:text-neonPurple transition-colors">Journal</a>
-            <a href="expenses.html" class="hover:text-neonPurple transition-colors">Finance</a>
-            <a href="timeline.html" class="hover:text-neonPurple transition-colors">Journey</a>
-            <a href="habits.html" class="hover:text-neonPurple transition-colors">Habits</a>
-            <a href="calendar.html" class="hover:text-neonPurple transition-colors">Calendar</a>
-            <a href="reports.html" class="hover:text-neonPurple transition-colors">Reports</a>
-            <a href="dashboard.html" class="hover:text-neonPurple transition-colors">Connections</a>
-            <a href="notifications.html" class="hover:text-neonPurple transition-colors">Inbox</a>
-            <a href="contact.html" class="hover:text-neonPurple transition-colors">Contact</a>
-            <a href="me.html" class="hover:text-neonPurple transition-colors">Me</a>
+            <a href="resume.html" class="hover:text-neonPurple transition-colors" data-i18n="nav.career">Career</a>
+            <a href="gallery.html" class="hover:text-neonPurple transition-colors" data-i18n="nav.memories">Memories</a>
+            <a href="atlas.html" class="hover:text-neonPurple transition-colors" data-i18n="nav.atlas">Atlas</a>
+            <a href="collections.html" class="hover:text-neonPurple transition-colors" data-i18n="nav.collections">Collections</a>
+            <a href="journal.html" class="hover:text-neonPurple transition-colors" data-i18n="nav.journal">Journal</a>
+            <a href="expenses.html" class="hover:text-neonPurple transition-colors" data-i18n="nav.finance">Finance</a>
+            <a href="timeline.html" class="hover:text-neonPurple transition-colors" data-i18n="nav.journey">Journey</a>
+            <a href="habits.html" class="hover:text-neonPurple transition-colors" data-i18n="nav.habits">Habits</a>
+            <a href="calendar.html" class="hover:text-neonPurple transition-colors" data-i18n="nav.calendar">Calendar</a>
+            <a href="reports.html" class="hover:text-neonPurple transition-colors" data-i18n="nav.reports">Reports</a>
+            <a href="dashboard.html" class="hover:text-neonPurple transition-colors" data-i18n="nav.people">Connections</a>
+            <a href="notifications.html" class="hover:text-neonPurple transition-colors" data-i18n="nav.inbox">Inbox</a>
+            <a href="time-capsule.html" class="hover:text-neonPurple transition-colors" data-i18n="nav.time_capsule">Time Capsule</a>
+            <a href="contact.html" class="hover:text-neonPurple transition-colors" data-i18n="nav.contact">Contact</a>
+            <a href="me.html" class="hover:text-neonPurple transition-colors" data-i18n="nav.me">Me</a>
         </section>
     </main>
 
@@ -174,29 +201,29 @@
         <div class="qa-backdrop absolute inset-0 bg-darkBg/80 backdrop-blur-sm"></div>
         <div class="relative w-full max-w-sm bg-cardBg neon-border-purple rounded-2xl p-6">
             <div class="flex items-center justify-between mb-4">
-                <h2 class="font-cyber font-bold text-lg text-white">Add Expense</h2>
+                <h2 class="font-cyber font-bold text-lg text-white" data-i18n="home.add_expense">Add Expense</h2>
                 <button type="button" class="qa-close text-textGray hover:text-white text-xl leading-none">&times;</button>
             </div>
             <form id="qa-expense-form" class="space-y-4">
                 <div>
-                    <label class="block text-xs font-code text-textGray mb-1.5" for="qa-expense-amount">Amount (RM)</label>
+                    <label class="block text-xs font-code text-textGray mb-1.5" for="qa-expense-amount" data-i18n="home.amount_label">Amount (RM)</label>
                     <input id="qa-expense-amount" type="number" step="0.01" min="0" required class="w-full bg-darkBg/60 border border-borderNeon rounded-lg px-3 py-2 text-sm text-white">
                 </div>
                 <div>
-                    <label class="block text-xs font-code text-textGray mb-1.5" for="qa-expense-category">Category</label>
+                    <label class="block text-xs font-code text-textGray mb-1.5" for="qa-expense-category" data-i18n="home.category_label">Category</label>
                     <select id="qa-expense-category" class="w-full bg-darkBg/60 border border-borderNeon rounded-lg px-3 py-2 text-xs text-white">
-                        <option value="food">Food</option>
-                        <option value="transport">Transport</option>
-                        <option value="shopping">Shopping</option>
-                        <option value="bills">Bills</option>
-                        <option value="other">Other</option>
+                        <option value="food" data-i18n="finance.category_food">Food</option>
+                        <option value="transport" data-i18n="finance.category_transport">Transport</option>
+                        <option value="shopping" data-i18n="finance.category_shopping">Shopping</option>
+                        <option value="bills" data-i18n="finance.category_bills">Bills</option>
+                        <option value="other" data-i18n="finance.category_other">Other</option>
                     </select>
                 </div>
                 <div>
-                    <label class="block text-xs font-code text-textGray mb-1.5" for="qa-expense-note">Note</label>
-                    <input id="qa-expense-note" type="text" placeholder="Optional" class="w-full bg-darkBg/60 border border-borderNeon rounded-lg px-3 py-2 text-sm text-white placeholder:text-textGray/60">
+                    <label class="block text-xs font-code text-textGray mb-1.5" for="qa-expense-note" data-i18n="home.note_label">Note</label>
+                    <input id="qa-expense-note" type="text" data-i18n-placeholder="common.optional" placeholder="Optional" class="w-full bg-darkBg/60 border border-borderNeon rounded-lg px-3 py-2 text-sm text-white placeholder:text-textGray/60">
                 </div>
-                <button type="submit" class="w-full px-5 py-2.5 bg-gradient-to-r from-neonViolet to-neonPurple rounded-xl text-xs font-cyber font-bold tracking-wider text-white hover:scale-105 transition-all">SAVE</button>
+                <button type="submit" class="w-full px-5 py-2.5 bg-gradient-to-r from-neonViolet to-neonPurple rounded-xl text-xs font-cyber font-bold tracking-wider text-white hover:scale-105 transition-all" data-i18n="common.save">SAVE</button>
                 <p id="qa-expense-status" class="text-xs font-code text-textGray text-center"></p>
             </form>
         </div>
@@ -207,23 +234,23 @@
         <div class="qa-backdrop absolute inset-0 bg-darkBg/80 backdrop-blur-sm"></div>
         <div class="relative w-full max-w-md bg-cardBg neon-border-purple rounded-2xl p-6">
             <div class="flex items-center justify-between mb-4">
-                <h2 class="font-cyber font-bold text-lg text-white">New Journal Entry</h2>
+                <h2 class="font-cyber font-bold text-lg text-white" data-i18n="home.new_journal_entry">New Journal Entry</h2>
                 <button type="button" class="qa-close text-textGray hover:text-white text-xl leading-none">&times;</button>
             </div>
             <form id="qa-journal-form" class="space-y-4">
                 <div>
-                    <label class="block text-xs font-code text-textGray mb-1.5" for="qa-journal-title">Title</label>
+                    <label class="block text-xs font-code text-textGray mb-1.5" for="qa-journal-title" data-i18n="home.title_label">Title</label>
                     <input id="qa-journal-title" type="text" required class="w-full bg-darkBg/60 border border-borderNeon rounded-lg px-3 py-2 text-sm text-white">
                 </div>
                 <div>
-                    <label class="block text-xs font-code text-textGray mb-1.5" for="qa-journal-content">What's on your mind?</label>
+                    <label class="block text-xs font-code text-textGray mb-1.5" for="qa-journal-content" data-i18n="home.whats_on_your_mind">What's on your mind?</label>
                     <textarea id="qa-journal-content" rows="4" required class="w-full bg-darkBg/60 border border-borderNeon rounded-lg px-3 py-2 text-sm text-white"></textarea>
                 </div>
                 <div class="flex items-center gap-4 text-xs font-code text-textGray">
-                    <label class="flex items-center gap-1.5"><input type="radio" name="qa-journal-visibility" value="public" checked> Public</label>
-                    <label class="flex items-center gap-1.5"><input type="radio" name="qa-journal-visibility" value="private"> Private</label>
+                    <label class="flex items-center gap-1.5"><input type="radio" name="qa-journal-visibility" value="public" checked> <span data-i18n="common.public">Public</span></label>
+                    <label class="flex items-center gap-1.5"><input type="radio" name="qa-journal-visibility" value="private"> <span data-i18n="common.private">Private</span></label>
                 </div>
-                <button type="submit" class="w-full px-5 py-2.5 bg-gradient-to-r from-neonViolet to-neonPurple rounded-xl text-xs font-cyber font-bold tracking-wider text-white hover:scale-105 transition-all">SAVE</button>
+                <button type="submit" class="w-full px-5 py-2.5 bg-gradient-to-r from-neonViolet to-neonPurple rounded-xl text-xs font-cyber font-bold tracking-wider text-white hover:scale-105 transition-all" data-i18n="common.save">SAVE</button>
                 <p id="qa-journal-status" class="text-xs font-code text-textGray text-center"></p>
             </form>
         </div>
@@ -234,34 +261,34 @@
         <div class="qa-backdrop absolute inset-0 bg-darkBg/80 backdrop-blur-sm"></div>
         <div class="relative w-full max-w-md bg-cardBg neon-border-purple rounded-2xl p-6">
             <div class="flex items-center justify-between mb-4">
-                <h2 class="font-cyber font-bold text-lg text-white">Upload Photo</h2>
+                <h2 class="font-cyber font-bold text-lg text-white" data-i18n="home.upload_photo_title">Upload Photo</h2>
                 <button type="button" class="qa-close text-textGray hover:text-white text-xl leading-none">&times;</button>
             </div>
             <form id="qa-photo-form" class="space-y-4">
                 <div>
-                    <label class="block text-xs font-code text-textGray mb-1.5" for="qa-photo-file">Image</label>
+                    <label class="block text-xs font-code text-textGray mb-1.5" for="qa-photo-file" data-i18n="home.image_label">Image</label>
                     <input id="qa-photo-file" type="file" accept="image/*" required class="w-full text-xs text-textGray file:mr-3 file:px-3 file:py-2 file:rounded-lg file:border file:border-borderNeon file:bg-darkBg/60 file:text-white file:text-xs">
                 </div>
                 <div>
-                    <label class="block text-xs font-code text-textGray mb-1.5" for="qa-photo-caption">Caption</label>
-                    <input id="qa-photo-caption" type="text" placeholder="Optional" class="w-full bg-darkBg/60 border border-borderNeon rounded-lg px-3 py-2 text-sm text-white placeholder:text-textGray/60">
+                    <label class="block text-xs font-code text-textGray mb-1.5" for="qa-photo-caption" data-i18n="home.caption_label">Caption</label>
+                    <input id="qa-photo-caption" type="text" data-i18n-placeholder="common.optional" placeholder="Optional" class="w-full bg-darkBg/60 border border-borderNeon rounded-lg px-3 py-2 text-sm text-white placeholder:text-textGray/60">
                 </div>
                 <div class="flex items-center gap-4">
                     <div class="flex-1">
-                        <label class="block text-xs font-code text-textGray mb-1.5" for="qa-photo-category">Album</label>
+                        <label class="block text-xs font-code text-textGray mb-1.5" for="qa-photo-category" data-i18n="home.album_label">Album</label>
                         <select id="qa-photo-category" class="w-full bg-darkBg/60 border border-borderNeon rounded-lg px-3 py-2 text-xs text-white">
-                            <option value="travel">Travel</option>
-                            <option value="projects">Projects</option>
-                            <option value="events">Events</option>
-                            <option value="dailylife" selected>Daily Life</option>
+                            <option value="travel" data-i18n="memories.album_travel">Travel</option>
+                            <option value="projects" data-i18n="memories.album_projects">Projects</option>
+                            <option value="events" data-i18n="memories.album_events">Events</option>
+                            <option value="dailylife" selected data-i18n="memories.album_dailylife">Daily Life</option>
                         </select>
                     </div>
                     <div class="flex items-center gap-4 text-xs font-code text-textGray">
-                        <label class="flex items-center gap-1.5"><input type="radio" name="qa-photo-visibility" value="public" checked> Public</label>
-                        <label class="flex items-center gap-1.5"><input type="radio" name="qa-photo-visibility" value="private"> Private</label>
+                        <label class="flex items-center gap-1.5"><input type="radio" name="qa-photo-visibility" value="public" checked> <span data-i18n="common.public">Public</span></label>
+                        <label class="flex items-center gap-1.5"><input type="radio" name="qa-photo-visibility" value="private"> <span data-i18n="common.private">Private</span></label>
                     </div>
                 </div>
-                <button type="submit" class="w-full px-5 py-2.5 bg-gradient-to-r from-neonViolet to-neonPurple rounded-xl text-xs font-cyber font-bold tracking-wider text-white hover:scale-105 transition-all">UPLOAD</button>
+                <button type="submit" class="w-full px-5 py-2.5 bg-gradient-to-r from-neonViolet to-neonPurple rounded-xl text-xs font-cyber font-bold tracking-wider text-white hover:scale-105 transition-all" data-i18n="common.upload">UPLOAD</button>
                 <p id="qa-photo-status" class="text-xs font-code text-textGray text-center"></p>
             </form>
         </div>
@@ -269,7 +296,7 @@
 
     <script type="module" src="js/i18n.js"></script>
   <footer class="max-w-7xl mx-auto px-4 mt-10 pb-6 text-center">
-    <p class="text-[11px] font-code text-textGray/70">EdenAtlas &middot; by Jun &middot; Version 2.8</p>
+    <p class="text-[11px] font-code text-textGray/70" data-i18n="footer.line">EdenAtlas &middot; by Jun &middot; Version 2.9</p>
   </footer>
 
   <script src="scripts.js" defer></script>
@@ -280,17 +307,18 @@
     <script type="module">
         import { auth, db, storage, canParticipate } from "./firebase-init.js";
         import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-auth.js";
-        import { collection, query, where, getDocs, addDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-firestore.js";
+        import { collection, query, where, getDocs, getDoc, doc, setDoc, addDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-firestore.js";
         import { ref, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-storage.js";
+        import { t } from "./js/i18n.js";
 
         // ---- Greeting ----
 
         function greetingWord() {
             const h = new Date().getHours();
-            if (h < 12) return "Good Morning";
-            if (h < 17) return "Good Afternoon";
-            if (h < 21) return "Good Evening";
-            return "Good Night";
+            if (h < 12) return t("home.greeting_morning");
+            if (h < 17) return t("home.greeting_afternoon");
+            if (h < 21) return t("home.greeting_evening");
+            return t("home.greeting_night");
         }
 
         function firstName(user) {
@@ -349,7 +377,7 @@
         function renderHabitsToday(habits) {
             const listEl = document.getElementById("today-habits");
             if (!habits.length) {
-                listEl.innerHTML = '<p class="text-textGray">No habits yet. <a href="habits.html" class="text-neonPurple hover:underline">Add one</a>.</p>';
+                listEl.innerHTML = `<p class="text-textGray">${t("home.no_habits")} <a href="habits.html" class="text-neonPurple hover:underline">${t("home.add_one")}</a>.</p>`;
                 return;
             }
             const todayKey = toDateKey(new Date());
@@ -374,13 +402,13 @@
 
             const journalToday = data.journals.some((j) => j.createdAt?.toDate && isSameDay(j.createdAt.toDate(), today));
             document.getElementById("today-journal").innerHTML = journalToday
-                ? '<span class="text-emerald-400"><i class="fa-solid fa-check mr-1"></i>Written today</span>'
-                : '<a href="journal.html" class="text-textGray hover:text-neonPurple">Nothing yet &rarr;</a>';
+                ? `<span class="text-emerald-400"><i class="fa-solid fa-check mr-1"></i>${t("home.written_today")}</span>`
+                : `<a href="journal.html" class="text-textGray hover:text-neonPurple">${t("common.none_yet")} &rarr;</a>`;
 
             const photosToday = data.photos.filter((p) => p.uploadedAt?.toDate && isSameDay(p.uploadedAt.toDate(), today)).length;
             document.getElementById("today-photos").innerHTML = photosToday > 0
-                ? `<span class="text-emerald-400"><i class="fa-solid fa-check mr-1"></i>${photosToday} uploaded</span>`
-                : '<a href="gallery.html" class="text-textGray hover:text-neonPurple">Nothing yet &rarr;</a>';
+                ? `<span class="text-emerald-400"><i class="fa-solid fa-check mr-1"></i>${photosToday} ${t("common.uploaded")}</span>`
+                : `<a href="gallery.html" class="text-textGray hover:text-neonPurple">${t("common.none_yet")} &rarr;</a>`;
         }
 
         async function loadNotifCount(user) {
@@ -388,8 +416,8 @@
             try {
                 const snap = await getDocs(query(collection(db, "notifications"), where("uid", "==", user.uid), where("read", "==", false)));
                 el.innerHTML = snap.size > 0
-                    ? `<a href="notifications.html" class="text-amber-400 hover:underline">${snap.size} unread</a>`
-                    : '<span class="text-textGray">All caught up</span>';
+                    ? `<a href="notifications.html" class="text-amber-400 hover:underline">${snap.size} ${t("home.unread")}</a>`
+                    : `<span class="text-textGray">${t("home.all_caught_up")}</span>`;
             } catch (err) {
                 console.error("[home] notif count failed:", err.code || err);
                 el.textContent = "—";
@@ -425,14 +453,14 @@
                 ...hits.map((h) => {
                     const href = h.type === "photo" ? "gallery.html" : h.type === "journal" ? "journal.html" : "timeline.html";
                     const icon = h.type === "photo" ? "fa-image" : h.type === "journal" ? "fa-book" : "fa-timeline";
-                    const label = h.item.caption || h.item.title || "Untitled";
+                    const label = h.item.caption || h.item.title || t("common.untitled");
                     const el = document.createElement("a");
                     el.href = href;
                     el.className = "flex items-center gap-3 p-2.5 rounded-xl hover:bg-darkBg/40 transition-colors";
                     el.innerHTML = `
                         <span class="w-8 h-8 rounded-lg bg-neonPurple/10 text-neonPurple flex items-center justify-center text-xs flex-shrink-0"><i class="fa-solid ${icon}"></i></span>
                         <span class="min-w-0 text-sm text-white truncate flex-1">${label}</span>
-                        <span class="text-[10px] font-code text-textGray flex-shrink-0">${h.yearsAgo} year${h.yearsAgo === 1 ? "" : "s"} ago</span>`;
+                        <span class="text-[10px] font-code text-textGray flex-shrink-0">${h.yearsAgo === 1 ? t("common.year_ago") : t("common.years_ago", { n: h.yearsAgo })}</span>`;
                     return el;
                 })
             );
@@ -460,9 +488,9 @@
             const recentEvents = [...data.events].sort((a, b) => (b.date?.toMillis?.() || 0) - (a.date?.toMillis?.() || 0)).slice(0, 2);
 
             const cards = [];
-            if (latestPhoto) cards.push(memoryCard("gallery.html", "fa-image", "Latest Photo", latestPhoto.caption || "Untitled"));
-            if (latestJournal) cards.push(memoryCard("journal.html", "fa-book", "Latest Journal", latestJournal.title || "Untitled"));
-            recentEvents.forEach((e) => cards.push(memoryCard("timeline.html", "fa-timeline", "Timeline", e.title || "Untitled")));
+            if (latestPhoto) cards.push(memoryCard("gallery.html", "fa-image", t("home.photos_label"), latestPhoto.caption || t("common.untitled")));
+            if (latestJournal) cards.push(memoryCard("journal.html", "fa-book", t("home.journal_label"), latestJournal.title || t("common.untitled")));
+            recentEvents.forEach((e) => cards.push(memoryCard("timeline.html", "fa-timeline", t("nav.journey"), e.title || t("common.untitled"))));
 
             if (!cards.length) {
                 section.classList.add("hidden");
@@ -508,14 +536,17 @@
             document.getElementById("continue-working-list").innerHTML = unfinished.map((h) => `
                 <a href="habits.html" class="flex items-center justify-between gap-3 p-2.5 rounded-xl hover:bg-darkBg/40 transition-colors">
                     <span class="flex items-center gap-2.5 text-sm text-white truncate"><i data-lucide="circle-dashed" class="w-4 h-4 text-textGray flex-shrink-0"></i>${h.icon || ""} ${h.title}</span>
-                    <span class="text-[10px] font-code text-textGray flex-shrink-0">Not done yet</span>
+                    <span class="text-[10px] font-code text-textGray flex-shrink-0">${t("home.not_done_yet")}</span>
                 </a>`).join("");
         }
 
         // ---- Load + refresh ----
 
+        let lastData = null;
+
         async function refreshHome() {
             const data = await loadAllMyData();
+            lastData = data;
             renderToday(data);
             renderMemories(data);
             renderRecentMemories(data);
@@ -541,7 +572,7 @@
             const user = auth.currentUser;
             if (!user || !canParticipate()) return;
             const statusEl = document.getElementById("qa-expense-status");
-            statusEl.textContent = "Saving…";
+            statusEl.textContent = t("common.saving");
             try {
                 await addDoc(collection(db, "expenses"), {
                     amount: parseFloat(document.getElementById("qa-expense-amount").value) || 0,
@@ -550,13 +581,13 @@
                     createdAt: serverTimestamp(),
                     uid: user.uid,
                 });
-                statusEl.textContent = "Saved.";
+                statusEl.textContent = t("common.saved");
                 event.target.reset();
                 setTimeout(() => document.getElementById("qa-expense-modal").classList.add("hidden"), 500);
                 refreshHome();
             } catch (err) {
                 console.error("[home] quick expense failed:", err.code || err);
-                statusEl.textContent = "Couldn't save — check console.";
+                statusEl.textContent = t("common.couldnt_save");
             }
         });
 
@@ -565,7 +596,7 @@
             const user = auth.currentUser;
             if (!user || !canParticipate()) return;
             const statusEl = document.getElementById("qa-journal-status");
-            statusEl.textContent = "Saving…";
+            statusEl.textContent = t("common.saving");
             try {
                 await addDoc(collection(db, "journals"), {
                     title: document.getElementById("qa-journal-title").value.trim(),
@@ -577,13 +608,13 @@
                     createdAt: serverTimestamp(),
                     uid: user.uid,
                 });
-                statusEl.textContent = "Saved.";
+                statusEl.textContent = t("common.saved");
                 event.target.reset();
                 setTimeout(() => document.getElementById("qa-journal-modal").classList.add("hidden"), 500);
                 refreshHome();
             } catch (err) {
                 console.error("[home] quick journal failed:", err.code || err);
-                statusEl.textContent = "Couldn't save — check console.";
+                statusEl.textContent = t("common.couldnt_save");
             }
         });
 
@@ -596,7 +627,7 @@
             const statusEl = document.getElementById("qa-photo-status");
             const category = document.getElementById("qa-photo-category").value;
             const visibility = event.target.querySelector('input[name="qa-photo-visibility"]:checked').value;
-            statusEl.textContent = "Uploading…";
+            statusEl.textContent = t("common.uploading");
             try {
                 const storagePath = `gallery/${user.uid}/${visibility}/${category}/${Date.now()}-${file.name}`;
                 const fileRef = ref(storage, storagePath);
@@ -612,15 +643,127 @@
                     uploadedAt: serverTimestamp(),
                     uid: user.uid,
                 });
-                statusEl.textContent = "Uploaded.";
+                statusEl.textContent = t("common.uploaded");
                 event.target.reset();
                 setTimeout(() => document.getElementById("qa-photo-modal").classList.add("hidden"), 500);
                 refreshHome();
             } catch (err) {
                 console.error("[home] quick photo failed:", err.code || err);
-                statusEl.textContent = "Upload failed — check console.";
+                statusEl.textContent = t("common.upload_failed");
             }
         });
+
+        // ---- Daily Reflection ----
+
+        const MOODS = [
+            { key: "happy", emoji: "😊" },
+            { key: "neutral", emoji: "😐" },
+            { key: "tired", emoji: "😮" },
+            { key: "sad", emoji: "😔" },
+            { key: "excited", emoji: "🎉" },
+            { key: "grateful", emoji: "🙏" },
+        ];
+        let selectedMood = null;
+        let currentReflection = null;
+
+        function todayReflectionId(uid) {
+            return `${uid}_${toDateKey(new Date())}`;
+        }
+
+        function renderMoodButtons() {
+            document.getElementById("reflection-mood-row").innerHTML = MOODS.map((m) => `
+                <button type="button" data-mood="${m.key}" class="reflection-mood-btn px-3 py-2 rounded-xl border text-sm flex items-center gap-1.5 transition-colors ${selectedMood === m.key ? "border-neonPurple bg-neonPurple/15 text-white" : "border-borderNeon text-textGray hover:border-neonPurple/40"}">
+                    <span>${m.emoji}</span> <span>${t(`reflection.mood_${m.key}`)}</span>
+                </button>`).join("");
+            document.querySelectorAll(".reflection-mood-btn").forEach((btn) => {
+                btn.addEventListener("click", () => {
+                    selectedMood = btn.dataset.mood;
+                    renderMoodButtons();
+                });
+            });
+        }
+
+        function renderReflectionView() {
+            const formView = document.getElementById("reflection-form-view");
+            const doneView = document.getElementById("reflection-done-view");
+            if (currentReflection) {
+                const meta = MOODS.find((m) => m.key === currentReflection.mood);
+                document.getElementById("reflection-done-emoji").textContent = meta ? meta.emoji : "";
+                document.getElementById("reflection-done-note").textContent = currentReflection.note || (meta ? t(`reflection.mood_${meta.key}`) : "");
+                formView.classList.add("hidden");
+                doneView.classList.remove("hidden");
+            } else {
+                selectedMood = null;
+                document.getElementById("reflection-note").value = "";
+                renderMoodButtons();
+                formView.classList.remove("hidden");
+                doneView.classList.add("hidden");
+            }
+        }
+
+        async function loadReflection(user) {
+            const section = document.getElementById("reflection-section");
+            section.classList.toggle("hidden", !canParticipate());
+            if (!canParticipate()) return;
+            try {
+                const snap = await getDoc(doc(db, "daily_reflections", todayReflectionId(user.uid)));
+                currentReflection = snap.exists() ? snap.data() : null;
+            } catch (err) {
+                console.error("[home] reflection load failed:", err.code || err);
+                currentReflection = null;
+            }
+            renderReflectionView();
+        }
+
+        document.getElementById("reflection-edit-btn").addEventListener("click", () => {
+            const editing = currentReflection;
+            currentReflection = null;
+            renderReflectionView();
+            if (editing) {
+                selectedMood = editing.mood;
+                document.getElementById("reflection-note").value = editing.note || "";
+                renderMoodButtons();
+            }
+        });
+
+        document.getElementById("reflection-save-btn").addEventListener("click", async () => {
+            const user = auth.currentUser;
+            if (!user || !canParticipate() || !selectedMood) return;
+            const statusEl = document.getElementById("reflection-status");
+            statusEl.textContent = t("common.saving");
+            try {
+                await setDoc(doc(db, "daily_reflections", todayReflectionId(user.uid)), {
+                    uid: user.uid,
+                    dateKey: toDateKey(new Date()),
+                    mood: selectedMood,
+                    note: document.getElementById("reflection-note").value.trim(),
+                    visibility: "private",
+                    updatedAt: serverTimestamp(),
+                    createdAt: serverTimestamp(),
+                }, { merge: true });
+                statusEl.textContent = t("common.saved");
+                await loadReflection(user);
+                setTimeout(() => { statusEl.textContent = ""; }, 1500);
+            } catch (err) {
+                console.error("[home] reflection save failed:", err.code || err);
+                statusEl.textContent = t("common.couldnt_save");
+            }
+        });
+
+        // ---- Time Capsule ready check ----
+
+        async function checkCapsulesReady(user) {
+            const section = document.getElementById("capsule-ready-section");
+            try {
+                const capsules = await fetchMine("time_capsules");
+                const now = new Date();
+                const ready = capsules.some((c) => c.status === "sealed" && c.openAt?.toDate && c.openAt.toDate() <= now);
+                section.classList.toggle("hidden", !ready);
+            } catch (err) {
+                console.error("[home] capsule ready check failed:", err.code || err);
+                section.classList.add("hidden");
+            }
+        }
 
         // ---- Weather (compact, inline in the greeting) ----
 
@@ -657,7 +800,7 @@
                     : "—";
             } catch (err) {
                 console.error("[weather] failed:", err);
-                condEl.textContent = "Weather unavailable";
+                condEl.textContent = t("common.weather_unavailable");
             }
         }
 
@@ -673,6 +816,22 @@
             setInterval(loadWeather, 15 * 60 * 1000);
             loadNotifCount(user);
             refreshHome();
+            loadReflection(user);
+            checkCapsulesReady(user);
+        });
+
+        document.addEventListener("eden:langchange", () => {
+            const user = auth.currentUser;
+            if (user) document.getElementById("greeting-text").textContent = `${greetingWord()}, ${firstName(user)}`;
+            if (lastData) {
+                renderToday(lastData);
+                renderMemories(lastData);
+                renderRecentMemories(lastData);
+                renderContinueWorking(lastData);
+                renderThisMonth(lastData);
+                if (window.lucide) window.lucide.createIcons();
+            }
+            renderReflectionView();
         });
     </script>
 </body>

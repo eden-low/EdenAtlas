@@ -67,12 +67,28 @@ function getCurrentLang() {
   return currentLang;
 }
 
-// Dot-path lookup, e.g. t("nav.home"). Falls back to the key itself so a missing
-// translation is visible (and debuggable) rather than blank.
-function t(key) {
-  const dict = DICTS[currentLang] || {};
-  const value = key.split(".").reduce((node, part) => (node && typeof node === "object" ? node[part] : undefined), dict);
-  return typeof value === "string" ? value : key;
+const DEV_HOST = typeof location !== "undefined" && (location.hostname === "localhost" || location.hostname === "127.0.0.1");
+
+function lookup(dict, key) {
+  const value = key.split(".").reduce((node, part) => (node && typeof node === "object" ? node[part] : undefined), dict || {});
+  return typeof value === "string" ? value : undefined;
+}
+
+function interpolate(str, vars) {
+  if (!vars) return str;
+  return str.replace(/\{(\w+)\}/g, (match, name) => (name in vars ? String(vars[name]) : match));
+}
+
+// Dot-path lookup, e.g. t("nav.home"). Falls back to the English dict, then to the
+// key itself, so a missing translation is visible (and debuggable) rather than blank.
+// Optional `vars` does {placeholder} interpolation, e.g. t("x.y", { date: "..." }).
+function t(key, vars) {
+  let value = lookup(DICTS[currentLang], key);
+  if (value === undefined) {
+    if (DEV_HOST) console.warn(`[i18n] missing key "${key}" for lang "${currentLang}"`);
+    value = lookup(DICTS.en, key) ?? key;
+  }
+  return interpolate(value, vars);
 }
 
 // Pure re-render from whatever `currentLang` already is — never changes the selected language,
