@@ -102,35 +102,38 @@ function drawerHTML(isOwnerRole, user) {
   // extra users/{uid} fetch (that's what me.html's own header is for). Optional by design: if
   // neither is set, the header just shows the wordmark alone.
   const handle = escapeHTML((user && (user.displayName || user.email)) || "");
+  // #mobile-drawer and #mobile-drawer-backdrop are independent fixed-position siblings (no
+  // wrapping overlay div) — both need to stay in the DOM at all times so their transform/opacity
+  // transitions can actually animate; a `display:none` toggle on a wrapper can't be transitioned.
+  // Closed state is the *default* class list (backdrop: hidden + opacity-0 + pointer-events-none;
+  // drawer: -translate-x-full) so a fresh page load never flashes the drawer open before JS runs.
   return `
-    <div id="mobile-drawer-overlay" class="hidden md:hidden fixed inset-0 z-[9999]">
-      <div id="mobile-drawer-backdrop" class="absolute inset-0 bg-darkBg/80 backdrop-blur-sm"></div>
-      <div id="mobile-drawer" role="dialog" aria-label="Navigation menu" class="bg-cardBg neon-border-purple">
-        <div id="mobile-drawer-header" class="flex items-center justify-between gap-2 px-4 py-3 border-b border-borderNeon/60">
-          <span class="flex items-center gap-2 min-w-0">
-            <img src="images/logo-mark.png" alt="" class="object-contain flex-shrink-0">
-            <span class="min-w-0 leading-tight">
-              <span class="block font-cyber font-semibold text-sm text-transparent bg-clip-text bg-gradient-to-r from-white to-neonPurple truncate">EdenAtlas</span>
-              ${handle ? `<span class="block text-[11px] text-textGray truncate">${handle}</span>` : ""}
-            </span>
+    <div id="mobile-drawer-backdrop" class="md:hidden hidden opacity-0 pointer-events-none fixed inset-0 bg-darkBg/80 backdrop-blur-sm"></div>
+    <div id="mobile-drawer" role="dialog" aria-label="Navigation menu" class="md:hidden -translate-x-full fixed top-0 left-0 bg-cardBg neon-border-purple">
+      <div id="mobile-drawer-header" class="flex items-center justify-between gap-2 px-4 py-3 border-b border-borderNeon/60">
+        <span class="flex items-center gap-2 min-w-0">
+          <img src="images/logo-mark.png" alt="" class="object-contain flex-shrink-0">
+          <span class="min-w-0 leading-tight">
+            <span class="block font-cyber font-semibold text-sm text-transparent bg-clip-text bg-gradient-to-r from-white to-neonPurple truncate">EdenAtlas</span>
+            ${handle ? `<span class="block text-[11px] text-textGray truncate">${handle}</span>` : ""}
           </span>
-          <button id="mobile-drawer-close" type="button" aria-label="Close menu" class="min-w-[44px] min-h-[44px] flex items-center justify-center text-textGray hover:text-white text-xl leading-none flex-shrink-0">&times;</button>
-        </div>
-        <div id="mobile-drawer-nav" class="flex flex-col gap-1 px-3 pt-2">
-          ${links}
-        </div>
-        <div id="mobile-drawer-footer" class="px-3 py-3 space-y-2 border-t border-borderNeon/60">
-          <div class="flex items-center justify-between">
-            <span class="text-sm text-textGray" data-i18n="settings.language">Language</span>
-            <div id="drawer-lang-toggle" class="flex items-center gap-1 bg-darkBg/60 border border-borderNeon rounded-full p-1 text-xs font-code">
-              <button data-lang-choice="en" class="drawer-lang-btn px-3 py-1.5 min-h-[36px] rounded-full transition-colors">EN</button>
-              <button data-lang-choice="zh-CN" class="drawer-lang-btn px-3 py-1.5 min-h-[36px] rounded-full transition-colors">中文</button>
-            </div>
+        </span>
+        <button id="mobile-drawer-close" type="button" aria-label="Close menu" class="min-w-[44px] min-h-[44px] flex items-center justify-center text-textGray hover:text-white text-xl leading-none flex-shrink-0">&times;</button>
+      </div>
+      <div id="mobile-drawer-nav" class="flex flex-col gap-1 px-3 pt-2">
+        ${links}
+      </div>
+      <div id="mobile-drawer-footer" class="px-3 py-3 space-y-2 border-t border-borderNeon/60">
+        <div class="flex items-center justify-between">
+          <span class="text-sm text-textGray" data-i18n="settings.language">Language</span>
+          <div id="drawer-lang-toggle" class="flex items-center gap-1 bg-darkBg/60 border border-borderNeon rounded-full p-1 text-xs font-code">
+            <button data-lang-choice="en" class="drawer-lang-btn px-3 py-1.5 min-h-[36px] rounded-full transition-colors">EN</button>
+            <button data-lang-choice="zh-CN" class="drawer-lang-btn px-3 py-1.5 min-h-[36px] rounded-full transition-colors">中文</button>
           </div>
-          <button id="drawer-logout-btn" type="button" class="w-full flex items-center gap-3 px-3 py-3 min-h-[44px] rounded-xl text-rose-400 hover:bg-rose-400/10 transition-colors">
-            <i class="fa-solid fa-arrow-right-from-bracket w-5 text-center"></i> <span data-i18n="nav.logout">Log Out</span>
-          </button>
         </div>
+        <button id="drawer-logout-btn" type="button" class="w-full flex items-center gap-3 px-3 py-3 min-h-[44px] rounded-xl text-rose-400 hover:bg-rose-400/10 transition-colors">
+          <i class="fa-solid fa-arrow-right-from-bracket w-5 text-center"></i> <span data-i18n="nav.logout">Log Out</span>
+        </button>
       </div>
     </div>`;
 }
@@ -176,19 +179,63 @@ function quickAddHTML(isOwnerRole) {
     </div>`;
 }
 
-function wireTopBar() {
-  document.getElementById("mobile-hamburger-btn").addEventListener("click", openDrawer);
-}
+// Explicit open/closed flag rather than reading a class off the DOM — bug being fixed here is
+// that the hamburger button used to be wired to openDrawer() unconditionally, so tapping it a
+// second time while already open just re-ran "open" (a no-op) instead of closing anything.
+let mobileDrawerOpen = false;
 
 function openDrawer() {
-  document.getElementById("mobile-drawer-overlay").classList.remove("hidden");
-  document.getElementById("mobile-hamburger-btn").setAttribute("aria-expanded", "true");
+  const drawer = document.getElementById("mobile-drawer");
+  const backdrop = document.getElementById("mobile-drawer-backdrop");
+  if (!drawer || !backdrop) return;
+  mobileDrawerOpen = true;
+
+  backdrop.classList.remove("hidden");
+  // Force a layout flush between un-hiding (display:none -> block) and starting the opacity
+  // transition — otherwise the browser can coalesce both style changes into a single frame and
+  // the fade-in never visibly plays.
+  void backdrop.offsetWidth;
+  backdrop.classList.remove("opacity-0", "pointer-events-none");
+  backdrop.classList.add("opacity-100", "pointer-events-auto");
+
+  drawer.classList.remove("-translate-x-full");
+  drawer.classList.add("translate-x-0");
+
   document.body.classList.add("drawer-open");
+  document.documentElement.classList.add("drawer-open");
+  document.getElementById("mobile-hamburger-btn")?.setAttribute("aria-expanded", "true");
 }
+
 function closeDrawer() {
-  document.getElementById("mobile-drawer-overlay").classList.add("hidden");
-  document.getElementById("mobile-hamburger-btn").setAttribute("aria-expanded", "false");
+  const drawer = document.getElementById("mobile-drawer");
+  const backdrop = document.getElementById("mobile-drawer-backdrop");
+  if (!drawer || !backdrop) return;
+  mobileDrawerOpen = false;
+
+  drawer.classList.remove("translate-x-0");
+  drawer.classList.add("-translate-x-full");
+
+  backdrop.classList.remove("opacity-100", "pointer-events-auto");
+  backdrop.classList.add("opacity-0", "pointer-events-none");
+
   document.body.classList.remove("drawer-open");
+  document.documentElement.classList.remove("drawer-open");
+  document.getElementById("mobile-hamburger-btn")?.setAttribute("aria-expanded", "false");
+
+  // Only actually display:none the backdrop after its fade-out finishes (matches the drawer's
+  // own 250ms slide) — and only if nothing re-opened the drawer in the meantime.
+  window.setTimeout(() => {
+    if (!mobileDrawerOpen) backdrop.classList.add("hidden");
+  }, 250);
+}
+
+function toggleDrawer() {
+  if (mobileDrawerOpen) closeDrawer();
+  else openDrawer();
+}
+
+function wireTopBar() {
+  document.getElementById("mobile-hamburger-btn").addEventListener("click", toggleDrawer);
 }
 
 function wireDrawer() {
@@ -197,6 +244,11 @@ function wireDrawer() {
   document.getElementById("drawer-logout-btn").addEventListener("click", async () => {
     await signOut(auth);
     location.href = "login.html";
+  });
+  // Close the drawer the moment a nav link is tapped, rather than leaving it visibly open while
+  // the browser navigates away.
+  document.querySelectorAll("#mobile-drawer a").forEach((link) => {
+    link.addEventListener("click", closeDrawer);
   });
 
   // Same setLang()/getLang() from js/i18n.js that Settings uses — no separate mobile logic.
@@ -224,7 +276,7 @@ function wireDrawer() {
   document.addEventListener("eden:langchange", paintActive);
 
   document.addEventListener("keydown", (event) => {
-    if (event.key === "Escape" && !document.getElementById("mobile-drawer-overlay").classList.contains("hidden")) {
+    if (event.key === "Escape" && mobileDrawerOpen) {
       closeDrawer();
     }
   });

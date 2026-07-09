@@ -343,7 +343,8 @@ html[data-theme="light"] ::-webkit-scrollbar-thumb {
   #eden-sidebar,
   #mobile-topbar,
   #mobile-bottomnav,
-  #mobile-drawer-overlay,
+  #mobile-drawer,
+  #mobile-drawer-backdrop,
   #quickadd-sheet-overlay,
   #global-search-overlay,
   header,
@@ -362,23 +363,35 @@ html[data-theme="light"] ::-webkit-scrollbar-thumb {
   }
 }
 
-/* Mobile drawer (js/mobile-nav.js) — a fixed, viewport-locked panel split into three flex
-   sections instead of one long scrolling column: header/footer are flex-shrink:0, only
-   #mobile-drawer-nav scrolls. height:100dvh (not 100vh) tracks the *visible* viewport as
-   iOS/Android toggle their address bar/toolbar chrome — 100vh uses the layout viewport, which
-   is taller than what's actually on screen, so the drawer used to extend past the visible area
-   and strand its last few links behind the browser's own chrome with no way to reach them.
-   min-height:0 on the nav is required — flex children default to min-height:auto, which would
-   let the column grow past the drawer's height instead of actually scrolling. */
+/* Mobile drawer (js/mobile-nav.js) — #mobile-drawer and #mobile-drawer-backdrop are independent
+   fixed-position siblings (no wrapping overlay div: a wrapper toggled via display:none couldn't
+   animate, since transitions never run across a display:none boundary). Both stay permanently
+   in the DOM; open/close is done entirely by toggling transform/opacity classes in
+   js/mobile-nav.js's openDrawer()/closeDrawer(), so the slide/fade actually animates instead of
+   popping instantly.
+   #mobile-drawer is split into three flex sections instead of one long scrolling column —
+   header/footer are flex-shrink:0, only #mobile-drawer-nav scrolls. height:100dvh (not 100vh)
+   tracks the *visible* viewport as iOS/Android toggle their address bar/toolbar chrome — 100vh
+   uses the layout viewport, which is taller than what's actually on screen, so the drawer used
+   to extend past the visible area and strand its last few links behind the browser's own chrome
+   with no way to reach them. min-height:0 on the nav is required — flex children default to
+   min-height:auto, which would let the column grow past the drawer's height instead of actually
+   scrolling. */
 #mobile-drawer {
-  position: fixed;
-  inset: 0 auto 0 0;
-  width: min(84vw, 320px);
+  top: 0;
+  left: 0;
+  width: min(84vw, 340px);
   height: 100dvh;
+  z-index: 9999;
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  animation: eden-drawer-in 0.2s ease-out;
+  transition: transform 250ms ease;
+}
+
+#mobile-drawer-backdrop {
+  z-index: 9998;
+  transition: opacity 250ms ease;
 }
 
 #mobile-drawer-header,
@@ -404,8 +417,21 @@ html[data-theme="light"] ::-webkit-scrollbar-thumb {
   padding-bottom: calc(120px + env(safe-area-inset-bottom));
 }
 
+/* Belt-and-suspenders alongside the `md:hidden` Tailwind class already on both elements —
+   guarantees the drawer/backdrop/hamburger can never show on desktop even if a Tailwind Play
+   CDN JIT hiccup ever failed to generate that utility for a dynamically-injected node. */
+@media (min-width: 768px) {
+  #mobile-drawer,
+  #mobile-drawer-backdrop,
+  #mobile-hamburger-btn {
+    display: none !important;
+  }
+}
+
+html.drawer-open,
 body.drawer-open {
   overflow: hidden;
+  touch-action: none;
 }
 
 /* Every centered modal in this app shares the same structural pattern — an overlay
@@ -426,11 +452,6 @@ body.drawer-open {
   animation: eden-sheet-up 0.2s ease-out;
 }
 
-@keyframes eden-drawer-in {
-  from { transform: translateX(-100%); }
-  to { transform: translateX(0); }
-}
-
 @keyframes eden-sheet-up {
   from { transform: translateY(100%); }
   to { transform: translateY(0); }
@@ -438,6 +459,10 @@ body.drawer-open {
 
 @media (prefers-reduced-motion: reduce) {
   #mobile-drawer,
+  #mobile-drawer-backdrop {
+    transition: none;
+  }
+
   #quickadd-sheet-overlay .relative,
   .fixed.inset-0.z-50 > .relative {
     animation: none;
