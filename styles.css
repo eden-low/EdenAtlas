@@ -362,8 +362,50 @@ html[data-theme="light"] ::-webkit-scrollbar-thumb {
   }
 }
 
+/* Mobile drawer (js/mobile-nav.js) — a fixed, viewport-locked panel split into three flex
+   sections instead of one long scrolling column: header/footer are flex-shrink:0, only
+   #mobile-drawer-nav scrolls. height:100dvh (not 100vh) tracks the *visible* viewport as
+   iOS/Android toggle their address bar/toolbar chrome — 100vh uses the layout viewport, which
+   is taller than what's actually on screen, so the drawer used to extend past the visible area
+   and strand its last few links behind the browser's own chrome with no way to reach them.
+   min-height:0 on the nav is required — flex children default to min-height:auto, which would
+   let the column grow past the drawer's height instead of actually scrolling. */
 #mobile-drawer {
+  position: fixed;
+  inset: 0 auto 0 0;
+  width: min(84vw, 320px);
+  height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
   animation: eden-drawer-in 0.2s ease-out;
+}
+
+#mobile-drawer-header,
+#mobile-drawer-footer {
+  flex-shrink: 0;
+}
+
+/* Hard pixel size on the drawer wordmark's mark — guards against a flash of the source PNG's
+   native (much larger) intrinsic size before the Tailwind Play CDN's runtime JIT compiles the
+   utility classes for this dynamically-injected node, which is what made the logo read as
+   "huge" for a moment on first open. The desktop sidebar's own (larger, intentional) logo box
+   is untouched. */
+#mobile-drawer-header img {
+  width: 22px;
+  height: 22px;
+}
+
+#mobile-drawer-nav {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  padding-bottom: calc(120px + env(safe-area-inset-bottom));
+}
+
+body.drawer-open {
+  overflow: hidden;
 }
 
 /* Every centered modal in this app shares the same structural pattern — an overlay

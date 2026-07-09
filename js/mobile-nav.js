@@ -51,6 +51,12 @@ const QUICK_ADD_ITEMS = [
 const here = location.pathname.split("/").pop() || "index.html";
 let injected = false;
 
+// user.displayName/email are Google-account-controlled, not app-controlled — escape before
+// interpolating into the insertAdjacentHTML template below.
+function escapeHTML(str) {
+  return str.replace(/[&<>"']/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[ch]));
+}
+
 function injectUI(user) {
   if (injected) return;
   const anchor = document.querySelector("header");
@@ -64,7 +70,7 @@ function injectUI(user) {
   // failing open to full nav for the one account that's always allowed everywhere.
   const isOwnerRole = isOwner(user) || getUserMode() === "OWNER";
   document.body.insertAdjacentHTML("afterbegin", topBarHTML());
-  document.body.insertAdjacentHTML("beforeend", drawerHTML(isOwnerRole));
+  document.body.insertAdjacentHTML("beforeend", drawerHTML(isOwnerRole, user));
   document.body.insertAdjacentHTML("beforeend", bottomNavHTML());
   document.body.insertAdjacentHTML("beforeend", quickAddHTML(isOwnerRole));
 
@@ -86,34 +92,45 @@ function topBarHTML() {
     </div>`;
 }
 
-function drawerHTML(isOwnerRole) {
+function drawerHTML(isOwnerRole, user) {
   const visibleLinks = isOwnerRole ? DRAWER_LINKS : DRAWER_LINKS.filter((item) => !OWNER_ONLY_HREFS.has(item.href));
   const links = visibleLinks.map((item) => `
     <a href="${item.href}" class="flex items-center gap-3 px-3 py-3 min-h-[44px] rounded-xl ${item.href === here ? "text-neonPurple bg-neonPurple/10" : "text-white hover:bg-darkBg/40"} transition-colors">
       <i class="fa-solid ${item.icon} w-5 text-center"></i> <span data-i18n="${item.key}">${item.label}</span>
     </a>`).join("");
+  // Compact header line 2 — reuses the Auth user object already passed into injectUI(), no
+  // extra users/{uid} fetch (that's what me.html's own header is for). Optional by design: if
+  // neither is set, the header just shows the wordmark alone.
+  const handle = escapeHTML((user && (user.displayName || user.email)) || "");
   return `
-    <div id="mobile-drawer-overlay" class="hidden md:hidden fixed inset-0 z-50">
+    <div id="mobile-drawer-overlay" class="hidden md:hidden fixed inset-0 z-[9999]">
       <div id="mobile-drawer-backdrop" class="absolute inset-0 bg-darkBg/80 backdrop-blur-sm"></div>
-      <div id="mobile-drawer" role="dialog" aria-label="Navigation menu" class="absolute inset-y-0 left-0 w-72 max-w-[85vw] bg-cardBg neon-border-purple overflow-y-auto p-4 flex flex-col gap-1">
-        <div class="flex items-center justify-between mb-2 px-1">
-          <span class="flex items-center gap-2">
-            <img src="images/logo-mark.png" alt="" class="w-6 h-6 object-contain">
-            <span class="font-cyber font-semibold text-sm text-transparent bg-clip-text bg-gradient-to-r from-white to-neonPurple">EdenAtlas</span>
+      <div id="mobile-drawer" role="dialog" aria-label="Navigation menu" class="bg-cardBg neon-border-purple">
+        <div id="mobile-drawer-header" class="flex items-center justify-between gap-2 px-4 py-3 border-b border-borderNeon/60">
+          <span class="flex items-center gap-2 min-w-0">
+            <img src="images/logo-mark.png" alt="" class="object-contain flex-shrink-0">
+            <span class="min-w-0 leading-tight">
+              <span class="block font-cyber font-semibold text-sm text-transparent bg-clip-text bg-gradient-to-r from-white to-neonPurple truncate">EdenAtlas</span>
+              ${handle ? `<span class="block text-[11px] text-textGray truncate">${handle}</span>` : ""}
+            </span>
           </span>
-          <button id="mobile-drawer-close" type="button" aria-label="Close menu" class="min-w-[44px] min-h-[44px] flex items-center justify-center text-textGray hover:text-white text-xl leading-none">&times;</button>
+          <button id="mobile-drawer-close" type="button" aria-label="Close menu" class="min-w-[44px] min-h-[44px] flex items-center justify-center text-textGray hover:text-white text-xl leading-none flex-shrink-0">&times;</button>
         </div>
-        ${links}
-        <div class="flex items-center justify-between px-3 py-3">
-          <span class="text-sm text-textGray" data-i18n="settings.language">Language</span>
-          <div id="drawer-lang-toggle" class="flex items-center gap-1 bg-darkBg/60 border border-borderNeon rounded-full p-1 text-xs font-code">
-            <button data-lang-choice="en" class="drawer-lang-btn px-3 py-1.5 min-h-[36px] rounded-full transition-colors">EN</button>
-            <button data-lang-choice="zh-CN" class="drawer-lang-btn px-3 py-1.5 min-h-[36px] rounded-full transition-colors">中文</button>
+        <div id="mobile-drawer-nav" class="flex flex-col gap-1 px-3 pt-2">
+          ${links}
+        </div>
+        <div id="mobile-drawer-footer" class="px-3 py-3 space-y-2 border-t border-borderNeon/60">
+          <div class="flex items-center justify-between">
+            <span class="text-sm text-textGray" data-i18n="settings.language">Language</span>
+            <div id="drawer-lang-toggle" class="flex items-center gap-1 bg-darkBg/60 border border-borderNeon rounded-full p-1 text-xs font-code">
+              <button data-lang-choice="en" class="drawer-lang-btn px-3 py-1.5 min-h-[36px] rounded-full transition-colors">EN</button>
+              <button data-lang-choice="zh-CN" class="drawer-lang-btn px-3 py-1.5 min-h-[36px] rounded-full transition-colors">中文</button>
+            </div>
           </div>
+          <button id="drawer-logout-btn" type="button" class="w-full flex items-center gap-3 px-3 py-3 min-h-[44px] rounded-xl text-rose-400 hover:bg-rose-400/10 transition-colors">
+            <i class="fa-solid fa-arrow-right-from-bracket w-5 text-center"></i> <span data-i18n="nav.logout">Log Out</span>
+          </button>
         </div>
-        <button id="drawer-logout-btn" type="button" class="mt-2 flex items-center gap-3 px-3 py-3 min-h-[44px] rounded-xl text-rose-400 hover:bg-rose-400/10 transition-colors">
-          <i class="fa-solid fa-arrow-right-from-bracket w-5 text-center"></i> <span data-i18n="nav.logout">Log Out</span>
-        </button>
       </div>
     </div>`;
 }
@@ -166,10 +183,12 @@ function wireTopBar() {
 function openDrawer() {
   document.getElementById("mobile-drawer-overlay").classList.remove("hidden");
   document.getElementById("mobile-hamburger-btn").setAttribute("aria-expanded", "true");
+  document.body.classList.add("drawer-open");
 }
 function closeDrawer() {
   document.getElementById("mobile-drawer-overlay").classList.add("hidden");
   document.getElementById("mobile-hamburger-btn").setAttribute("aria-expanded", "false");
+  document.body.classList.remove("drawer-open");
 }
 
 function wireDrawer() {
