@@ -60,30 +60,49 @@ function injectUI(user) {
   // window-scoped (not a module-level `let`) so a second accidental <script> tag for this same
   // module on one page — which would otherwise get its own fresh module instance with its own
   // "not yet injected" flag — can't inject a duplicate topbar/drawer/bottom-nav and double-bind
-  // every listener on top of it.
+  // every listener on top of it. Checked again at the very end, AFTER binding — see below for why.
   if (window.__edenMobileNavBound) return;
   const anchor = document.querySelector("header");
   if (!anchor) return;
-  window.__edenMobileNavBound = true;
 
-  // Prefer isOwner(user) (a direct email check on the live Firebase user) over the cached
-  // lfj:userMode alone — that cache can be missing (cleared storage, iOS Safari private/ITP,
-  // a device that's never been through login.html's resolveUserMode()) and getUserMode()'s own
-  // fallback is "VIEWER", which would wrongly drop the owner to the light nav instead of just
-  // failing open to full nav for the one account that's always allowed everywhere.
-  const isOwnerRole = isOwner(user) || getUserMode() === "OWNER";
-  document.body.insertAdjacentHTML("afterbegin", topBarHTML());
-  document.body.insertAdjacentHTML("beforeend", drawerHTML(isOwnerRole, user));
-  document.body.insertAdjacentHTML("beforeend", bottomNavHTML());
-  document.body.insertAdjacentHTML("beforeend", quickAddHTML(isOwnerRole));
+  // Inject only if missing — idempotent, so a later retry of this function (see below) after an
+  // earlier attempt injected the DOM but failed before finishing doesn't insert a second copy.
+  if (!document.getElementById("mobile-topbar")) {
+    // Prefer isOwner(user) (a direct email check on the live Firebase user) over the cached
+    // lfj:userMode alone — that cache can be missing (cleared storage, iOS Safari private/ITP,
+    // a device that's never been through login.html's resolveUserMode()) and getUserMode()'s own
+    // fallback is "VIEWER", which would wrongly drop the owner to the light nav instead of just
+    // failing open to full nav for the one account that's always allowed everywhere.
+    const isOwnerRole = isOwner(user) || getUserMode() === "OWNER";
+    document.body.insertAdjacentHTML("afterbegin", topBarHTML());
+    document.body.insertAdjacentHTML("beforeend", drawerHTML(isOwnerRole, user));
+    document.body.insertAdjacentHTML("beforeend", bottomNavHTML());
+    document.body.insertAdjacentHTML("beforeend", quickAddHTML(isOwnerRole));
+  }
 
+  const { drawer, backdrop, hamburger } = getDrawerEls();
+  if (!hamburger || !drawer || !backdrop) {
+    // Don't set the bound guard here — an onAuthStateChanged re-fire (token refresh, etc.) gets
+    // another chance to finish injection/binding instead of this page being permanently stuck
+    // half-initialized because the guard was already flipped true from a run that never finished.
+    console.error("[MobileNav] missing required elements after injection", { hamburger: !!hamburger, drawer: !!drawer, backdrop: !!backdrop });
+    return;
+  }
+
+  // Re-assert closed state now that the DOM definitely exists — see forceClosedInitialState()'s
+  // own comment for why this isn't just "trust the template string's initial classes."
+  forceClosedInitialState();
+
+  if (window.__edenMobileNavBound) return;
   wireTopBar();
   wireDrawer();
   wireBottomNav();
   wireQuickAdd();
-  // Re-assert closed state now that the DOM/listeners exist — see forceClosedInitialState()'s
-  // own comment for why this isn't just "trust the template string's initial classes."
-  forceClosedInitialState();
+  // Only now, after every wire*() call has actually run without throwing, is it safe to say
+  // "don't do this again" — setting this any earlier (as a previous version of this function
+  // did) meant a single unexpected exception partway through binding left the rest of that
+  // page's session permanently unbound, with no way to recover short of a full reload.
+  window.__edenMobileNavBound = true;
 }
 
 function topBarHTML() {
@@ -345,17 +364,21 @@ function wireDrawer() {
 }
 
 function wireBottomNav() {
-  document.getElementById("mobile-quickadd-btn").addEventListener("click", () => {
-    document.getElementById("quickadd-sheet-overlay").classList.remove("hidden");
+  // Optional-chained — these were the one remaining pair of unguarded document.getElementById(...)
+  // .addEventListener(...) calls in this module. A throw here (element unexpectedly missing)
+  // used to abort the rest of injectUI()'s synchronous body, silently skipping wireQuickAdd() and
+  // forceClosedInitialState() entirely on whichever page hit it.
+  document.getElementById("mobile-quickadd-btn")?.addEventListener("click", () => {
+    document.getElementById("quickadd-sheet-overlay")?.classList.remove("hidden");
   });
 }
 
 function wireQuickAdd() {
   const overlay = document.getElementById("quickadd-sheet-overlay");
-  const close = () => overlay.classList.add("hidden");
-  document.getElementById("quickadd-sheet-backdrop").addEventListener("click", close);
+  const close = () => overlay?.classList.add("hidden");
+  document.getElementById("quickadd-sheet-backdrop")?.addEventListener("click", close);
   document.addEventListener("keydown", (event) => {
-    if (event.key === "Escape" && !overlay.classList.contains("hidden")) close();
+    if (event.key === "Escape" && overlay && !overlay.classList.contains("hidden")) close();
   });
 }
 
