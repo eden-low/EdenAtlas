@@ -98,6 +98,31 @@ function injectUI(user) {
   wireDrawer();
   wireBottomNav();
   wireQuickAdd();
+
+  // Mobile WebKit (iOS Safari) can compute a stale hit-test region for a `position:fixed`
+  // element that was inserted into the DOM after the initial paint (rather than present in the
+  // parsed HTML) — it's drawn in the correct place, but taps land on whatever page content is
+  // underneath until something forces WebKit to rebuild its hit-test tree, which normally only
+  // happens on the user's first real scroll. That's exactly "the hamburger only works after
+  // scrolling all the way down" — CSS alone (z-index, opacity, even a transform on the topbar
+  // itself) can't fix this, since the problem is a stale *hit-test* region, not a paint/stacking
+  // one. It shows up worse on heavier pages (map/chart/larger Firestore query pages) simply
+  // because there's more time between injection and the user's first scroll for the stale region
+  // to matter. Forcing a synchronous reflow + a same-position scroll + a resize event right after
+  // injection gives WebKit that rebuild immediately instead of waiting on the user to scroll.
+  void document.body.offsetHeight;
+  window.scrollTo(window.scrollX, window.scrollY);
+  window.dispatchEvent(new Event("resize"));
+  // A second, delayed nudge covers content that finishes loading *after* injection (a Leaflet
+  // map's tiles, a Firestore query's first snapshot, Chart.js's own layout pass) — each of those
+  // is itself a layout change that can re-introduce the same stale hit-test region a moment
+  // after the immediate nudge above already ran.
+  window.setTimeout(() => {
+    void document.body.offsetHeight;
+    window.scrollTo(window.scrollX, window.scrollY);
+    window.dispatchEvent(new Event("resize"));
+  }, 1000);
+
   // Only now, after every wire*() call has actually run without throwing, is it safe to say
   // "don't do this again" — setting this any earlier (as a previous version of this function
   // did) meant a single unexpected exception partway through binding left the rest of that
