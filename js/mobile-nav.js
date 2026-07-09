@@ -49,7 +49,6 @@ const QUICK_ADD_ITEMS = [
 ];
 
 const here = location.pathname.split("/").pop() || "index.html";
-let injected = false;
 
 // user.displayName/email are Google-account-controlled, not app-controlled — escape before
 // interpolating into the insertAdjacentHTML template below.
@@ -58,10 +57,14 @@ function escapeHTML(str) {
 }
 
 function injectUI(user) {
-  if (injected) return;
+  // window-scoped (not a module-level `let`) so a second accidental <script> tag for this same
+  // module on one page — which would otherwise get its own fresh module instance with its own
+  // "not yet injected" flag — can't inject a duplicate topbar/drawer/bottom-nav and double-bind
+  // every listener on top of it.
+  if (window.__edenMobileNavBound) return;
   const anchor = document.querySelector("header");
   if (!anchor) return;
-  injected = true;
+  window.__edenMobileNavBound = true;
 
   // Prefer isOwner(user) (a direct email check on the live Firebase user) over the cached
   // lfj:userMode alone — that cache can be missing (cleared storage, iOS Safari private/ITP,
@@ -78,6 +81,9 @@ function injectUI(user) {
   wireDrawer();
   wireBottomNav();
   wireQuickAdd();
+  // Re-assert closed state now that the DOM/listeners exist — see forceClosedInitialState()'s
+  // own comment for why this isn't just "trust the template string's initial classes."
+  forceClosedInitialState();
 }
 
 function topBarHTML() {
@@ -191,36 +197,66 @@ function quickAddHTML(isOwnerRole) {
     </div>`;
 }
 
-// Explicit open/closed flag rather than reading a class off the DOM — bug being fixed here is
-// that the hamburger button used to be wired to openDrawer() unconditionally, so tapping it a
-// second time while already open just re-ran "open" (a no-op) instead of closing anything.
+// Explicit open/closed flag rather than reading a class off the DOM — the hamburger button
+// toggles off this, not off whatever classes happen to be on the DOM at the time.
 let mobileDrawerOpen = false;
 
+function getDrawerEls() {
+  return {
+    drawer: document.getElementById("mobile-drawer"),
+    backdrop: document.getElementById("mobile-drawer-backdrop"),
+    hamburger: document.getElementById("mobile-hamburger-btn"),
+    closeBtn: document.getElementById("mobile-drawer-close"),
+  };
+}
+
+// Called once right after injection, before any listener can fire — re-asserts the closed state
+// in code instead of trusting that the template string's initial class list (-translate-x-full /
+// hidden opacity-0 pointer-events-none) survived to first paint. The template already has those
+// classes, but this makes "closed on load" true by explicit assignment rather than by convention,
+// so a future edit to the template can't silently reopen this bug.
+function forceClosedInitialState() {
+  const { drawer, backdrop } = getDrawerEls();
+  mobileDrawerOpen = false;
+
+  document.body.classList.remove("drawer-open");
+  document.documentElement.classList.remove("drawer-open");
+
+  if (drawer) {
+    drawer.classList.remove("translate-x-0");
+    drawer.classList.add("-translate-x-full");
+  }
+
+  if (backdrop) {
+    backdrop.classList.remove("opacity-100", "pointer-events-auto");
+    backdrop.classList.add("hidden", "opacity-0", "pointer-events-none");
+  }
+}
+
 function openDrawer() {
-  const drawer = document.getElementById("mobile-drawer");
-  const backdrop = document.getElementById("mobile-drawer-backdrop");
+  const { drawer, backdrop, hamburger } = getDrawerEls();
   if (!drawer || !backdrop) return;
   mobileDrawerOpen = true;
 
   backdrop.classList.remove("hidden");
-  // Force a layout flush between un-hiding (display:none -> block) and starting the opacity
-  // transition — otherwise the browser can coalesce both style changes into a single frame and
-  // the fade-in never visibly plays.
-  void backdrop.offsetWidth;
-  backdrop.classList.remove("opacity-0", "pointer-events-none");
-  backdrop.classList.add("opacity-100", "pointer-events-auto");
+  // rAF between un-hiding (display:none -> block) and starting the opacity/transform change —
+  // otherwise the browser can coalesce both style changes into a single frame and the
+  // fade-in/slide-in never visibly plays.
+  requestAnimationFrame(() => {
+    backdrop.classList.remove("opacity-0", "pointer-events-none");
+    backdrop.classList.add("opacity-100", "pointer-events-auto");
 
-  drawer.classList.remove("-translate-x-full");
-  drawer.classList.add("translate-x-0");
+    drawer.classList.remove("-translate-x-full");
+    drawer.classList.add("translate-x-0");
+  });
 
   document.body.classList.add("drawer-open");
   document.documentElement.classList.add("drawer-open");
-  document.getElementById("mobile-hamburger-btn")?.setAttribute("aria-expanded", "true");
+  hamburger?.setAttribute("aria-expanded", "true");
 }
 
-function closeDrawer() {
-  const drawer = document.getElementById("mobile-drawer");
-  const backdrop = document.getElementById("mobile-drawer-backdrop");
+function closeDrawer(options = {}) {
+  const { drawer, backdrop, hamburger } = getDrawerEls();
   if (!drawer || !backdrop) return;
   mobileDrawerOpen = false;
 
@@ -232,7 +268,12 @@ function closeDrawer() {
 
   document.body.classList.remove("drawer-open");
   document.documentElement.classList.remove("drawer-open");
-  document.getElementById("mobile-hamburger-btn")?.setAttribute("aria-expanded", "false");
+  hamburger?.setAttribute("aria-expanded", "false");
+
+  if (options.immediate) {
+    backdrop.classList.add("hidden");
+    return;
+  }
 
   // Only actually display:none the backdrop after its fade-out finishes (matches the drawer's
   // own 250ms slide) — and only if nothing re-opened the drawer in the meantime.
@@ -247,20 +288,29 @@ function toggleDrawer() {
 }
 
 function wireTopBar() {
-  document.getElementById("mobile-hamburger-btn").addEventListener("click", toggleDrawer);
+  const { hamburger } = getDrawerEls();
+  hamburger?.addEventListener("click", (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    toggleDrawer();
+  });
 }
 
 function wireDrawer() {
-  document.getElementById("mobile-drawer-close").addEventListener("click", closeDrawer);
-  document.getElementById("mobile-drawer-backdrop").addEventListener("click", closeDrawer);
-  document.getElementById("drawer-logout-btn").addEventListener("click", async () => {
+  const { drawer, backdrop, closeBtn } = getDrawerEls();
+  closeBtn?.addEventListener("click", (e) => {
+    e.preventDefault();
+    closeDrawer();
+  });
+  backdrop?.addEventListener("click", closeDrawer);
+  document.getElementById("drawer-logout-btn")?.addEventListener("click", async () => {
     await signOut(auth);
     location.href = "login.html";
   });
   // Close the drawer the moment a nav link is tapped, rather than leaving it visibly open while
   // the browser navigates away.
-  document.querySelectorAll("#mobile-drawer a").forEach((link) => {
-    link.addEventListener("click", closeDrawer);
+  drawer?.querySelectorAll("a").forEach((link) => {
+    link.addEventListener("click", () => closeDrawer());
   });
 
   // Same setLang()/getLang() from js/i18n.js that Settings uses — no separate mobile logic.

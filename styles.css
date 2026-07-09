@@ -463,6 +463,15 @@ canvas {
    with no way to reach them. min-height:0 on the nav is required — flex children default to
    min-height:auto, which would let the column grow past the drawer's height instead of actually
    scrolling. */
+/* Hard, JIT-independent default: closed (translateX(-100%)) unless the .translate-x-0 class is
+   present. Previously this transform was left entirely to Tailwind's own `-translate-x-full`/
+   `translate-x-0` utility classes — those need the Play CDN's runtime JIT to compile CSS for a
+   dynamically-injected node, and a compile that's slow/never happens for this exact
+   negative-value utility is the most likely explanation for the drawer occasionally rendering
+   open by default on load, or not visibly reopening after a close, on some page loads. Declaring
+   the transform directly, keyed off the same class names JS already toggles, makes the
+   open/closed state correct from a plain external stylesheet with zero JIT dependency — the
+   Tailwind utility classes stay in the markup too, but are now redundant rather than load-bearing. */
 #mobile-drawer {
   top: 0;
   left: 0;
@@ -472,12 +481,34 @@ canvas {
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  transform: translateX(-100%);
   transition: transform 250ms ease;
 }
 
+#mobile-drawer.translate-x-0 {
+  transform: translateX(0);
+}
+
+#mobile-drawer.-translate-x-full {
+  transform: translateX(-100%);
+}
+
+/* Same reasoning as #mobile-drawer above, for the backdrop's opacity/pointer-events pair. */
 #mobile-drawer-backdrop {
   z-index: 9998;
+  opacity: 0;
+  pointer-events: none;
   transition: opacity 250ms ease;
+}
+
+#mobile-drawer-backdrop.opacity-100 {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+#mobile-drawer-backdrop.opacity-0 {
+  opacity: 0;
+  pointer-events: none;
 }
 
 #mobile-drawer-header,
@@ -503,13 +534,15 @@ canvas {
   padding-bottom: calc(120px + env(safe-area-inset-bottom));
 }
 
-/* Belt-and-suspenders alongside the `md:hidden` Tailwind class already on both elements —
-   guarantees the drawer/backdrop/hamburger can never show on desktop even if a Tailwind Play
-   CDN JIT hiccup ever failed to generate that utility for a dynamically-injected node. */
+/* Belt-and-suspenders alongside the `md:hidden` Tailwind class already on these elements —
+   guarantees none of the mobile app shell can ever show on desktop even if a Tailwind Play CDN
+   JIT hiccup ever failed to generate that utility for a dynamically-injected node. */
 @media (min-width: 768px) {
   #mobile-drawer,
   #mobile-drawer-backdrop,
-  #mobile-hamburger-btn {
+  #mobile-hamburger-btn,
+  #mobile-topbar,
+  #mobile-bottomnav {
     display: none !important;
   }
 }
