@@ -37,6 +37,28 @@
   </script>
 </head>
 <body data-public-optional="true" class="auth-check-pending bg-darkBg text-white font-sans grid-bg min-h-screen pb-12">
+  <!-- v3.3.1: minimal public/HR resume shell. In resume-viewer-mode (career.js's
+       applyViewerModeClass()) this is the only navigation shown — the full private-app
+       sidebar/mobile-nav that styles.css already hides for that mode never renders here.
+       Three items only, per the "Public / HR Resume Surface" definition: a brand mark, a
+       Career/Resume page indicator, and an optional View Profile link (populated by career.js
+       once the shared link's target uid/username resolves). Owner mode leaves this hidden and
+       the normal sidebar/mobile-nav render as usual. -->
+  <div id="resume-public-topbar" class="hidden sticky top-0 z-40 bg-cardBg/90 backdrop-blur-md border-b border-borderNeon">
+    <div class="max-w-6xl mx-auto px-4 h-16 flex items-center justify-between gap-3">
+      <a href="login.html" class="flex items-center gap-2 min-w-0 flex-shrink-0">
+        <img src="images/logo-mark.png" alt="" class="w-7 h-7 object-contain flex-shrink-0">
+        <span class="font-cyber font-semibold text-sm tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-white to-neonPurple truncate">EdenAtlas</span>
+      </a>
+      <span class="flex items-center gap-1.5 text-xs font-cyber font-bold tracking-wider text-neonPurple flex-shrink-0">
+        <i class="fa-solid fa-briefcase text-[11px]"></i> <span data-i18n="nav.career">Career</span>
+      </span>
+      <a id="resume-public-view-profile" href="#" class="hidden inline-flex items-center gap-1.5 text-xs font-code text-textGray hover:text-neonPurple transition-colors flex-shrink-0">
+        <span data-i18n="career.view_profile_link">View Profile</span> <i class="fa-solid fa-arrow-right text-[10px]"></i>
+      </a>
+    </div>
+  </div>
+
   <header class="hidden max-w-7xl mx-auto px-4 pt-6">
     <div class="bg-cardBg/80 backdrop-blur-md neon-border-purple rounded-2xl px-6 py-4 flex flex-col md:flex-row items-center justify-between gap-4">
       <div class="flex items-center gap-3">

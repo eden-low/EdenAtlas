@@ -185,21 +185,21 @@
         </section>
 
         <!-- All pages -->
-        <section class="reveal flex flex-wrap items-center gap-x-5 gap-y-2 text-xs font-code text-textGray px-1 pt-2 border-t border-borderNeon/40">
-            <a href="resume.html" class="hover:text-neonPurple transition-colors" data-i18n="nav.career">Career</a>
+        <section id="all-pages-links" class="reveal flex flex-wrap items-center gap-x-5 gap-y-2 text-xs font-code text-textGray px-1 pt-2 border-t border-borderNeon/40">
+            <a href="resume.html" data-owner-only-link class="hover:text-neonPurple transition-colors" data-i18n="nav.career">Career</a>
             <a href="gallery.html" class="hover:text-neonPurple transition-colors" data-i18n="nav.memories">Memories</a>
             <a href="atlas.html" class="hover:text-neonPurple transition-colors" data-i18n="nav.atlas">Atlas</a>
             <a href="collections.html" class="hover:text-neonPurple transition-colors" data-i18n="nav.collections">Collections</a>
             <a href="journal.html" class="hover:text-neonPurple transition-colors" data-i18n="nav.journal">Journal</a>
-            <a href="expenses.html" class="hover:text-neonPurple transition-colors" data-i18n="nav.finance">Finance</a>
+            <a href="expenses.html" data-owner-only-link class="hover:text-neonPurple transition-colors" data-i18n="nav.finance">Finance</a>
             <a href="timeline.html" class="hover:text-neonPurple transition-colors" data-i18n="nav.journey">Journey</a>
             <a href="habits.html" class="hover:text-neonPurple transition-colors" data-i18n="nav.habits">Habits</a>
             <a href="calendar.html" class="hover:text-neonPurple transition-colors" data-i18n="nav.calendar">Calendar</a>
-            <a href="reports.html" class="hover:text-neonPurple transition-colors" data-i18n="nav.reports">Reports</a>
+            <a href="reports.html" data-owner-only-link class="hover:text-neonPurple transition-colors" data-i18n="nav.reports">Reports</a>
             <a href="dashboard.html" class="hover:text-neonPurple transition-colors" data-i18n="nav.people">Connections</a>
             <a href="notifications.html" class="hover:text-neonPurple transition-colors" data-i18n="nav.inbox">Inbox</a>
-            <a href="time-capsule.html" class="hover:text-neonPurple transition-colors" data-i18n="nav.time_capsule">Time Capsule</a>
-            <a href="constellation.html" class="hover:text-neonPurple transition-colors" data-i18n="nav.constellation">Constellation</a>
+            <a href="time-capsule.html" data-owner-only-link class="hover:text-neonPurple transition-colors" data-i18n="nav.time_capsule">Time Capsule</a>
+            <a href="constellation.html" data-owner-only-link class="hover:text-neonPurple transition-colors" data-i18n="nav.constellation">Constellation</a>
             <a href="contact.html" class="hover:text-neonPurple transition-colors" data-i18n="nav.contact">Contact</a>
             <a href="me.html" class="hover:text-neonPurple transition-colors" data-i18n="nav.me">Me</a>
         </section>
@@ -890,6 +890,13 @@
             document.getElementById("qa-expense-btn").classList.toggle("hidden", !isOwnerRole(user));
             document.getElementById("qa-capsule-btn").classList.toggle("hidden", !isOwnerRole(user));
             document.getElementById("light-space-note").classList.toggle("hidden", isOwnerRole(user));
+            // v3.3.1: the "All pages" quick-link row at the bottom of Home used to link every
+            // page unconditionally, including the owner-heavy modules js/sidebar.js's LIGHT_LINKS
+            // and js/mobile-nav.js's OWNER_ONLY_HREFS already hide from a Friend's real nav — a
+            // stray full-nav leak on this one page. Same set, same gate.
+            if (!isOwnerRole(user)) {
+                document.querySelectorAll("#all-pages-links [data-owner-only-link]").forEach((el) => el.classList.add("hidden"));
+            }
             tickClock();
             setInterval(tickClock, 30000);
             loadWeather();

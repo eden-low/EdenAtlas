@@ -92,10 +92,31 @@ let access = { pageAccessible: false, includeConnections: false, includeAllMine:
 // page, not the whole app shell. Deliberately scoped to an explicit ?u=/?uid= visit (or a
 // signed-out one) rather than bare `!canEdit`: a non-owner opening bare resume.html directly
 // (no shared link) keeps their normal role-based nav so they're never stranded without a way out.
+const publicTopbar = document.getElementById("resume-public-topbar");
+const publicTopbarProfileLink = document.getElementById("resume-public-view-profile");
+
 function applyViewerModeClass(user) {
   const viewerMode = !canEdit && (hasTargetParam || !user);
   document.body.classList.toggle("resume-viewer-mode", viewerMode);
   document.body.classList.toggle("resume-owner-mode", !viewerMode);
+  publicTopbar?.classList.toggle("hidden", !viewerMode);
+  if (!viewerMode) publicTopbarProfileLink?.classList.add("hidden");
+}
+
+// v3.3.1: the shell's optional "View Profile" link — only meaningful for an explicit shared
+// ?u=/?uid= link (never a bare resume.html open, which has no target to point at). Populated
+// once targetUid is resolved, independent of whether access ends up granted below — it's a
+// wayfinding link, not a second access gate.
+function updatePublicTopbarProfileLink() {
+  if (!publicTopbarProfileLink) return;
+  if (!hasTargetParam || !targetUid) {
+    publicTopbarProfileLink.classList.add("hidden");
+    return;
+  }
+  publicTopbarProfileLink.href = targetUsernameParam
+    ? `profile.html?u=${encodeURIComponent(targetUsernameParam)}`
+    : `profile.html?uid=${encodeURIComponent(targetUid)}`;
+  publicTopbarProfileLink.classList.remove("hidden");
 }
 
 // v3.2.2 hotfix: resolves an *explicit* ?u=/?uid= target only. The "no param at all" case is
@@ -285,6 +306,8 @@ async function initCareerAccess(user) {
       return;
     }
   }
+
+  updatePublicTopbarProfileLink();
 
   const isSelf = !!user && user.uid === targetUid;
   const person = await fetchPersonForTarget(targetUid);

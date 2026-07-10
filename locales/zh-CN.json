@@ -170,7 +170,8 @@
     "resume_private_notice": "此简历为私密状态。",
     "resume_connections_notice": "此简历仅对好友可见。",
     "resume_not_found": "未找到该简历。",
-    "signin_required_notice": "登录后即可查看此简历。"
+    "signin_required_notice": "登录后即可查看此简历。",
+    "view_profile_link": "查看主页"
   },
   "memories": {
     "title": "回忆",

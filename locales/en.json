@@ -170,7 +170,8 @@
     "resume_private_notice": "This resume is private.",
     "resume_connections_notice": "This resume is only visible to trusted connections.",
     "resume_not_found": "This resume could not be found.",
-    "signin_required_notice": "Sign in to view this resume."
+    "signin_required_notice": "Sign in to view this resume.",
+    "view_profile_link": "View Profile"
   },
   "memories": {
     "title": "Memories",
