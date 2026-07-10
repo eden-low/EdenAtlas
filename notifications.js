@@ -1,5 +1,6 @@
 import { auth, db } from "./firebase-init.js";
 import { t } from "./js/i18n.js";
+import { publicDisplayName, formatHandle } from "./js/identity.js";
 import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-auth.js";
 import {
   collection,
@@ -7,6 +8,7 @@ import {
   where,
   getDocs,
   doc,
+  getDoc,
   updateDoc,
 } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-firestore.js";
 
@@ -31,6 +33,31 @@ const markAllBtn = document.getElementById("mark-all-read-btn");
 
 let cachedNotifs = [];
 
+// fromUid -> users/{uid} doc data (or null if missing/failed), for LINKED_TYPES notifications
+// only — lets the actor's avatar/name/@username link straight to profile.html, same
+// u=username-preferred / uid-fallback resolution dashboard.js's personCard() uses.
+const actorCache = new Map();
+
+async function fetchActor(uid) {
+  if (actorCache.has(uid)) return actorCache.get(uid);
+  let data = null;
+  try {
+    const snap = await getDoc(doc(db, "users", uid));
+    if (snap.exists()) data = snap.data();
+  } catch (err) {
+    console.error("[notifications] actor fetch failed:", err.code || err);
+  }
+  actorCache.set(uid, data);
+  return data;
+}
+
+function actorProfileUrl(actor) {
+  if (!actor?.uid) return null;
+  return actor.username
+    ? `profile.html?u=${encodeURIComponent(actor.username)}`
+    : `profile.html?uid=${encodeURIComponent(actor.uid)}`;
+}
+
 function formatTimestamp(ts) {
   if (!ts?.toDate) return "";
   return ts.toDate().toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
@@ -38,18 +65,41 @@ function formatTimestamp(ts) {
 
 function notifCard(n) {
   const meta = TYPE_META[n.type] || TYPE_META.login;
+  const actor = LINKED_TYPES.has(n.type) && n.fromUid ? actorCache.get(n.fromUid) : null;
+  const profileUrl = actorProfileUrl(actor);
+  const handle = actor ? formatHandle(actor.username) : "";
+
   const el = document.createElement("div");
   el.className = `is-visible flex items-start gap-3 p-4 rounded-xl border ${n.read ? "border-borderNeon/40 bg-darkBg/30" : "border-neonPurple/40 bg-neonPurple/5"}`;
+
+  // Actor avatar (clickable) when we could resolve one, otherwise the plain type icon.
+  const avatarHtml = profileUrl
+    ? `<a href="${profileUrl}" class="w-9 h-9 rounded-full bg-neonPurple/10 flex items-center justify-center text-neonPurple overflow-hidden flex-shrink-0 hover:opacity-80 transition-opacity" title="${t("people.open_profile")}">
+        ${actor.photoURL ? `<img src="${actor.photoURL}" class="w-full h-full object-cover">` : `<i class="fa-solid fa-user text-xs"></i>`}
+      </a>`
+    : `<div class="w-9 h-9 rounded-lg ${meta.bg} ${meta.color} flex items-center justify-center flex-shrink-0"><i class="fa-solid ${meta.icon}"></i></div>`;
+
+  const actorNameHtml = profileUrl
+    ? `<a href="${profileUrl}" class="inline-flex items-center gap-1.5 min-w-0 hover:underline">
+        <span class="text-sm font-semibold text-white truncate">${publicDisplayName(actor)}</span>
+        ${handle ? `<span class="text-[11px] text-textGray font-code truncate">${handle}</span>` : ""}
+      </a>`
+    : "";
+
   el.innerHTML = `
-    <div class="w-9 h-9 rounded-lg ${meta.bg} ${meta.color} flex items-center justify-center flex-shrink-0"><i class="fa-solid ${meta.icon}"></i></div>
+    ${avatarHtml}
     <div class="flex-1 min-w-0">
-      <div class="flex items-center gap-2">
+      ${actorNameHtml}
+      <div class="flex items-center gap-2 ${actorNameHtml ? "mt-0.5" : ""}">
         ${!n.read ? '<span class="w-1.5 h-1.5 rounded-full bg-neonPurple flex-shrink-0"></span>' : ""}
-        <p class="text-sm font-semibold">${n.title}</p>
+        <p class="text-sm ${actorNameHtml ? "text-textGray" : "font-semibold"}">${n.title}</p>
       </div>
       <p class="text-xs text-textGray mt-1">${n.message}</p>
       <p class="text-[10px] font-code text-textGray/70 mt-1.5">${formatTimestamp(n.createdAt)}</p>
-      ${LINKED_TYPES.has(n.type) ? `<a href="dashboard.html" class="inline-block mt-1.5 text-[10px] font-code text-neonPurple hover:underline">${t("inbox.view")}</a>` : ""}
+      <div class="flex items-center gap-3 mt-1.5">
+        ${LINKED_TYPES.has(n.type) ? `<a href="dashboard.html" class="text-[10px] font-code text-neonPurple hover:underline">${t("inbox.view")}</a>` : ""}
+        ${profileUrl ? `<a href="${profileUrl}" class="text-[10px] font-code text-neonPurple hover:underline">${t("people.open_profile")}</a>` : ""}
+      </div>
     </div>
     ${!n.read ? `<button class="mark-read-btn flex-shrink-0 px-2.5 py-1 rounded-lg text-[10px] font-code text-textGray hover:text-neonPurple border border-borderNeon hover:border-neonPurple/50 transition-colors">${t("common.mark_read")}</button>` : ""}`;
 
@@ -91,6 +141,10 @@ async function fetchNotifications(user) {
     console.error("[notifications] fetch failed:", err.code || err);
     cachedNotifs = [];
   }
+
+  const actorUids = [...new Set(cachedNotifs.filter((n) => LINKED_TYPES.has(n.type) && n.fromUid).map((n) => n.fromUid))];
+  await Promise.all(actorUids.map(fetchActor));
+
   renderNotifs();
 }
 

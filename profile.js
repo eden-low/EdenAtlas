@@ -571,7 +571,8 @@ async function loadProfile() {
   cachedProfilePerson = person;
   renderHeader(person);
 
-  if (!canViewProfile(person.role || "viewer")) {
+  const isSelf = auth.currentUser?.uid === targetUid;
+  if (!isSelf && !canViewProfile(person.role || "viewer")) {
     privateNotice.classList.remove("hidden");
     return;
   }
