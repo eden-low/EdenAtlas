@@ -43,10 +43,16 @@ service cloud.firestore {
     // Always-private: financial data has no "public" story.
     match /expenses/{expenseId} {
       allow read, update, delete: if request.auth != null && resource.data.uid == request.auth.uid;
-      allow create: if canParticipate() && request.resource.data.uid == request.auth.uid;
+      // v3.3 "Friend Spaces": Finance is one of three modules (with Time Capsule/Daily
+      // Reflection) that stay Owner-only even though Friends now get their own space for
+      // Memories/Journal/Journey/Habits — create is isOwner(), not canParticipate(). read/
+      // update/delete stay a bare ownership check so any expense docs a Friend created before
+      // this pass remain theirs to view/edit — only new Finance writes are cut off going forward.
+      allow create: if isOwner() && request.resource.data.uid == request.auth.uid;
     }
 
-    // Always-private: personal targets have no "public" story, same shape as expenses.
+    // Always-private: personal targets have no "public" story, same shape as expenses. Not one of
+    // v3.3's three owner-only modules — Goals stays canParticipate() (Owner or Friend).
     match /goals/{goalId} {
       allow read, update, delete: if request.auth != null && resource.data.uid == request.auth.uid;
       allow create: if canParticipate() && request.resource.data.uid == request.auth.uid;
@@ -56,14 +62,16 @@ service cloud.firestore {
     // owner-only shape as goals/expenses — never readable via isMineOrPublic(), by design.
     match /time_capsules/{capsuleId} {
       allow read, update, delete: if request.auth != null && resource.data.uid == request.auth.uid;
-      allow create: if canParticipate() && request.resource.data.uid == request.auth.uid;
+      // v3.3: Owner-only create — see expenses' match block above for the full reasoning.
+      allow create: if isOwner() && request.resource.data.uid == request.auth.uid;
     }
 
     // Always-private (v2.9): one-per-day mood/note checkpoint. Doc ID is `${uid}_${dateKey}`
     // (enforced client-side, see index.html) so a same-day save is a merge, not a duplicate.
     match /daily_reflections/{reflectionId} {
       allow read, update, delete: if request.auth != null && resource.data.uid == request.auth.uid;
-      allow create: if canParticipate() && request.resource.data.uid == request.auth.uid;
+      // v3.3: Owner-only create — see expenses' match block above for the full reasoning.
+      allow create: if isOwner() && request.resource.data.uid == request.auth.uid;
     }
 
     match /journals/{journalId} {

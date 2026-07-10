@@ -55,10 +55,12 @@ service firebase.storage {
     }
 
     // Time Capsule attachments (v2.9) — always private, no /public split (capsules are never
-    // shown to anyone but their own writer).
+    // shown to anyone but their own writer). v3.3: Time Capsule became one of the three
+    // Owner-only modules (with Finance/Daily Reflection) — write is Owner-only, mirroring
+    // career/{uid}'s email check, instead of canParticipate().
     match /capsules/{uid}/{allPaths=**} {
       allow read: if request.auth != null && request.auth.uid == uid;
-      allow write: if request.auth != null && request.auth.uid == uid && canParticipate(request.auth.token.email);
+      allow write: if request.auth != null && request.auth.uid == uid && request.auth.token.email == 'jjun8647@gmail.com';
     }
   }
 }

@@ -489,7 +489,11 @@ async function renderGalleryAnalytics() {
 
 let monthlyChart, categoryPieChart, weeklyChart;
 
-async function renderExpenseAnalytics() {
+// Finance is Owner-only (v3.3) — Friends no longer get this section on their own Overview tab.
+async function renderExpenseAnalytics(user) {
+  const section = document.getElementById("expense-analytics-section");
+  section.classList.toggle("hidden", !isOwner(user));
+  if (!isOwner(user)) return;
   const expenses = await fetchMyCollection("expenses");
   const now = new Date();
 
@@ -680,10 +684,11 @@ document.getElementById("goal-form").addEventListener("submit", async (event) =>
 
 // ---- Time Capsule summary ----
 
-async function loadCapsulesSummary() {
+// Time Capsule is Owner-only (v3.3), same as Finance.
+async function loadCapsulesSummary(user) {
   const section = document.getElementById("capsules-summary-section");
-  section.classList.toggle("hidden", !canParticipate());
-  if (!canParticipate()) return;
+  section.classList.toggle("hidden", !isOwner(user));
+  if (!isOwner(user)) return;
   const capsules = await fetchMyCollection("time_capsules");
   const now = new Date();
   const sealed = capsules.filter((c) => c.status === "sealed" && !(c.openAt?.toDate && c.openAt.toDate() <= now));
@@ -741,12 +746,16 @@ function achievementTile(def, count) {
 }
 
 async function renderAchievements() {
+  const user = auth.currentUser;
+  // Expenses is always private and Owner-only (v3.3) — never surface this tile for a Friend,
+  // same reasoning profile.js's PUBLIC_ACHIEVEMENTS already applies to other people's profiles.
+  const defs = user && isOwner(user) ? ACHIEVEMENTS : ACHIEVEMENTS.filter((d) => d.key !== "expenses");
   const [photos, journals, expenses, habits] = await Promise.all([
     fetchMyCollection("photos"), fetchMyCollection("journals"), fetchMyCollection("expenses"), fetchMyCollection("habits"),
   ]);
   const bestStreak = habits.length ? Math.max(...habits.map((h) => computeStreak(h.completedDates))) : 0;
   const counts = { photos: photos.length, journals: journals.length, expenses: expenses.length, streak: bestStreak };
-  document.getElementById("achievements-list").replaceChildren(...ACHIEVEMENTS.map((def) => achievementTile(def, counts[def.key])));
+  document.getElementById("achievements-list").replaceChildren(...defs.map((def) => achievementTile(def, counts[def.key])));
 }
 
 // ---- Auth control ----
@@ -767,10 +776,10 @@ onAuthStateChanged(auth, (user) => {
   loadAbout(user);
   renderSystemStatus(user);
   renderGalleryAnalytics();
-  renderExpenseAnalytics();
+  renderExpenseAnalytics(user);
   renderJournalAnalytics();
   loadGoals();
-  loadCapsulesSummary();
+  loadCapsulesSummary(user);
   renderAchievements();
 
   if (isOwner(user)) {

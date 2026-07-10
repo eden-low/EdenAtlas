@@ -111,6 +111,7 @@
     "continue_working": "继续完成",
     "monthly_summary": "本月概览",
     "expenses_stat": "支出",
+    "connections_stat": "人脉",
     "habit_completion_stat": "习惯完成度",
     "journal_entries_stat": "日记篇数",
     "photos_uploaded_stat": "上传照片数",
@@ -413,12 +414,12 @@
     "role_owner": "所有者",
     "role_owner_desc": "拥有完整权限，是唯一能看到人脉管理 / 系统日志的角色。",
     "role_friend": "好友",
-    "role_friend_desc": "拥有自己私密的回忆 / 日记 / 财务 / 历程 / 习惯空间。",
+    "role_friend_desc": "拥有自己的回忆 / 日记 / 历程 / 习惯空间——财务、时间胶囊与每日心情记录仍仅限所有者使用。",
     "role_viewer": "访客",
     "role_viewer_desc": "只读身份，可查看所有者与好友公开的内容。",
-    "role_finance_desc": "财务记录始终私密——无论角色为何，都不会出现在任何人的公开主页或收藏集中。",
+    "role_finance_desc": "财务记录始终私密且仅限所有者使用——无论角色为何，都不会出现在任何人的公开主页或收藏集中。",
     "whitelist_title": "白名单 — 好友管理",
-    "whitelist_desc": "这里列出所有登录过的人。将其提升为好友，可让他们拥有自己私密的支出 / 日记 / 照片 / 历程 / 习惯空间；降级则会让他们变回只读访客。",
+    "whitelist_desc": "这里列出所有登录过的人。将其提升为好友，可让他们拥有自己的日记 / 照片 / 历程 / 习惯空间；降级则会让他们变回只读访客。",
     "whitelist_empty": "还没有人登录过。",
     "backup_title": "导出与备份",
     "backup_desc": "下载你自己的数据。",
@@ -565,5 +566,15 @@
     "summary_title": "心情记录",
     "most_common_mood": "最常见的心情",
     "reflection_days": "记录天数"
+  },
+  "friend_space": {
+    "my_space": "我的空间",
+    "add_memory": "添加回忆",
+    "write_journal": "写日记",
+    "your_memories": "你的回忆",
+    "your_journal": "你的日记",
+    "start_your_edenatlas": "开启你的 EdenAtlas",
+    "private_space_note": "这是你自己的私人空间——你添加的回忆与日记默认私密，只有你选择分享后才会被他人看到。",
+    "shared_with_connections": "仅信任的好友可见"
   }
 }

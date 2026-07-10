@@ -111,6 +111,7 @@
     "continue_working": "Continue Working",
     "monthly_summary": "Monthly Summary",
     "expenses_stat": "Expenses",
+    "connections_stat": "Connections",
     "habit_completion_stat": "Habit completion",
     "journal_entries_stat": "Journal entries",
     "photos_uploaded_stat": "Photos uploaded",
@@ -413,12 +414,12 @@
     "role_owner": "Owner",
     "role_owner_desc": "full access everywhere, the only role that sees Connections/System Logs.",
     "role_friend": "Friend",
-    "role_friend_desc": "has their own private space for Memories/Journal/Finance/Journey/Habits.",
+    "role_friend_desc": "has their own space for Memories/Journal/Journey/Habits — Finance, Time Capsule, and Daily Reflection stay Owner-only.",
     "role_viewer": "Viewer",
     "role_viewer_desc": "read-only, sees public content from the Owner and any Friend.",
-    "role_finance_desc": "Finance is always private — it is never shown on anyone's public profile or Collection, regardless of role.",
+    "role_finance_desc": "Finance is always private and Owner-only — it is never shown on anyone's public profile or Collection, regardless of role.",
     "whitelist_title": "Whitelist — Friend Management",
-    "whitelist_desc": "Everyone who has ever signed in. Promote to Friend to give them their own private expenses/journal/photos/timeline/habits space; demote to make them a read-only Viewer again.",
+    "whitelist_desc": "Everyone who has ever signed in. Promote to Friend to give them their own space for Memories/journal/photos/journey/habits; demote to make them a read-only Viewer again.",
     "whitelist_empty": "No signed-in users yet.",
     "backup_title": "Export & Backup",
     "backup_desc": "Downloads your own data.",
@@ -565,5 +566,15 @@
     "summary_title": "Reflections",
     "most_common_mood": "Most common mood",
     "reflection_days": "Reflection days"
+  },
+  "friend_space": {
+    "my_space": "My Space",
+    "add_memory": "Add Memory",
+    "write_journal": "Write Journal",
+    "your_memories": "Your Memories",
+    "your_journal": "Your Journal",
+    "start_your_edenatlas": "Start your EdenAtlas",
+    "private_space_note": "This is your own private space — Memories and Journal entries you add stay private unless you choose to share them.",
+    "shared_with_connections": "Shared with trusted connections"
   }
 }

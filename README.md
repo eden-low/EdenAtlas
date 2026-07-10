@@ -79,7 +79,7 @@ link set, with owner-only pages redirecting non-owners on direct access. See `CL
 ## Roles
 
 - **Owner** (`jjun8647@gmail.com`) — full access everywhere, plus the only role that sees System Logs and Whitelist Management in Me → Connections/System Logs.
-- **Friend** — anyone approved via Settings' Whitelist (a `friends/{email}` Firestore doc). Gets their own private expenses/journal/photos/timeline/habits space, structurally identical to the owner's.
+- **Friend** — anyone approved via Settings' Whitelist (a `friends/{email}` Firestore doc). Gets their own space for Memories/Journal/Journey/Habits/Atlas/Collections/Calendar, structurally identical to the owner's for those modules. As of v3.3, Finance/Time Capsule/Daily Reflection stay Owner-only regardless of Friend status.
 - **Viewer** — anyone else who signs in with Google. Read-only: sees public content from the owner and any friend, can like/comment on public gallery posts, but can't create anything of their own.
 
 Nobody is ever signed out or blocked at login — everyone gets in, access just scales with role.

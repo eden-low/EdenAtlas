@@ -82,6 +82,7 @@
                 <span class="text-borderNeon">&middot;</span>
                 <span class="inline-flex items-center gap-1.5"><i class="fa-solid fa-cloud-sun text-amber-400"></i> <span id="weather-inline-temp">&mdash;&deg;</span> <span id="weather-inline-cond">Loading weather&hellip;</span></span>
             </div>
+            <p id="light-space-note" class="hidden mt-2 text-xs text-textGray/80"><span class="text-neonPurple font-code uppercase tracking-wider text-[10px]" data-i18n="friend_space.my_space">My Space</span> &middot; <span data-i18n="friend_space.private_space_note">This is your own private space — Memories and Journal entries you add stay private unless you choose to share them.</span></p>
         </section>
 
         <!-- Today's Overview: one consolidated card, not five -->
@@ -92,7 +93,7 @@
                 <div id="today-habits" class="space-y-1.5 text-sm"><p class="text-textGray text-xs" data-i18n="common.loading">Loading&hellip;</p></div>
             </div>
             <div class="divide-y divide-borderNeon/50 text-sm mt-4 pt-1 border-t border-borderNeon/40">
-                <div class="flex items-center justify-between py-2.5">
+                <div id="today-spending-row" class="hidden flex items-center justify-between py-2.5">
                     <span class="text-textGray flex items-center gap-1.5"><i data-lucide="wallet" class="w-3.5 h-3.5"></i> <span data-i18n="home.spending_label">Spending</span></span>
                     <span id="today-spending" class="font-code font-semibold">&mdash;</span>
                 </div>
@@ -156,7 +157,8 @@
         <section class="reveal bg-cardBg/90 neon-border-purple rounded-2xl p-6">
             <p class="text-[10px] uppercase tracking-[0.2em] text-textGray font-code mb-4" data-i18n="home.monthly_summary">Monthly Summary</p>
             <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 text-sm">
-                <div><p class="text-textGray text-xs" data-i18n="home.expenses_stat">Expenses</p><p id="month-expenses" class="font-code font-semibold text-xl mt-1">&mdash;</p></div>
+                <div id="stat-expenses" class="hidden"><p class="text-textGray text-xs" data-i18n="home.expenses_stat">Expenses</p><p id="month-expenses" class="font-code font-semibold text-xl mt-1">&mdash;</p></div>
+                <div id="stat-connections" class="hidden"><p class="text-textGray text-xs" data-i18n="home.connections_stat">Connections</p><p id="month-connections" class="font-code font-semibold text-xl mt-1">&mdash;</p></div>
                 <div><p class="text-textGray text-xs" data-i18n="home.habit_completion_stat">Habit completion</p><p id="month-habits" class="font-code font-semibold text-xl mt-1">&mdash;</p></div>
                 <div><p class="text-textGray text-xs" data-i18n="home.journal_entries_stat">Journal entries</p><p id="month-journal" class="font-code font-semibold text-xl mt-1">&mdash;</p></div>
                 <div><p class="text-textGray text-xs" data-i18n="home.photos_uploaded_stat">Photos uploaded</p><p id="month-photos" class="font-code font-semibold text-xl mt-1">&mdash;</p></div>
@@ -167,7 +169,7 @@
         <section id="quick-actions-section" class="hidden">
             <p class="text-[10px] uppercase tracking-[0.2em] text-textGray font-code mb-3 px-1" data-i18n="home.quick_actions">Quick Actions</p>
             <div class="flex flex-wrap gap-2">
-                <button id="qa-expense-btn" type="button" class="flex items-center gap-2 px-4 py-2.5 bg-cardBg/90 neon-border-purple rounded-xl text-sm text-white hover:border-neonPurple/40 transition-all">
+                <button id="qa-expense-btn" type="button" class="hidden flex items-center gap-2 px-4 py-2.5 bg-cardBg/90 neon-border-purple rounded-xl text-sm text-white hover:border-neonPurple/40 transition-all">
                     <i data-lucide="plus" class="w-4 h-4 text-emerald-400"></i> <span data-i18n="home.add_expense">Add Expense</span>
                 </button>
                 <button id="qa-journal-btn" type="button" class="flex items-center gap-2 px-4 py-2.5 bg-cardBg/90 neon-border-purple rounded-xl text-sm text-white hover:border-neonPurple/40 transition-all">
@@ -176,7 +178,7 @@
                 <button id="qa-photo-btn" type="button" class="flex items-center gap-2 px-4 py-2.5 bg-cardBg/90 neon-border-purple rounded-xl text-sm text-white hover:border-neonPurple/40 transition-all">
                     <i data-lucide="plus" class="w-4 h-4 text-neonBlue"></i> <span data-i18n="home.upload_photo">Upload Photo</span>
                 </button>
-                <a id="qa-capsule-btn" href="time-capsule.html?new=1" class="flex items-center gap-2 px-4 py-2.5 bg-cardBg/90 neon-border-purple rounded-xl text-sm text-white hover:border-neonPurple/40 transition-all">
+                <a id="qa-capsule-btn" href="time-capsule.html?new=1" class="hidden flex items-center gap-2 px-4 py-2.5 bg-cardBg/90 neon-border-purple rounded-xl text-sm text-white hover:border-neonPurple/40 transition-all">
                     <i data-lucide="plus" class="w-4 h-4 text-neonViolet"></i> <span data-i18n="nav.time_capsule">Time Capsule</span>
                 </a>
             </div>
@@ -254,9 +256,9 @@
                     <textarea id="qa-journal-content" rows="4" required class="w-full bg-darkBg/60 border border-borderNeon rounded-lg px-3 py-2 text-sm text-white"></textarea>
                 </div>
                 <div class="flex items-center gap-4 text-xs font-code text-textGray">
-                    <label class="flex items-center gap-1.5"><input type="radio" name="qa-journal-visibility" value="public" checked> <span data-i18n="common.public">Public</span></label>
+                    <label class="flex items-center gap-1.5"><input type="radio" name="qa-journal-visibility" value="public"> <span data-i18n="common.public">Public</span></label>
                     <label class="flex items-center gap-1.5"><input type="radio" name="qa-journal-visibility" value="connections"> <span data-i18n="common.connections">Connections</span></label>
-                    <label class="flex items-center gap-1.5"><input type="radio" name="qa-journal-visibility" value="private"> <span data-i18n="common.private">Private</span></label>
+                    <label class="flex items-center gap-1.5"><input type="radio" name="qa-journal-visibility" value="private" checked> <span data-i18n="common.private">Private</span></label>
                 </div>
                 <button type="submit" class="w-full px-5 py-2.5 bg-gradient-to-r from-neonViolet to-neonPurple rounded-xl text-xs font-cyber font-bold tracking-wider text-white hover:scale-105 transition-all" data-i18n="common.save">SAVE</button>
                 <p id="qa-journal-status" class="text-xs font-code text-textGray text-center"></p>
@@ -292,9 +294,9 @@
                         </select>
                     </div>
                     <div class="flex items-center gap-4 text-xs font-code text-textGray">
-                        <label class="flex items-center gap-1.5"><input type="radio" name="qa-photo-visibility" value="public" checked> <span data-i18n="common.public">Public</span></label>
+                        <label class="flex items-center gap-1.5"><input type="radio" name="qa-photo-visibility" value="public"> <span data-i18n="common.public">Public</span></label>
                         <label class="flex items-center gap-1.5"><input type="radio" name="qa-photo-visibility" value="connections"> <span data-i18n="common.connections">Connections</span></label>
-                        <label class="flex items-center gap-1.5"><input type="radio" name="qa-photo-visibility" value="private"> <span data-i18n="common.private">Private</span></label>
+                        <label class="flex items-center gap-1.5"><input type="radio" name="qa-photo-visibility" value="private" checked> <span data-i18n="common.private">Private</span></label>
                     </div>
                 </div>
                 <button type="submit" class="w-full px-5 py-2.5 bg-gradient-to-r from-neonViolet to-neonPurple rounded-xl text-xs font-cyber font-bold tracking-wider text-white hover:scale-105 transition-all" data-i18n="common.upload">UPLOAD</button>
@@ -315,7 +317,7 @@
     <script type="module" src="js/mobile-nav.js"></script>
     <script type="module" src="js/sidebar.js"></script>
     <script type="module">
-        import { auth, db, storage, canParticipate } from "./firebase-init.js";
+        import { auth, db, storage, canParticipate, isOwner, getUserMode } from "./firebase-init.js";
         import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-auth.js";
         import { collection, query, where, getDocs, getDoc, doc, setDoc, addDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-firestore.js";
         import { ref, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-storage.js";
@@ -378,6 +380,14 @@
             return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth();
         }
 
+        // v3.3 "Friend Spaces": Finance/Time Capsule/Daily Reflection stay Owner-only even though
+        // Friends now get their own space for Memories/Journal/Journey/Habits — same isOwner(user)
+        // || getUserMode() === "OWNER" fallback js/sidebar.js and js/mobile-nav.js already use, so
+        // a missing/cleared lfj:userMode cache can't wrongly collapse the Owner's own Home.
+        function isOwnerRole(user) {
+            return isOwner(user) || getUserMode() === "OWNER";
+        }
+
         // ---- Data: this Home is strictly personal (mine only), matching dashboard.js's convention ----
 
         async function fetchMine(name) {
@@ -392,11 +402,23 @@
             }
         }
 
+        async function fetchFriendCount() {
+            const user = auth.currentUser;
+            if (!user) return 0;
+            try {
+                const snap = await getDocs(collection(db, "friendships", user.uid, "friends"));
+                return snap.size;
+            } catch (err) {
+                console.error("[home] friend count fetch failed:", err.code || err);
+                return 0;
+            }
+        }
+
         async function loadAllMyData() {
-            const [photos, journals, events, habits, expenses] = await Promise.all([
-                fetchMine("photos"), fetchMine("journals"), fetchMine("life_events"), fetchMine("habits"), fetchMine("expenses"),
+            const [photos, journals, events, habits, expenses, friendCount] = await Promise.all([
+                fetchMine("photos"), fetchMine("journals"), fetchMine("life_events"), fetchMine("habits"), fetchMine("expenses"), fetchFriendCount(),
             ]);
-            return { photos, journals, events, habits, expenses };
+            return { photos, journals, events, habits, expenses, friendCount };
         }
 
         // ---- Today ----
@@ -419,13 +441,22 @@
 
         function renderToday(data) {
             const today = new Date();
+            const user = auth.currentUser;
 
             renderHabitsToday(data.habits);
 
-            const todaySpend = data.expenses
-                .filter((e) => e.createdAt?.toDate && isSameDay(e.createdAt.toDate(), today))
-                .reduce((sum, e) => sum + (e.amount || 0), 0);
-            document.getElementById("today-spending").textContent = `RM ${todaySpend.toFixed(2)}`;
+            // Finance is Owner-only (v3.3) — don't show a Friend a "Spending: RM0.00" row for a
+            // module they can't actually use.
+            const spendingRow = document.getElementById("today-spending-row");
+            if (user && isOwnerRole(user)) {
+                spendingRow.classList.remove("hidden");
+                const todaySpend = data.expenses
+                    .filter((e) => e.createdAt?.toDate && isSameDay(e.createdAt.toDate(), today))
+                    .reduce((sum, e) => sum + (e.amount || 0), 0);
+                document.getElementById("today-spending").textContent = `RM ${todaySpend.toFixed(2)}`;
+            } else {
+                spendingRow.classList.add("hidden");
+            }
 
             const journalToday = data.journals.some((j) => j.createdAt?.toDate && isSameDay(j.createdAt.toDate(), today));
             document.getElementById("today-journal").innerHTML = journalToday
@@ -531,11 +562,22 @@
 
         function renderThisMonth(data) {
             const now = new Date();
+            const user = auth.currentUser;
 
-            const monthExpenses = data.expenses
-                .filter((e) => e.createdAt?.toDate && isThisMonth(e.createdAt.toDate(), now))
-                .reduce((sum, e) => sum + (e.amount || 0), 0);
-            document.getElementById("month-expenses").textContent = `RM ${monthExpenses.toFixed(2)}`;
+            // Finance is Owner-only (v3.3) — swap the Expenses stat tile for a Connections count
+            // for anyone else, rather than showing a module they can't use.
+            if (user && isOwnerRole(user)) {
+                document.getElementById("stat-expenses").classList.remove("hidden");
+                document.getElementById("stat-connections").classList.add("hidden");
+                const monthExpenses = data.expenses
+                    .filter((e) => e.createdAt?.toDate && isThisMonth(e.createdAt.toDate(), now))
+                    .reduce((sum, e) => sum + (e.amount || 0), 0);
+                document.getElementById("month-expenses").textContent = `RM ${monthExpenses.toFixed(2)}`;
+            } else {
+                document.getElementById("stat-expenses").classList.add("hidden");
+                document.getElementById("stat-connections").classList.remove("hidden");
+                document.getElementById("month-connections").textContent = data.friendCount ?? 0;
+            }
 
             document.getElementById("month-journal").textContent = data.journals.filter((j) => j.createdAt?.toDate && isThisMonth(j.createdAt.toDate(), now)).length;
             document.getElementById("month-photos").textContent = data.photos.filter((p) => p.uploadedAt?.toDate && isThisMonth(p.uploadedAt.toDate(), now)).length;
@@ -597,7 +639,7 @@
         document.getElementById("qa-expense-form").addEventListener("submit", async (event) => {
             event.preventDefault();
             const user = auth.currentUser;
-            if (!user || !canParticipate()) return;
+            if (!user || !isOwnerRole(user)) return;
             const statusEl = document.getElementById("qa-expense-status");
             statusEl.textContent = t("common.saving");
             try {
@@ -730,8 +772,9 @@
 
         async function loadReflection(user) {
             const section = document.getElementById("reflection-section");
-            section.classList.toggle("hidden", !canParticipate());
-            if (!canParticipate()) return;
+            // Daily Reflection is Owner-only (v3.3), same as Finance/Time Capsule.
+            section.classList.toggle("hidden", !isOwnerRole(user));
+            if (!isOwnerRole(user)) return;
             try {
                 const snap = await getDoc(doc(db, "daily_reflections", todayReflectionId(user.uid)));
                 currentReflection = snap.exists() ? snap.data() : null;
@@ -755,7 +798,7 @@
 
         document.getElementById("reflection-save-btn").addEventListener("click", async () => {
             const user = auth.currentUser;
-            if (!user || !canParticipate() || !selectedMood) return;
+            if (!user || !isOwnerRole(user) || !selectedMood) return;
             const statusEl = document.getElementById("reflection-status");
             statusEl.textContent = t("common.saving");
             try {
@@ -781,6 +824,11 @@
 
         async function checkCapsulesReady(user) {
             const section = document.getElementById("capsule-ready-section");
+            // Time Capsule is Owner-only (v3.3), same as Finance/Daily Reflection.
+            if (!isOwnerRole(user)) {
+                section.classList.add("hidden");
+                return;
+            }
             try {
                 const capsules = await fetchMine("time_capsules");
                 const now = new Date();
@@ -839,6 +887,9 @@
                 document.getElementById("greeting-text").textContent = `${greetingWord()}, ${name}`;
             });
             document.getElementById("quick-actions-section").classList.toggle("hidden", !canParticipate());
+            document.getElementById("qa-expense-btn").classList.toggle("hidden", !isOwnerRole(user));
+            document.getElementById("qa-capsule-btn").classList.toggle("hidden", !isOwnerRole(user));
+            document.getElementById("light-space-note").classList.toggle("hidden", isOwnerRole(user));
             tickClock();
             setInterval(tickClock, 30000);
             loadWeather();
