@@ -107,7 +107,16 @@
       <div class="skeleton h-72 rounded-2xl"></div>
       <div class="skeleton h-72 rounded-2xl"></div>
     </div>
-    <p id="feed-empty" class="hidden text-center text-xs font-code text-textGray py-10" data-i18n="memories.no_posts">Every journey starts with a single memory.</p>
+    <div id="feed-empty" class="hidden text-center py-14">
+      <div class="w-14 h-14 mx-auto rounded-2xl bg-neonPurple/10 text-neonPurple flex items-center justify-center text-xl mb-4">
+        <i class="fa-solid fa-images"></i>
+      </div>
+      <p class="text-sm text-white font-cyber font-semibold" data-i18n="memories.empty_title">Start your memory archive.</p>
+      <p class="text-xs font-code text-textGray mt-1.5" data-i18n="memories.no_posts">Every journey starts with a single memory.</p>
+      <button id="feed-empty-cta" type="button" class="hidden mt-5 px-5 py-2.5 bg-gradient-to-r from-neonViolet to-neonPurple rounded-xl text-xs font-cyber font-bold tracking-wider text-white hover:scale-105 transition-all">
+        <i class="fa-solid fa-plus mr-1.5"></i><span data-i18n="memories.add_memory_cta">Add Memory</span>
+      </button>
+    </div>
   </main>
 
   <!-- New Post modal -->
@@ -143,6 +152,7 @@
             <label class="flex items-center gap-1.5"><input type="radio" name="post-visibility" value="private" checked> <span data-i18n="common.private">Private</span></label>
           </div>
         </div>
+        <p class="text-[10.5px] text-textGray/70 -mt-2" data-i18n="common.private_by_default_hint">Private by default. You can share with trusted connections anytime.</p>
         <div>
           <label class="block text-xs font-code text-textGray mb-1.5" for="post-collection" data-i18n="common.collection">Collection</label>
           <select id="post-collection" class="w-full bg-darkBg/60 border border-borderNeon rounded-lg px-3 py-2 text-xs text-white">

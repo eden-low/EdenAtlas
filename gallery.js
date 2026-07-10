@@ -103,6 +103,7 @@ const authControl = document.getElementById("auth-control");
 const accessNote = document.getElementById("gallery-access-note");
 const feedContainer = document.getElementById("feed-container");
 const feedEmpty = document.getElementById("feed-empty");
+const feedEmptyCta = document.getElementById("feed-empty-cta");
 const filterTabs = document.querySelectorAll(".filter-tab");
 const privateTab = document.querySelector('.filter-tab[data-filter="private"]');
 const connectionsTab = document.querySelector('.filter-tab[data-filter="connections"]');
@@ -368,6 +369,7 @@ function renderSignedOut() {
   privateTab.classList.add("hidden");
   connectionsTab.classList.add("hidden");
   newPostBtn.classList.add("hidden");
+  feedEmptyCta.classList.add("hidden");
   if (activeFilter === "private" || activeFilter === "connections") setActiveTab("all");
 }
 
@@ -382,6 +384,7 @@ async function renderSignedIn(user) {
 
   const mayParticipate = canParticipate();
   newPostBtn.classList.toggle("hidden", !mayParticipate);
+  feedEmptyCta.classList.toggle("hidden", !mayParticipate);
   selectModeBtn.classList.toggle("hidden", !mayParticipate);
   privateTab.classList.toggle("hidden", !mayParticipate);
   connectionsTab.classList.toggle("hidden", !mayParticipate);
@@ -420,6 +423,7 @@ function closeModal() {
 }
 
 newPostBtn.addEventListener("click", openModal);
+feedEmptyCta.addEventListener("click", openModal);
 postModalClose.addEventListener("click", closeModal);
 postModalBackdrop.addEventListener("click", closeModal);
 

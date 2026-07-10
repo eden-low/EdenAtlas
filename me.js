@@ -117,6 +117,18 @@ async function renderHeader(user) {
     document.getElementById("me-joined").innerHTML = data.createdAt?.toDate
       ? `<i class="fa-solid fa-calendar mr-1"></i>Joined ${data.createdAt.toDate().toLocaleDateString(undefined, { month: "long", year: "numeric" })}`
       : "";
+    // v3.3.2: friend-only "View My Profile" link — same ?u=username (preferred) / ?uid=
+    // fallback shape used by profile.js's own resumeCta and career.js's
+    // updatePublicTopbarProfileLink(), reusing the users/{uid} doc already fetched above
+    // instead of a second query. Owner keeps other paths to their own profile; this stays
+    // hidden for Owner Me (see the isOwner() check).
+    const profileLink = document.getElementById("me-view-profile-link");
+    if (!isOwner(user)) {
+      profileLink.href = data.username ? `profile.html?u=${encodeURIComponent(data.username)}` : `profile.html?uid=${encodeURIComponent(user.uid)}`;
+      profileLink.classList.remove("hidden");
+    } else {
+      profileLink.classList.add("hidden");
+    }
   } catch (err) {
     console.error("[me] header directory fetch failed:", err.code || err);
     document.getElementById("me-name").textContent = user.displayName || "User";
@@ -697,6 +709,27 @@ async function loadCapsulesSummary(user) {
   document.getElementById("capsules-ready-count").textContent = ready.length;
 }
 
+// ---- Friend Me cleanup (v3.3.2): Connections/Habits basic stats ----
+// Memories/Journal counts already show for everyone via renderGalleryAnalytics()/
+// renderJournalAnalytics() above — this only fills the two that were missing. Owner-hidden
+// (same isOwner(user) gate as renderExpenseAnalytics()/loadCapsulesSummary()), so Owner Me is
+// unchanged.
+async function renderFriendStats(user) {
+  const section = document.getElementById("friend-stats-section");
+  section.classList.toggle("hidden", isOwner(user));
+  if (isOwner(user)) return;
+  try {
+    const [friendsSnap, habits] = await Promise.all([
+      getDocs(collection(db, "friendships", user.uid, "friends")),
+      fetchMyCollection("habits"),
+    ]);
+    document.getElementById("friend-stat-connections").textContent = friendsSnap.size;
+    document.getElementById("friend-stat-habits").textContent = habits.length;
+  } catch (err) {
+    console.error("[me] friend stats fetch failed:", err.code || err);
+  }
+}
+
 // ---- Achievements ----
 
 function toDateKey(d) {
@@ -780,6 +813,7 @@ onAuthStateChanged(auth, (user) => {
   renderJournalAnalytics();
   loadGoals();
   loadCapsulesSummary(user);
+  renderFriendStats(user);
   renderAchievements();
 
   if (isOwner(user)) {

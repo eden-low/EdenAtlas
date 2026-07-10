@@ -145,6 +145,12 @@
         <section id="recent-memories-section" class="hidden">
             <p class="text-[10px] uppercase tracking-[0.2em] text-textGray font-code mb-3 px-1" data-i18n="home.recent_memories">Recent Memories</p>
             <div id="recent-memories-list" class="reveal-group grid grid-cols-1 sm:grid-cols-2 gap-3"></div>
+            <!-- v3.3.2: Friend Home polish — shown instead of the grid (never both) when a
+                 non-owner has nothing recent yet, rather than the section just vanishing.
+                 Owner keeps the original "hide the whole section" behavior unchanged. -->
+            <div id="recent-memories-empty" class="hidden reveal bg-cardBg/90 neon-border-purple rounded-2xl p-6 text-center">
+                <p class="text-sm text-textGray" data-i18n="home.no_recent_memories">No memories yet — moments you add will show up here.</p>
+            </div>
         </section>
 
         <!-- Continue Working: today's not-yet-done habits, an actionable nudge -->
@@ -178,6 +184,15 @@
                 <button id="qa-photo-btn" type="button" class="flex items-center gap-2 px-4 py-2.5 bg-cardBg/90 neon-border-purple rounded-xl text-sm text-white hover:border-neonPurple/40 transition-all">
                     <i data-lucide="plus" class="w-4 h-4 text-neonBlue"></i> <span data-i18n="home.upload_photo">Upload Photo</span>
                 </button>
+                <!-- v3.3.2: Friend Home polish — Connections/My Profile, shown only to a non-owner
+                     (see the isOwnerRole() toggle in the boot handler below). Owner's Quick
+                     Actions row is unchanged: these two stay hidden for the Owner. -->
+                <a id="qa-connections-btn" href="dashboard.html" class="hidden flex items-center gap-2 px-4 py-2.5 bg-cardBg/90 neon-border-purple rounded-xl text-sm text-white hover:border-neonPurple/40 transition-all">
+                    <i data-lucide="users" class="w-4 h-4 text-neonBlue"></i> <span data-i18n="home.view_connections">Connections</span>
+                </a>
+                <a id="qa-profile-btn" href="me.html" class="hidden flex items-center gap-2 px-4 py-2.5 bg-cardBg/90 neon-border-purple rounded-xl text-sm text-white hover:border-neonPurple/40 transition-all">
+                    <i data-lucide="user-circle" class="w-4 h-4 text-emerald-400"></i> <span data-i18n="home.view_my_profile">My Profile</span>
+                </a>
                 <a id="qa-capsule-btn" href="time-capsule.html?new=1" class="hidden flex items-center gap-2 px-4 py-2.5 bg-cardBg/90 neon-border-purple rounded-xl text-sm text-white hover:border-neonPurple/40 transition-all">
                     <i data-lucide="plus" class="w-4 h-4 text-neonViolet"></i> <span data-i18n="nav.time_capsule">Time Capsule</span>
                 </a>
@@ -260,6 +275,7 @@
                     <label class="flex items-center gap-1.5"><input type="radio" name="qa-journal-visibility" value="connections"> <span data-i18n="common.connections">Connections</span></label>
                     <label class="flex items-center gap-1.5"><input type="radio" name="qa-journal-visibility" value="private" checked> <span data-i18n="common.private">Private</span></label>
                 </div>
+                <p class="text-[10.5px] text-textGray/70 -mt-2" data-i18n="common.private_by_default_hint">Private by default. You can share with trusted connections anytime.</p>
                 <button type="submit" class="w-full px-5 py-2.5 bg-gradient-to-r from-neonViolet to-neonPurple rounded-xl text-xs font-cyber font-bold tracking-wider text-white hover:scale-105 transition-all" data-i18n="common.save">SAVE</button>
                 <p id="qa-journal-status" class="text-xs font-code text-textGray text-center"></p>
             </form>
@@ -299,6 +315,7 @@
                         <label class="flex items-center gap-1.5"><input type="radio" name="qa-photo-visibility" value="private" checked> <span data-i18n="common.private">Private</span></label>
                     </div>
                 </div>
+                <p class="text-[10.5px] text-textGray/70 -mt-2" data-i18n="common.private_by_default_hint">Private by default. You can share with trusted connections anytime.</p>
                 <button type="submit" class="w-full px-5 py-2.5 bg-gradient-to-r from-neonViolet to-neonPurple rounded-xl text-xs font-cyber font-bold tracking-wider text-white hover:scale-105 transition-all" data-i18n="common.upload">UPLOAD</button>
                 <p id="qa-photo-status" class="text-xs font-code text-textGray text-center"></p>
             </form>
@@ -399,6 +416,20 @@
             } catch (err) {
                 console.error(`[home] ${name} fetch failed:`, err.code || err);
                 return [];
+            }
+        }
+
+        // v3.3.2: resolves the signed-in user's own profile.html link — same ?u=username
+        // (preferred) / ?uid= fallback shape as profile.js's own resumeCta and career.js's
+        // updatePublicTopbarProfileLink(), so "My Profile" never has to expose email.
+        async function myProfileHref(user) {
+            try {
+                const snap = await getDoc(doc(db, "users", user.uid));
+                const username = snap.exists() ? snap.data().username : null;
+                return username ? `profile.html?u=${encodeURIComponent(username)}` : `profile.html?uid=${encodeURIComponent(user.uid)}`;
+            } catch (err) {
+                console.error("[home] profile href resolve failed:", err.code || err);
+                return `profile.html?uid=${encodeURIComponent(user.uid)}`;
             }
         }
 
@@ -541,6 +572,9 @@
 
         function renderRecentMemories(data) {
             const section = document.getElementById("recent-memories-section");
+            const listEl = document.getElementById("recent-memories-list");
+            const emptyEl = document.getElementById("recent-memories-empty");
+            const user = auth.currentUser;
             const latestPhoto = [...data.photos].sort((a, b) => (b.uploadedAt?.toMillis?.() || 0) - (a.uploadedAt?.toMillis?.() || 0))[0];
             const latestJournal = [...data.journals].sort((a, b) => (b.createdAt?.toMillis?.() || 0) - (a.createdAt?.toMillis?.() || 0))[0];
             const recentEvents = [...data.events].sort((a, b) => (b.date?.toMillis?.() || 0) - (a.date?.toMillis?.() || 0)).slice(0, 2);
@@ -551,11 +585,22 @@
             recentEvents.forEach((e) => cards.push(memoryCard("timeline.html", "fa-timeline", t("nav.journey"), e.title || t("common.untitled"))));
 
             if (!cards.length) {
-                section.classList.add("hidden");
+                // v3.3.2: Friend Home polish — a non-owner sees an intentional empty state
+                // instead of the section vanishing. Owner keeps the original hide-when-empty
+                // behavior unchanged.
+                if (user && !isOwnerRole(user)) {
+                    section.classList.remove("hidden");
+                    listEl.classList.add("hidden");
+                    emptyEl.classList.remove("hidden");
+                } else {
+                    section.classList.add("hidden");
+                }
                 return;
             }
             section.classList.remove("hidden");
-            document.getElementById("recent-memories-list").replaceChildren(...cards);
+            listEl.classList.remove("hidden");
+            emptyEl.classList.add("hidden");
+            listEl.replaceChildren(...cards);
         }
 
         // ---- This Month ----
@@ -896,6 +941,14 @@
             // stray full-nav leak on this one page. Same set, same gate.
             if (!isOwnerRole(user)) {
                 document.querySelectorAll("#all-pages-links [data-owner-only-link]").forEach((el) => el.classList.add("hidden"));
+            }
+            // v3.3.2: Friend Home polish — Connections/My Profile quick actions, friend-only
+            // (Owner's Quick Actions row is unchanged; these two stay hidden for the Owner).
+            const isFriendRole = !isOwnerRole(user);
+            document.getElementById("qa-connections-btn").classList.toggle("hidden", !isFriendRole);
+            document.getElementById("qa-profile-btn").classList.toggle("hidden", !isFriendRole);
+            if (isFriendRole) {
+                myProfileHref(user).then((href) => { document.getElementById("qa-profile-btn").href = href; });
             }
             tickClock();
             setInterval(tickClock, 30000);

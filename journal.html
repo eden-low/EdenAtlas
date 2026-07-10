@@ -105,7 +105,16 @@
     </section>
 
     <div id="journal-grid" class="grid grid-cols-1 md:grid-cols-2 gap-4"></div>
-    <p id="journal-empty" class="hidden text-center text-xs font-code text-textGray py-10" data-i18n="journal.no_entries">Write something today. Your future self will thank you.</p>
+    <div id="journal-empty" class="hidden text-center py-14">
+      <div class="w-14 h-14 mx-auto rounded-2xl bg-neonPurple/10 text-neonPurple flex items-center justify-center text-xl mb-4">
+        <i class="fa-solid fa-book"></i>
+      </div>
+      <p class="text-sm text-white font-cyber font-semibold" data-i18n="journal.empty_title">Write your first journal entry.</p>
+      <p class="text-xs font-code text-textGray mt-1.5" data-i18n="journal.no_entries">Write something today. Your future self will thank you.</p>
+      <button id="journal-empty-cta" type="button" class="hidden mt-5 px-5 py-2.5 bg-gradient-to-r from-neonViolet to-neonPurple rounded-xl text-xs font-cyber font-bold tracking-wider text-white hover:scale-105 transition-all">
+        <i class="fa-solid fa-plus mr-1.5"></i><span data-i18n="journal.write_journal_cta">Write Journal</span>
+      </button>
+    </div>
   </main>
 
   <!-- New Entry modal -->
@@ -136,6 +145,7 @@
             <label class="flex items-center gap-1.5"><input type="radio" name="journal-visibility" value="private" checked> <span data-i18n="common.private">Private</span></label>
           </div>
         </div>
+        <p class="text-[10.5px] text-textGray/70 -mt-2" data-i18n="common.private_by_default_hint">Private by default. You can share with trusted connections anytime.</p>
         <div>
           <label class="block text-xs font-code text-textGray mb-1.5" for="journal-tags">Tags <span class="text-textGray/60">(comma separated)</span></label>
           <input id="journal-tags" type="text" placeholder="work, coding, family" class="w-full bg-darkBg/60 border border-borderNeon rounded-lg px-3 py-2 text-sm text-white placeholder:text-textGray/60">

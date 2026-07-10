@@ -57,6 +57,12 @@
               <span id="me-location"></span>
               <span id="me-joined"></span>
             </div>
+            <!-- v3.3.2: friend-only self-profile link (see the isOwner() gate in me.js's
+                 renderHeader()) — the Owner already has other ways to reach their own profile
+                 (resume.html's CTA, Search People), so this stays hidden for Owner Me. -->
+            <a id="me-view-profile-link" href="#" class="hidden mt-2 inline-flex items-center gap-1.5 text-xs font-code text-neonPurple hover:underline">
+              <i class="fa-solid fa-arrow-up-right-from-square text-[10px]"></i> <span data-i18n="me.view_my_profile">View My Profile</span>
+            </a>
           </div>
         </div>
         <div id="auth-control" class="flex items-center gap-3"></div>
@@ -95,6 +101,17 @@
         <div class="grid grid-cols-2 gap-4 text-sm">
           <div><p class="text-textGray text-xs" data-i18n="me.capsules_sealed_count">Sealed</p><p id="capsules-sealed-count" class="font-code font-semibold text-xl mt-1">&mdash;</p></div>
           <div><p class="text-textGray text-xs" data-i18n="me.capsules_ready_count">Ready to open</p><p id="capsules-ready-count" class="font-code font-semibold text-xl mt-1">&mdash;</p></div>
+        </div>
+      </section>
+
+      <!-- v3.3.2: friend-only basic stats (Connections/Habits) — Memories/Journal counts already
+           show for everyone via Gallery/Journal Analytics below, so this only adds the two that
+           were missing. Hidden for Owner (see me.js's renderFriendStats()); Owner Me is unchanged. -->
+      <section id="friend-stats-section" class="hidden reveal bg-cardBg/90 neon-border-purple rounded-2xl p-6">
+        <p class="text-[10px] uppercase tracking-[0.2em] text-textGray font-code mb-4" data-i18n="me.my_stats">My Stats</p>
+        <div class="grid grid-cols-2 gap-4 text-sm">
+          <div><p class="text-textGray text-xs" data-i18n="home.connections_stat">Connections</p><p id="friend-stat-connections" class="font-code font-semibold text-xl mt-1">&mdash;</p></div>
+          <div><p class="text-textGray text-xs" data-i18n="nav.habits">Habits</p><p id="friend-stat-habits" class="font-code font-semibold text-xl mt-1">&mdash;</p></div>
         </div>
       </section>
 

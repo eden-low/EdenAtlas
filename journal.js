@@ -36,6 +36,7 @@ const accessNote = document.getElementById("journal-access-note");
 const searchInput = document.getElementById("journal-search");
 const journalGrid = document.getElementById("journal-grid");
 const journalEmpty = document.getElementById("journal-empty");
+const journalEmptyCta = document.getElementById("journal-empty-cta");
 const filterTabs = document.querySelectorAll(".filter-tab");
 const privateTab = document.querySelector('.filter-tab[data-filter="private"]');
 const connectionsTab = document.querySelector('.filter-tab[data-filter="connections"]');
@@ -351,6 +352,7 @@ function renderSignedOut() {
   privateTab.classList.add("hidden");
   connectionsTab.classList.add("hidden");
   newJournalBtn.classList.add("hidden");
+  journalEmptyCta.classList.add("hidden");
   if (activeVisibility === "private" || activeVisibility === "connections") setVisibilityFilter("all");
 }
 
@@ -365,6 +367,7 @@ async function renderSignedIn(user) {
 
   const mayParticipate = canParticipate();
   newJournalBtn.classList.toggle("hidden", !mayParticipate);
+  journalEmptyCta.classList.toggle("hidden", !mayParticipate);
   maybeAutoOpenFromQuickAdd(mayParticipate);
 }
 
@@ -398,6 +401,7 @@ function closeModal() {
 
 newJournalBtn.addEventListener("click", () => populateCollectionSelect(document.getElementById("journal-collection")));
 newJournalBtn.addEventListener("click", openModal);
+journalEmptyCta.addEventListener("click", () => { populateCollectionSelect(document.getElementById("journal-collection")); openModal(); });
 journalModalClose.addEventListener("click", closeModal);
 journalModalBackdrop.addEventListener("click", closeModal);
 
