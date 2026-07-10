@@ -24,11 +24,30 @@ const DRAWER_LINKS = [
   { href: "me.html", icon: "fa-circle-user", key: "nav.me", label: "Me" },
 ];
 
-// v3.2 "Light EdenAtlas": non-owner drawer drops the owner-heavy modules (Career/Finance/
-// Reports/Time Capsule/Constellation) — same set js/sidebar.js hides, direct URLs still work
-// via auth-guard.js's data-owner-only redirect. Habits isn't in DRAWER_LINKS at all today (it's
-// reachable via bottom nav/quick add already), so no extra filtering needed for it here.
+// v3.2 "Light EdenAtlas" — still used to filter QUICK_ADD_ITEMS below (Career/Finance/Reports/
+// Time Capsule/Constellation, same owner-heavy set js/sidebar.js hides); direct URLs still work
+// via auth-guard.js's data-owner-only redirect.
 const OWNER_ONLY_HREFS = new Set(["resume.html", "expenses.html", "reports.html", "time-capsule.html", "constellation.html"]);
+
+// v3.3.3: a dedicated non-owner drawer list, matching js/sidebar.js's LIGHT_LINKS order and
+// content exactly. Previously the Friend/Viewer drawer was DRAWER_LINKS filtered by
+// OWNER_ONLY_HREFS, which (a) preserved DRAWER_LINKS' owner-oriented order — Journey landed
+// after Inbox instead of after Journal — and (b) never carried Habits at all, since Habits was
+// never in DRAWER_LINKS in the first place (v3.3.2's audit flagged both as a desktop/mobile
+// nav inconsistency). A dedicated array fixes both while leaving DRAWER_LINKS and the Owner's
+// drawer completely untouched.
+const LIGHT_DRAWER_LINKS = [
+  { href: "index.html", icon: "fa-house", key: "nav.home", label: "Home" },
+  { href: "gallery.html", icon: "fa-images", key: "nav.memories", label: "Memories" },
+  { href: "atlas.html", icon: "fa-map-location-dot", key: "nav.atlas", label: "Atlas" },
+  { href: "journal.html", icon: "fa-book", key: "nav.journal", label: "Journal" },
+  { href: "timeline.html", icon: "fa-timeline", key: "nav.journey", label: "Journey" },
+  { href: "calendar.html", icon: "fa-calendar-days", key: "nav.calendar", label: "Calendar" },
+  { href: "dashboard.html", icon: "fa-chart-line", key: "nav.people", label: "Connections" },
+  { href: "notifications.html", icon: "fa-bell", key: "nav.inbox", label: "Inbox" },
+  { href: "habits.html", icon: "fa-list-check", key: "nav.habits", label: "Habits" },
+  { href: "me.html", icon: "fa-circle-user", key: "nav.me", label: "Me" },
+];
 
 const BOTTOM_ITEMS = [
   { href: "index.html", icon: "fa-house", key: "mobilenav.home", label: "Home" },
@@ -150,7 +169,7 @@ function topBarHTML() {
 }
 
 function drawerHTML(isOwnerRole, user) {
-  const visibleLinks = isOwnerRole ? DRAWER_LINKS : DRAWER_LINKS.filter((item) => !OWNER_ONLY_HREFS.has(item.href));
+  const visibleLinks = isOwnerRole ? DRAWER_LINKS : LIGHT_DRAWER_LINKS;
   // `.mobile-drawer-link`/`.mobile-drawer-link.active` are real semantic classes with hard CSS
   // rules in styles.css — the active pill used to be rendered *only* via a Tailwind utility
   // ternary (`text-neonPurple bg-neonPurple/10` vs `text-white hover:bg-darkBg/40`), which is

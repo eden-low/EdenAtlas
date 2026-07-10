@@ -42,11 +42,16 @@ const SECONDARY_LINKS = [
 // Time Capsule/Constellation (owner-heavy modules) are hidden from nav entirely, not deleted
 // (direct URLs still work, backstopped by auth-guard.js's data-owner-only redirect). One flat
 // list, no primary/secondary split — short enough not to need it.
+// v3.3.3: Journey (timeline.html) added — it was missing here even though js/mobile-nav.js's
+// drawer already showed it to a Friend, a desktop/mobile inconsistency flagged in v3.3.2's
+// audit. timeline.js is participant-scoped (canParticipate() writes, uid-owned reads) with no
+// Owner-only data, same as every other module already in this list.
 const LIGHT_LINKS = [
   { href: "index.html", icon: "home", key: "nav.home", label: "Home" },
   { href: "gallery.html", icon: "image", key: "nav.memories", label: "Memories" },
   { href: "atlas.html", icon: "map", key: "nav.atlas", label: "Atlas" },
   { href: "journal.html", icon: "book-open", key: "nav.journal", label: "Journal" },
+  { href: "timeline.html", icon: "compass", key: "nav.journey", label: "Journey" },
   { href: "calendar.html", icon: "calendar-days", key: "nav.calendar", label: "Calendar" },
   { href: "dashboard.html", icon: "users", key: "nav.people", label: "Connections" },
   { href: "notifications.html", icon: "bell", key: "nav.inbox", label: "Inbox" },
