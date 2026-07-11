@@ -637,6 +637,7 @@ into a standard resume formula, HTML + locale keys only (no `career.js`, rules, 
 changes; the CMS sections and viewer/owner modes are untouched). New section order in
 `#career-main`: `#profile` (name + one-line headline + inline contact row with email/phone/
 GitHub/portfolio/location + a "Profile Summary" block), `#education` (new standalone section,
+moved out of the profile card — degree | institution | date + CGPA/coursework bullets),
 `#experience` (CMS), `#projects` (CMS), `#events` Leadership & Events (moved after Projects; the
 IBT 2026 Chairperson entry is now a featured block with scope/impact bullets — ~300 students,
 40+ committee — the other entries stay compact rows), `#certificates` (CMS), `#inventory` Awards
