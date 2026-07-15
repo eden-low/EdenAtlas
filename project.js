@@ -5,6 +5,12 @@
 import { db } from "./firebase-init.js";
 import { init as i18nInit, getLang, setLang, t } from "./js/i18n.js";
 import { collection, query, where, getDocs } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-firestore.js";
+// Canonical project identity (name/tag/slug) — single source of truth shared with portfolio.js /
+// career.js. The deep case-study narratives (overview/investigation/solution/…) below are
+// case-study-specific and stay here; only the duplicated name/tag now come from the shared source.
+import { PROJECTS } from "./js/resume-data.js";
+
+const SHARED_PROJECTS = Object.fromEntries(PROJECTS.map((p) => [p.slug, p]));
 
 function L() {
   return getLang() === "zh-CN" ? "zh" : "en";
@@ -34,10 +40,10 @@ const CATEGORY_LABEL = {
 const ORDER = ["edenatlas", "utar-epms", "enterprise-ai-ops"];
 
 // ==================== Curated, verified fallback case studies ====================
+// name/tag come from the shared source (SHARED_PROJECTS); each entry here holds only the
+// case-study-specific tech list + narrative sections.
 const CASE_STUDIES = {
   edenatlas: {
-    name: { en: "EdenAtlas", zh: "EdenAtlas" },
-    tag: { en: "Personal life platform", zh: "个人生活平台" },
     tech: ["HTML/CSS/JS", "Firebase Auth", "Firestore", "Firebase Storage", "PWA"],
     overview: {
       en: "EdenAtlas is a private, login-first personal platform that brings memories, journaling, career and daily life into one calm, unified home.",
@@ -69,8 +75,6 @@ const CASE_STUDIES = {
     },
   },
   "utar-epms": {
-    name: { en: "UTAR Event Planning Management System", zh: "UTAR 活动策划管理系统" },
-    tag: { en: "University coursework system", zh: "大学课程项目系统" },
     tech: ["System Analysis", "Database Design", "Web"],
     overview: {
       en: "A university Event Planning Management System built as coursework to digitize how campus events are proposed, approved and organized.",
@@ -102,8 +106,6 @@ const CASE_STUDIES = {
     },
   },
   "enterprise-ai-ops": {
-    name: { en: "Enterprise AI Platform & Operations Improvements", zh: "企业 AI 平台与运维改进" },
-    tag: { en: "Internship (anonymized)", zh: "实习（已匿名）" },
     tech: ["TypeScript", "Django REST Framework", "Vue 3", "PostgreSQL", "MinIO", "Redis", "Celery", "Git"],
     overview: {
       en: "During an internship I worked across several internal AI platforms — an identity-verification review tool and an AutoML / chat-bot administration system — improving review workflows, analytics reliability and data operations.",
@@ -148,6 +150,7 @@ function biField(doc, base) {
 // curated fallback fills in. Returns null only when neither source knows this slug.
 function buildCaseStudy(cmsDoc) {
   const base = CASE_STUDIES[slug] || null;
+  const shared = SHARED_PROJECTS[slug] || null; // canonical name/tag
   if (!cmsDoc && !base) return null;
 
   const cms = cmsDoc
@@ -170,8 +173,8 @@ function buildCaseStudy(cmsDoc) {
   const tech = (cms.tech && cms.tech.length) ? cms.tech : (base ? base.tech : []);
 
   return {
-    name: has(cms.name) ? cms.name : (base ? base.name : { en: "", zh: "" }),
-    tag: has(cms.tag) ? cms.tag : (base ? base.tag : { en: "", zh: "" }),
+    name: has(cms.name) ? cms.name : (shared ? shared.name : { en: "", zh: "" }),
+    tag: has(cms.tag) ? cms.tag : (shared ? shared.tag : { en: "", zh: "" }),
     tech,
     overview: mergeText("overview"),
     problem: mergeText("problem"),
@@ -196,9 +199,9 @@ function section(labelKey, value) {
 }
 
 function navCard(targetSlug, dir) {
-  // Neighbour names come from the static CASE_STUDIES fallback (not CMS), but build via DOM
+  // Neighbour names come from the shared canonical source (not CMS), but build via DOM
   // + property assignment for uniform safety and so the href can never be attribute-injected.
-  const s = CASE_STUDIES[targetSlug];
+  const s = SHARED_PROJECTS[targetSlug] || { name: { en: targetSlug, zh: targetSlug } };
   const label = dir === "prev" ? t("project.prev") : t("project.next");
   const align = dir === "prev" ? "" : "sm:text-right sm:items-end";
   const a = h("a", { class: `card-lift flex flex-col ${align} gap-1 bg-cardBg/70 border border-borderNeon rounded-xl p-4 hover:border-neonPurple transition-all`, children: [

@@ -201,7 +201,8 @@
     "resume_connections_notice": "This resume is only visible to trusted connections.",
     "resume_not_found": "This resume could not be found.",
     "signin_required_notice": "Sign in to view this resume.",
-    "view_profile_link": "View Profile"
+    "view_profile_link": "View Profile",
+    "back_to_portfolio": "Back to Portfolio"
   },
   "portfolio": {
     "brand_tagline": "Portfolio",
@@ -211,7 +212,7 @@
     "nav_resume": "Résumé",
     "enter_app": "Enter EdenAtlas",
     "hero_cta_work": "View Selected Work",
-    "hero_cta_resume": "Download Résumé",
+    "hero_cta_resume": "View / Download Résumé",
     "open_to_opportunities": "Open to opportunities",
     "snapshot_title": "At a glance",
     "snap_focus_label": "Focus",

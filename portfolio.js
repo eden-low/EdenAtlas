@@ -11,6 +11,9 @@
 import { db } from "./firebase-init.js";
 import { init as i18nInit, getLang, setLang, t } from "./js/i18n.js";
 import { collection, query, where, getDocs } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-firestore.js";
+// Canonical fallback content — single source of truth shared with career.js / resume.html.
+// EXPERIENCE/PROJECTS were previously duplicated here as local FALLBACK_* constants; LEADERSHIP too.
+import { EXPERIENCE as FALLBACK_EXPERIENCE, PROJECTS as FALLBACK_PROJECTS, LEADERSHIP } from "./js/resume-data.js";
 
 // "en" | "zh" — collapse the app's zh-CN locale code to the key our bilingual data objects use.
 function L() {
@@ -79,128 +82,6 @@ const SNAPSHOT = {
   location: { en: "Kuching, Sarawak, Malaysia", zh: "马来西亚 · 砂拉越 · 古晋" },
   corefocus: { en: "Web dev, data workflows, system usability", zh: "Web 开发、数据流程、系统可用性" },
 };
-
-const FALLBACK_PROJECTS = [
-  {
-    slug: "edenatlas",
-    name: { en: "EdenAtlas", zh: "EdenAtlas" },
-    tag: { en: "Personal life platform", zh: "个人生活平台" },
-    problem: {
-      en: "Memories, journaling, career and daily life were scattered across half a dozen apps with no private, unified home.",
-      zh: "回忆、日记、职业与日常散落在多个 App 中，没有一个私密、统一的入口。",
-    },
-    role: {
-      en: "Sole designer and developer — built the entire product end to end.",
-      zh: "独立设计与开发，端到端完成整个产品。",
-    },
-    outcome: {
-      en: "A login-first, role-based platform (Owner / Friend / Public) with a public résumé surface, English/Chinese i18n and an installable PWA.",
-      zh: "一个登录优先、基于角色（Owner / Friend / Public）的平台，带公开简历入口、中英双语与可安装 PWA。",
-    },
-    tech: ["HTML/CSS/JS", "Firebase Auth", "Firestore", "Storage"],
-    featured: true,
-  },
-  {
-    slug: "utar-epms",
-    name: { en: "UTAR Event Planning Management System", zh: "UTAR 活动策划管理系统" },
-    tag: { en: "University coursework system", zh: "大学课程项目系统" },
-    problem: {
-      en: "University event planning relied on manual, fragmented steps that were hard to coordinate and track.",
-      zh: "大学活动策划依赖手工、割裂的步骤，难以协调与跟踪。",
-    },
-    role: {
-      en: "Contributed to requirements analysis, system and database design, and implementation.",
-      zh: "参与需求分析、系统与数据库设计及实现。",
-    },
-    outcome: {
-      en: "A structured event planning and approval system covering the core user roles and workflow.",
-      zh: "一个覆盖核心用户角色与流程的结构化活动策划与审批系统。",
-    },
-    tech: ["System Analysis", "Database Design", "Web"],
-    featured: true,
-  },
-  {
-    slug: "enterprise-ai-ops",
-    name: { en: "Enterprise AI Platform & Operations Improvements", zh: "企业 AI 平台与运维改进" },
-    tag: { en: "Internship (anonymized)", zh: "实习（已匿名）" },
-    problem: {
-      en: "Internal review and analytics workflows were hard to manage — some categories were hard-coded, historical data was inconsistent, and repeated CSV processing didn't scale.",
-      zh: "内部审核与分析流程难以管理——部分分类硬编码、历史数据不一致，且重复的 CSV 处理难以扩展。",
-    },
-    role: {
-      en: "Investigated existing frontend, backend, database and workflow logic; implemented scoped improvements and tested consistency.",
-      zh: "梳理既有前端、后端、数据库与流程逻辑；实现范围可控的改进并验证一致性。",
-    },
-    outcome: {
-      en: "A more maintainable review and reporting workflow with less unnecessary reprocessing — without exposing internal business data.",
-      zh: "更易维护的审核与报表流程，减少不必要的重复处理——且不暴露任何内部业务数据。",
-    },
-    tech: ["TypeScript", "Django REST", "Vue 3", "PostgreSQL", "Redis", "Celery"],
-    featured: true,
-  },
-];
-
-const FALLBACK_EXPERIENCE = [
-  {
-    role: { en: "Technical & Operations Intern", zh: "技术与运维实习生" },
-    company: { en: "AI technology company", zh: "AI 科技公司" },
-    dates: "Jun 2026 – Present",
-    location: { en: "Malaysia", zh: "马来西亚" },
-    bullets: [
-      {
-        en: "Delivered workflow and interface improvements for internal AI verification and administration systems, including a dedicated review-discussion workflow and clearer worker identification.",
-        zh: "为内部 AI 核验与管理系统交付流程与界面改进，包括专门的审核讨论流程与更清晰的操作员标识。",
-      },
-      {
-        en: "Improved analytics reliability by replacing hard-coded category logic with configurable rules and validating consistency between APIs, dashboard totals and detailed classifications.",
-        zh: "以可配置规则替换硬编码分类逻辑，并校验 API、看板汇总与明细分类之间的一致性，提升分析可靠性。",
-      },
-      {
-        en: "Optimized data operations through incremental CSV synchronization, database indexing and a controlled full-refresh fallback, followed by data-integrity checks.",
-        zh: "通过增量 CSV 同步、数据库索引与可控的全量刷新兜底优化数据处理，并进行数据完整性校验。",
-      },
-      {
-        en: "Contributed across frontend, backend and operational workflows using TypeScript, Django-based services, Git and database validation while supporting AI annotation and dataset quality control.",
-        zh: "使用 TypeScript、基于 Django 的服务、Git 与数据库校验，横跨前端、后端与运维流程贡献，同时支持 AI 标注与数据集质量控制。",
-      },
-    ],
-    caseSlug: "enterprise-ai-ops",
-  },
-];
-
-const LEADERSHIP = [
-  {
-    role: { en: "Chairperson", zh: "主席" },
-    event: { en: "UTAR Orientation Telematch (IBT 2026)", zh: "UTAR 迎新 Telematch（IBT 2026）" },
-    date: "Mar 2026",
-    bullets: [
-      {
-        en: "Coordinated an orientation event for ~300 freshmen and ~500 total participants including committee and helpers.",
-        zh: "统筹面向约 300 名新生、连同委员与工作人员共约 500 人的迎新活动。",
-      },
-      {
-        en: "Led a 41–42-member committee through preparation, rehearsals and event-day execution.",
-        zh: "带领 41–42 人的委员会完成筹备、彩排与活动当天的执行。",
-      },
-      {
-        en: "Managed cross-department communication, scheduling and operational decisions.",
-        zh: "负责跨部门沟通、排期与运营决策。",
-      },
-    ],
-  },
-  {
-    role: { en: "Chairperson", zh: "主席" },
-    event: { en: "Buddhist Society Welcoming Night", zh: "佛学会迎新之夜" },
-    date: "Oct 2024",
-    bullets: [],
-  },
-  {
-    role: { en: "Program Leader", zh: "节目负责人" },
-    event: { en: "ISC 2025", zh: "ISC 2025" },
-    date: "2025",
-    bullets: [],
-  },
-];
 
 const SKILLS = [
   { title: { en: "Web Development", zh: "Web 开发" }, items: ["HTML", "CSS", "JavaScript", "Firebase (Auth / Firestore / Storage)", "Responsive UI"] },
@@ -376,7 +257,9 @@ function renderExperience() {
 }
 
 function renderLeadership() {
-  document.getElementById("leadership-list").innerHTML = LEADERSHIP.map((l) => {
+  // Shared LEADERSHIP holds the full résumé list; the portfolio shows only the curated featured
+  // subset (its original three), while resume.html renders every entry.
+  document.getElementById("leadership-list").innerHTML = LEADERSHIP.filter((l) => l.featured).map((l) => {
     const bullets = l.bullets && l.bullets.length
       ? `<ul class="mt-3 space-y-1.5 text-sm text-textGray leading-relaxed list-disc list-inside">
            ${l.bullets.map((b) => `<li>${esc(pick(b))}</li>`).join("")}

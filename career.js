@@ -18,8 +18,10 @@ import {
   serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-firestore.js";
 import { ref, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-storage.js";
-import { getLang, t as i18nT } from "./js/i18n.js";
+import { getLang, setLang, t as i18nT } from "./js/i18n.js";
 import { resolveDisplayName } from "./js/identity.js";
+// Canonical résumé content — single source of truth shared with portfolio.js.
+import { PROFILE, EDUCATION, EXPERIENCE, PROJECTS, LEADERSHIP, RESUME_SKILLS } from "./js/resume-data.js";
 
 const authControl = document.getElementById("auth-control");
 
@@ -83,6 +85,7 @@ const targetUidParam = urlParams.get("uid");
 const hasTargetParam = !!(targetUsernameParam || targetUidParam);
 
 let targetUid = null;
+let targetIsOwner = false; // the résumé being viewed belongs to the app Owner (gates fallback content)
 let canEdit = false; // true only when the signed-in user IS the app Owner AND is viewing their own uid
 let access = { pageAccessible: false, includeConnections: false, includeAllMine: false };
 
@@ -139,6 +142,22 @@ async function resolveTargetUid() {
   return null;
 }
 
+// Canonical public résumé fallback: with no ?u=/?uid= param and nobody signed in, resume.html is
+// the app's public recruiter résumé — resolve the one app Owner's uid so an anonymous HR visitor
+// sees the Owner's public career profile instead of a "sign in to view" wall. public_profiles is
+// world-readable (firestore.rules) and holds a `role` mirror, so this needs no auth. Only the
+// Owner ever has role == "owner"; if somehow none is found we fall through to the not_found notice.
+let resolvedViaOwnerFallback = false;
+async function resolveOwnerUidFallback() {
+  try {
+    const snap = await getDocs(query(collection(db, "public_profiles"), where("role", "==", "owner")));
+    if (!snap.empty) return snap.docs[0].id;
+  } catch (err) {
+    console.error("[career] owner fallback lookup failed:", err.code || err);
+  }
+  return null;
+}
+
 // Signed in: read the richer users/{uid} doc (auth-required, has careerVisibility as the source
 // of truth). Signed out: fall back to the world-readable public_profiles/{uid} mirror.
 async function fetchPersonForTarget(uid) {
@@ -167,7 +186,14 @@ async function isAcceptedFriendOfTarget(uid) {
 }
 
 function computeAccess({ isSelf, careerVisibility, isFriend }) {
-  if (isSelf) return { pageAccessible: true, includeConnections: true, includeAllMine: true };
+  // Unified résumé (Login-Alignment / Public-Résumé pass): the Owner's own preview must show the
+  // SAME public-filtered content a logged-out recruiter sees — "what I see as my public résumé"
+  // == what recruiters see. So `isSelf` no longer grants `includeAllMine`/`includeConnections`;
+  // it's treated exactly like an anonymous public viewer (public items only). The Owner keeps
+  // edit affordances via `canEdit` (a separate gate), and can still Add new items — but a career
+  // item marked Private/Trusted-Connections simply won't appear in the résumé for anyone, Owner
+  // included. In practice every career item defaults to Public, so this hides nothing today.
+  if (isSelf) return { pageAccessible: true, includeConnections: false, includeAllMine: false };
   const vis = careerVisibility || "private";
   if (vis === "public") return { pageAccessible: true, includeConnections: isFriend, includeAllMine: false };
   if (vis === "connections") return { pageAccessible: isFriend, includeConnections: isFriend, includeAllMine: false };
@@ -268,6 +294,154 @@ let cachedCertificates = [];
 let cachedAwards = [];
 let activeProjectCategory = "all";
 
+// ---- Canonical fallback content (single source: js/resume-data.js) ----
+// The Career CMS is authoritative; these render ONLY when a collection returns no public items
+// (today the deployed CMS is empty, so this is the live path). Adapted from the shared nested
+// { en, zh } records into this page's flat CMS-doc render shape, so there is exactly ONE
+// definition of each Experience/Project record (shared with portfolio.js). Marked `_fallback` so
+// Owner edit/delete controls are suppressed (no real Firestore doc backs them); the Owner can
+// still "Add Experience/Project" to create real docs that supersede these.
+
+// Bilingual pick for a { en, zh } object (fallback content only; CMS docs use flat _en/_zh).
+function biBullet(b) {
+  return (getLang() === "zh-CN" ? (b.zh || b.en) : b.en) || "";
+}
+
+const FALLBACK_EXPERIENCES = EXPERIENCE.map((e) => ({
+  id: "fallback-exp-" + (e.caseSlug || e.role.en),
+  _fallback: true,
+  role_en: e.role.en,
+  role_zh: e.role.zh,
+  company_en: e.company.en,
+  company_zh: e.company.zh,
+  datesText: e.dates,
+  location_en: e.location.en,
+  location_zh: e.location.zh,
+  bullets: e.bullets,
+}));
+
+const FALLBACK_PROJECTS = PROJECTS.map((p) => ({
+  id: "fallback-proj-" + p.slug,
+  _fallback: true,
+  slug: p.slug,
+  category: p.category,
+  featured: !!p.featured,
+  title_en: p.name.en,
+  title_zh: p.name.zh,
+  summary_en: p.tag.en,
+  summary_zh: p.tag.zh,
+  description_en: [p.problem?.en, p.role?.en, p.outcome?.en].filter(Boolean).join("\n\n"),
+  description_zh: [p.problem?.zh, p.role?.zh, p.outcome?.zh].filter(Boolean).join("\n\n"),
+  techStack: p.tech || [],
+}));
+
+// ---- Static résumé sections (Profile Summary / Education / Leadership / Skills & Languages),
+// rendered from the shared bilingual source so the WHOLE résumé switches EN⇄中文 without a reload
+// (re-run from the eden:langchange listener). These describe the app Owner, so they only populate
+// for the Owner's résumé (targetIsOwner) — a non-owner viewing their own empty résumé gets blanks,
+// never the Owner's prose. Section headers stay static data-i18n in resume.html. ----
+function biObj(o) {
+  if (!o) return "";
+  return (getLang() === "zh-CN" ? (o.zh || o.en) : o.en) || "";
+}
+
+function renderResumeProfile() {
+  const headline = document.getElementById("resume-headline");
+  if (headline) headline.textContent = biObj(PROFILE.headline);
+  const summary = document.getElementById("resume-summary");
+  if (summary) summary.textContent = biObj(PROFILE.summary);
+  const loc = document.getElementById("resume-location");
+  if (loc) loc.textContent = biObj(PROFILE.location);
+}
+
+function renderEducation() {
+  const listEl = document.getElementById("education-list");
+  if (!listEl) return;
+  listEl.replaceChildren(...EDUCATION.map((ed) => {
+    const el = document.createElement("div");
+    el.className = "bg-darkBg/60 border border-borderNeon rounded-xl p-5";
+    const bullets = ed.bullets.map((b) => `<li>${biObj(b)}</li>`).join("");
+    el.innerHTML = `
+      <div class="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-1">
+        <div class="min-w-0">
+          <p class="font-cyber font-bold text-sm text-white">${biObj(ed.degree)}</p>
+          <p class="text-xs text-neonPurple font-code mt-0.5">${biObj(ed.institution)}</p>
+        </div>
+        <span class="text-[11px] font-code text-textGray flex-shrink-0">${ed.dates}</span>
+      </div>
+      ${bullets ? `<ul class="mt-3 text-xs text-textGray space-y-1 list-disc list-inside leading-relaxed">${bullets}</ul>` : ""}`;
+    return el;
+  }));
+}
+
+function renderLeadershipResume() {
+  const listEl = document.getElementById("leadership-list");
+  if (!listEl) return;
+  // Entries with bullets render as a detailed card, entries without as compact divide-y rows —
+  // matching resume.html's original featured-block + row-list layout (and its print selectors).
+  const detailed = LEADERSHIP.filter((l) => l.bullets && l.bullets.length);
+  const compact = LEADERSHIP.filter((l) => !(l.bullets && l.bullets.length));
+  const parts = detailed.map((l) => {
+    const bullets = l.bullets.map((b) => `<li>${biObj(b)}</li>`).join("");
+    return `
+      <div class="bg-darkBg/60 border border-borderNeon rounded-xl p-5">
+        <div class="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-1">
+          <div class="min-w-0">
+            <p class="font-cyber font-bold text-sm text-white">${biObj(l.role)}</p>
+            <p class="text-xs text-neonPurple font-code mt-0.5">${biObj(l.event)}</p>
+          </div>
+          <span class="text-[11px] font-code text-textGray flex-shrink-0">${l.date}</span>
+        </div>
+        <ul class="mt-3 text-xs text-textGray space-y-1 list-disc list-inside leading-relaxed">${bullets}</ul>
+      </div>`;
+  });
+  if (compact.length) {
+    const rows = compact.map((l) => `
+      <div class="flex items-center gap-3 py-3">
+        <i class="fa-solid fa-user-group text-neonBlue text-sm flex-shrink-0"></i>
+        <span class="text-sm text-white flex-1">${biObj(l.role)} &mdash; ${biObj(l.event)}</span>
+        <span class="text-[11px] font-code text-textGray flex-shrink-0">${l.date}</span>
+      </div>`).join("");
+    parts.push(`<div class="mt-4 divide-y divide-borderNeon/40">${rows}</div>`);
+  }
+  listEl.innerHTML = parts.join("");
+}
+
+function renderResumeSkills() {
+  const listEl = document.getElementById("skills-list");
+  if (!listEl) return;
+  listEl.innerHTML = RESUME_SKILLS.map((g) => {
+    const pills = g.items.map((it) => {
+      const label = typeof it === "string" ? it : biObj(it);
+      return `<span class="px-3 py-1.5 rounded-full bg-darkBg/60 border border-borderNeon text-xs font-code text-textGray">${label}</span>`;
+    }).join("");
+    return `
+      <div class="flex flex-col sm:flex-row sm:items-baseline gap-2 sm:gap-4">
+        <span class="w-48 flex-shrink-0 font-cyber font-bold text-xs text-white tracking-wider">${i18nT(g.labelKey)}</span>
+        <div class="flex flex-wrap gap-2">${pills}</div>
+      </div>`;
+  }).join("");
+}
+
+function renderStaticResumeSections() {
+  if (!targetIsOwner) {
+    const headline = document.getElementById("resume-headline");
+    if (headline) headline.textContent = "";
+    const summary = document.getElementById("resume-summary");
+    if (summary) summary.textContent = "";
+    const loc = document.getElementById("resume-location");
+    if (loc) loc.textContent = "";
+    document.getElementById("education-list")?.replaceChildren();
+    document.getElementById("leadership-list")?.replaceChildren();
+    document.getElementById("skills-list")?.replaceChildren();
+    return;
+  }
+  renderResumeProfile();
+  renderEducation();
+  renderLeadershipResume();
+  renderResumeSkills();
+}
+
 async function loadAll() {
   [cachedExperiences, cachedProjects, cachedCertificates, cachedAwards] = await Promise.all([
     fetchCareerFor("career_experiences"),
@@ -275,6 +449,13 @@ async function loadAll() {
     fetchCareerFor("career_certificates"),
     fetchCareerFor("career_awards"),
   ]);
+  // Per-collection fallback so partial CMS population never blanks an unrelated section — but only
+  // for the app Owner's résumé (this fallback content is the Owner's; never show it as a non-owner's
+  // own empty résumé).
+  if (targetIsOwner) {
+    if (!cachedExperiences.length) cachedExperiences = FALLBACK_EXPERIENCES;
+    if (!cachedProjects.length) cachedProjects = FALLBACK_PROJECTS;
+  }
   renderExperiences();
   renderProjects();
   renderCertificates();
@@ -286,19 +467,25 @@ async function loadAll() {
 // every public item + my own" behavior with per-target, per-viewer access control.
 async function initCareerAccess(user) {
   canEdit = false;
+  targetIsOwner = false;
+  resolvedViaOwnerFallback = false;
   applyViewerModeClass(user);
 
   if (!hasTargetParam) {
-    // No ?u=/?uid= at all: this is never a shared HR link (those always carry an explicit
-    // target) — it's someone opening resume.html directly. Signed in -> always their own resume,
-    // full stop, resolved straight from auth with no Firestore read required to even get this
-    // far. Signed out -> ask them to sign in rather than silently guessing whose resume to show.
+    // No ?u=/?uid= at all: someone opening resume.html directly. Signed in -> their own resume,
+    // resolved straight from auth with no Firestore read. Signed out -> this is the canonical
+    // PUBLIC recruiter résumé route, so resolve the app Owner's uid and render their public
+    // career profile (no login wall — objective of the Public-Résumé pass).
     if (!user) {
-      targetUid = null;
-      showNotice("signin_required");
-      return;
+      targetUid = await resolveOwnerUidFallback();
+      if (!targetUid) {
+        showNotice("not_found");
+        return;
+      }
+      resolvedViaOwnerFallback = true;
+    } else {
+      targetUid = user.uid;
     }
-    targetUid = user.uid;
   } else {
     targetUid = await resolveTargetUid();
     if (!targetUid) {
@@ -330,9 +517,18 @@ async function initCareerAccess(user) {
   }
 
   canEdit = isSelf && isOwner(user);
+  // The Owner's résumé — the only résumé the app has content/fallbacks for. True for the app Owner
+  // viewing their own uid, and for any recruiter/friend/anon viewing the Owner via ?u=/?uid=/the
+  // no-param fallback (all of which resolve a person whose role is "owner").
+  targetIsOwner = person?.role === "owner" || (isSelf && isOwner(user));
   applyViewerModeClass(user);
 
   let careerVisibility = person?.careerVisibility;
+  // Canonical public route (no param, signed out): a missing careerVisibility historically meant
+  // "public portfolio" (the app's original default), so treat undefined as "public" here rather
+  // than falling through to computeAccess's safe "private" default and locking recruiters out. An
+  // explicit "private"/"connections" the Owner deliberately set is still respected.
+  if (resolvedViaOwnerFallback && careerVisibility === undefined) careerVisibility = "public";
   // One-time default upgrade: the app historically treated Career as a public portfolio, so the
   // very first time the actual Owner loads their own resume with no careerVisibility ever set,
   // default it to "public" instead of leaving it at the (safer, rules-level) implicit "private" —
@@ -356,18 +552,39 @@ async function initCareerAccess(user) {
     return;
   }
   hideNotice();
+  renderStaticResumeSections();
   await loadAll();
 }
 
 // Re-render bilingual content (not just chrome — see js/i18n.js's applyTranslations for that)
 // whenever the language switcher fires.
 document.addEventListener("eden:langchange", () => {
+  renderStaticResumeSections();
   renderExperiences();
   renderProjects();
   renderCertificates();
   renderAwards();
   if (lastNoticeReason) careerNoticeText.textContent = i18nT(noticeKey(lastNoticeReason));
+  syncResumeToolbarLang();
 });
+
+// ---- Public résumé toolbar (viewer mode: recruiter / friend / shared link). The private-app
+// sidebar & mobile nav are hidden in viewer mode, so this is a recruiter's only language switch,
+// print entry point and way back to the portfolio. Buttons live in resume.html's #resume-public-
+// topbar; wired here since career.js already owns setLang and the viewer-mode state. ----
+const resumeLangEn = document.getElementById("resume-lang-en");
+const resumeLangZh = document.getElementById("resume-lang-zh");
+function syncResumeToolbarLang() {
+  const zh = getLang() === "zh-CN";
+  resumeLangEn?.classList.toggle("text-white", !zh);
+  resumeLangEn?.classList.toggle("text-textGray", zh);
+  resumeLangZh?.classList.toggle("text-white", zh);
+  resumeLangZh?.classList.toggle("text-textGray", !zh);
+}
+resumeLangEn?.addEventListener("click", () => setLang("en"));
+resumeLangZh?.addEventListener("click", () => setLang("zh-CN"));
+document.getElementById("resume-print-btn")?.addEventListener("click", () => window.print());
+syncResumeToolbarLang();
 
 // ---- Storage upload helper (mirrors gallery.js's upload flow) ----
 async function uploadCareerFile(file, visibility, subfolder) {
@@ -418,18 +635,27 @@ function renderExperiences() {
     ...sorted.map((exp) => {
       const el = document.createElement("div");
       el.className = "bg-darkBg/60 border border-borderNeon rounded-xl p-5";
-      const dates = `${exp.startDate || ""} – ${exp.endDate || "Present"}`;
+      // Fallback entries carry bilingual company/location + a preformatted datesText; CMS docs use
+      // a monolingual company/location string and startDate/endDate fields.
+      const dates = exp.datesText || `${exp.startDate || ""} – ${exp.endDate || "Present"}`;
+      const company = (exp.company_en || exp.company_zh) ? bi(exp, "company") : (exp.company || "");
+      const loc = (exp.location_en || exp.location_zh) ? bi(exp, "location") : (exp.location || "");
       const skills = (exp.skills || []).map((s) => `<span class="px-2 py-0.5 rounded-full border border-borderNeon text-[10px] font-code text-textGray">${s}</span>`).join(" ");
+      // Fallback entries carry a bullets[] ({en,zh}) list; CMS docs use a single description field.
+      const body = exp.bullets && exp.bullets.length
+        ? `<ul class="mt-3 space-y-1.5 text-sm text-textGray leading-relaxed list-disc list-inside">${exp.bullets.map((b) => `<li>${biBullet(b)}</li>`).join("")}</ul>`
+        : `<p class="text-sm text-textGray mt-3 leading-relaxed">${bi(exp, "description")}</p>`;
+      const itemOwner = owner && !exp._fallback;
       el.innerHTML = `
         <div class="flex items-start justify-between gap-3">
           <div class="min-w-0">
             <p class="font-cyber font-bold text-sm text-white">${bi(exp, "role")}</p>
-            <p class="text-xs text-neonPurple font-code mt-0.5">${exp.company || ""}</p>
-            <p class="text-[11px] text-textGray font-code mt-0.5">${dates}${exp.location ? " · " + exp.location : ""}</p>
+            <p class="text-xs text-neonPurple font-code mt-0.5">${company}</p>
+            <p class="text-[11px] text-textGray font-code mt-0.5">${dates}${loc ? " · " + loc : ""}</p>
           </div>
-          ${owner ? ownerControlsHTML(exp.id, "career_experiences") : ""}
+          ${itemOwner ? ownerControlsHTML(exp.id, "career_experiences") : ""}
         </div>
-        <p class="text-sm text-textGray mt-3 leading-relaxed">${bi(exp, "description")}</p>
+        ${body}
         ${skills ? `<div class="flex flex-wrap gap-1.5 mt-3">${skills}</div>` : ""}`;
       return el;
     })
@@ -525,7 +751,7 @@ function projectCard(project, owner) {
           <p class="font-cyber font-bold text-sm text-white truncate">${bi(project, "title")}</p>
           <p class="text-[10px] font-code text-neonPurple mt-1 uppercase tracking-wider">${project.category || ""}</p>
         </div>
-        ${owner ? ownerControlsHTML(project.id, "career_projects") : ""}
+        ${owner && !project._fallback ? ownerControlsHTML(project.id, "career_projects") : ""}
       </div>
       <p class="text-xs text-textGray mt-3 leading-relaxed flex-1">${bi(project, "summary")}</p>
       ${tech ? `<div class="flex flex-wrap gap-1.5 mt-3">${tech}</div>` : ""}

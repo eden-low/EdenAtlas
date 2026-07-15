@@ -1,11 +1,13 @@
 // Minimal network-first service worker for offline shell caching.
 // Deliberately bypasses Firebase/CDN/weather hosts so it never interferes with
 // the auth flow, live Firestore/Storage reads, or third-party API calls.
-// v15 (v3.5): bumped for the new recruiter-portfolio shell files below + the edited styles.css /
-// locale files. Since the activate handler deletes every cache whose key != CACHE, bumping the
-// version forces the updated styles.css and locales/*.json to be re-precached instead of served
-// stale from the old cache when offline. Online behaviour is unchanged (network-first).
-const CACHE = "eden-shell-v15";
+// v17 (Résumé consistency cleanup): adds the new shared js/resume-data.js (single source of truth
+// for résumé/portfolio fallback content, imported by career.js + portfolio.js) to PRECACHE, and
+// bumps the version so returning PWA users re-precache the edited career.js/portfolio.js/resume.html/
+// locales and pick up the new shared module instead of serving stale offline copies. Earlier this
+// pass (v16) fixed the off-centre login + login-locked résumé. Online behaviour is unchanged
+// (network-first); bypass hosts are unchanged.
+const CACHE = "eden-shell-v17";
 
 const PRECACHE = [
   "index.html", "resume.html", "gallery.html", "journal.html", "expenses.html",
@@ -17,6 +19,7 @@ const PRECACHE = [
   "habits.js", "notifications.js", "export.js", "calendar.js", "insights.js",
   "profile.js", "career.js", "atlas.js", "portfolio.js", "project.js",
   "js/i18n.js", "js/mobile-nav.js", "js/sidebar.js", "js/splash.js", "js/location-search.js",
+  "js/resume-data.js",
   "locales/en.json", "locales/zh-CN.json",
   "manifest.json", "images/icon-192.png", "images/icon-512.png", "images/logo-mark.png",
 ];

@@ -894,6 +894,48 @@ app. Two new public pages plus optional CMS fields:
    version on the two new pages is `3.5`; the other 19 pages' footers were left as-is (narrow,
    additive pass).
 
+**"Login-Alignment + Public-Résumé Unification"** — a three-part fix pass, no new pages, no
+Firebase/rules/schema changes, no deploy. (1) **Login centring**: `styles.css` gained a
+`body.login-bg` rule zeroing the sitewide sidebar `padding-left: var(--sidebar-w)` (and the mobile
+top/bottom nav-clearance padding) that was being inherited by `login.html` — which loads neither
+`js/sidebar.js` nor `js/mobile-nav.js` — and pushing the card+footer ~240px right of the viewport
+centre while the fixed background rings stayed centred. (2) **Public résumé**: `resume.html` was
+already `data-public-optional` (no login redirect), but `career.js`'s no-param + signed-out path
+showed a `signin_required` notice — it now calls a new `resolveOwnerUidFallback()`
+(`public_profiles where role=="owner"`, world-readable, no auth) and renders the Owner's public
+career profile, treating a never-set `careerVisibility` as `"public"` on that canonical route only
+(an explicit private/connections is still respected). `#resume-public-topbar` was rebuilt into a
+recruiter toolbar (Back to Portfolio + EN/中文 + Print/Save PDF, all `no-print`), wired in
+`career.js` via the existing `setLang`/`window.print()`. (3) **Unified internal/external**:
+`computeAccess()`'s `isSelf` branch dropped `includeAllMine`/`includeConnections` — the Owner's own
+preview now shows the exact public-filtered content a recruiter sees (edit affordances stay, gated
+by the separate `canEdit`; a Private/Connections career item no longer appears in the résumé for
+anyone). Canonical fallback Experience/Project records render per-collection when the CMS is empty, gated to
+the Owner's résumé via `targetIsOwner`, marked `_fallback` so no Owner edit/delete controls attach.
+Portfolio hero CTA → "View / Download Résumé"; new `career.back_to_portfolio` i18n key (EN/ZH).
+
+**Résumé consistency cleanup (follow-up to the above)** — three loose ends closed, no auth/rules/
+schema changes: (1) **Single source of truth** — the previously-duplicated fallback constants moved
+into a new shared ES module [js/resume-data.js](js/resume-data.js) (`PROFILE`, `EDUCATION`,
+`EXPERIENCE`, `PROJECTS`, `LEADERSHIP`, `RESUME_SKILLS`, all bilingual `{en,zh}`), imported by
+`portfolio.js` (Experience/Projects/Leadership), `career.js` (all six, adapted to its flat CMS
+render shape) and `project.js` (project name/tag only — its deep case-study narratives stay local);
+each Experience/Project record now has exactly one definition. `portfolio.js` renders only the
+`featured` LEADERSHIP subset (its original three); the résumé renders all six. (2) **Fully bilingual
+résumé** — `resume.html`'s Profile Summary, Education, Leadership and Skills/Languages are no longer
+static English HTML; they're empty containers (`#resume-headline`/`#resume-summary`/
+`#resume-location`/`#education-list`/`#leadership-list`/`#skills-list`) rendered by `career.js` from
+the shared source and re-rendered on `eden:langchange`, so EN⇄中文 switches the whole résumé with no
+reload and Print prints the selected language. Skill group headers stay `data-i18n` (interface
+labels in the locale files); language/soft-skill item names translate via the shared data. These
+sections populate only for the Owner's résumé (`targetIsOwner`). (3) `service-worker.js` `CACHE` →
+`eden-shell-v17` with `js/resume-data.js` added to `PRECACHE`. Visibility invariant re-audited and
+unchanged: anonymous Career reads only ever run `where("visibility","==","public")` (the
+`includeAllMine`/connections paths require auth), so `isCareerReadable`'s no-auth branch reduces to
+`data.visibility == 'public'` — private/connections/legacy-missing-visibility docs are excluded by
+both the query and the rule, and the page-level `careerVisibility` default only decides whether the
+shell renders, never what items are fetched.
+
 ## Architecture
 
 ### Roles and the multi-tenant data model

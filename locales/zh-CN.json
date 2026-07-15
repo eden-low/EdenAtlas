@@ -201,7 +201,8 @@
     "resume_connections_notice": "此简历仅对好友可见。",
     "resume_not_found": "未找到该简历。",
     "signin_required_notice": "登录后即可查看此简历。",
-    "view_profile_link": "查看主页"
+    "view_profile_link": "查看主页",
+    "back_to_portfolio": "返回作品集"
   },
   "portfolio": {
     "brand_tagline": "作品集",
@@ -211,7 +212,7 @@
     "nav_resume": "简历",
     "enter_app": "进入 EdenAtlas",
     "hero_cta_work": "查看精选作品",
-    "hero_cta_resume": "下载简历",
+    "hero_cta_resume": "查看 / 下载简历",
     "open_to_opportunities": "开放机会中",
     "snapshot_title": "快速了解",
     "snap_focus_label": "方向",

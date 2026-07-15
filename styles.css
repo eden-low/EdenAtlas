@@ -520,6 +520,23 @@ body.public-page {
   padding-bottom: 0 !important;
 }
 
+/* login.html is a full-viewport standalone page that loads neither js/sidebar.js nor
+   js/mobile-nav.js — but the sitewide `@media (min-width:768px) body{ padding-left: var(--sidebar-w) }`
+   (desktop sidebar reflow) and the mobile `body{ padding-top/bottom }` nav-clearance rules both
+   still match its bare `body` selector. That left padding was pushing the whole login shell
+   (card AND footer, both in normal flow) ~240px to the right of the actual viewport centre while
+   the fixed background rings stayed viewport-centred — i.e. the reported "card shifted right".
+   Zeroing all three paddings here (login.html's <body> carries the login-bg class) centres the
+   card against the true viewport width; the card's own `flex items-center justify-center` +
+   `place`-style centring in the markup then aligns it to viewportWidth/2. */
+body.login-bg {
+  padding-left: 0 !important;
+  padding-top: 0 !important;
+  padding-bottom: 0 !important;
+  min-height: 100vh;
+  min-height: 100dvh;
+}
+
 /* Public portfolio: constrain the editorial content column and give the hero generous rhythm. */
 .portfolio-shell {
   max-width: 1120px;

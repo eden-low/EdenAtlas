@@ -44,18 +44,24 @@
        Career/Resume page indicator, and an optional View Profile link (populated by career.js
        once the shared link's target uid/username resolves). Owner mode leaves this hidden and
        the normal sidebar/mobile-nav render as usual. -->
-  <div id="resume-public-topbar" class="hidden sticky top-0 z-40 bg-cardBg/90 backdrop-blur-md border-b border-borderNeon">
+  <div id="resume-public-topbar" class="hidden sticky top-0 z-40 bg-cardBg/90 backdrop-blur-md border-b border-borderNeon no-print">
     <div class="max-w-6xl mx-auto px-4 h-16 flex items-center justify-between gap-3">
-      <a href="login.html" class="flex items-center gap-2 min-w-0 flex-shrink-0">
-        <img src="images/logo-mark.png" alt="" class="w-7 h-7 object-contain flex-shrink-0">
-        <span class="font-cyber font-semibold text-sm tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-white to-neonPurple truncate">EdenAtlas</span>
+      <a href="portfolio.html" class="flex items-center gap-2 min-w-0 flex-shrink-0 text-textGray hover:text-neonPurple transition-colors">
+        <i class="fa-solid fa-arrow-left text-xs flex-shrink-0"></i>
+        <span class="font-cyber font-semibold text-sm tracking-tight truncate" data-i18n="career.back_to_portfolio">Back to Portfolio</span>
       </a>
-      <span class="flex items-center gap-1.5 text-xs font-cyber font-bold tracking-wider text-neonPurple flex-shrink-0">
-        <i class="fa-solid fa-briefcase text-[11px]"></i> <span data-i18n="nav.career">Career</span>
-      </span>
-      <a id="resume-public-view-profile" href="#" class="hidden inline-flex items-center gap-1.5 text-xs font-code text-textGray hover:text-neonPurple transition-colors flex-shrink-0">
-        <span data-i18n="career.view_profile_link">View Profile</span> <i class="fa-solid fa-arrow-right text-[10px]"></i>
-      </a>
+      <div class="flex items-center gap-2 sm:gap-3 flex-shrink-0">
+        <a id="resume-public-view-profile" href="#" class="hidden sm:inline-flex items-center gap-1.5 text-xs font-code text-textGray hover:text-neonPurple transition-colors">
+          <span data-i18n="career.view_profile_link">View Profile</span> <i class="fa-solid fa-arrow-right text-[10px]"></i>
+        </a>
+        <div class="flex items-center rounded-full border border-borderNeon overflow-hidden text-[11px] font-cyber font-bold">
+          <button id="resume-lang-en" type="button" class="px-2.5 py-1 text-textGray hover:text-white transition-colors">EN</button>
+          <button id="resume-lang-zh" type="button" class="px-2.5 py-1 text-textGray hover:text-white transition-colors border-l border-borderNeon">中文</button>
+        </div>
+        <button id="resume-print-btn" type="button" class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-neonViolet to-neonPurple rounded-full text-xs font-cyber font-bold tracking-wider text-white hover:scale-105 transition-all whitespace-nowrap">
+          <i class="fa-solid fa-print text-[11px]"></i> <span data-i18n="career.print_save_pdf">Print / Save PDF</span>
+        </button>
+      </div>
     </div>
   </div>
 
@@ -141,7 +147,7 @@
         </div>
         <div class="flex-1">
           <h1 class="font-cyber font-black text-3xl text-white">Low Fang Jun</h1>
-          <p class="text-sm text-neonPurple font-code mt-1.5">Business Information Systems Undergraduate &middot; Web Developer</p>
+          <p id="resume-headline" class="text-sm text-neonPurple font-code mt-1.5">Business Information Systems Undergraduate &middot; Web Developer</p>
           <!-- TODO: Future: add public contact visibility controls for resume contact fields.
                Email/phone below are static markup (not read from users/{uid} or the auth provider),
                so this is not itself a data exposure of any Firestore/Auth field — but there's no
@@ -151,47 +157,22 @@
             <span><i class="fa-solid fa-phone mr-1.5 text-neonBlue"></i>011-10574969</span>
             <a href="https://github.com/eden-low" target="_blank" rel="noopener" class="hover:text-neonPurple transition-colors"><i class="fa-brands fa-github mr-1.5 text-white"></i>github.com/eden-low</a>
             <a href="portfolio.html" class="hover:text-neonPurple transition-colors"><i class="fa-solid fa-globe mr-1.5 text-emerald-400"></i>Portfolio</a>
-            <span><i class="fa-solid fa-location-dot mr-1.5 text-rose-400"></i>Kuching, Sarawak, Malaysia</span>
+            <span><i class="fa-solid fa-location-dot mr-1.5 text-rose-400"></i><span id="resume-location">Kuching, Sarawak, Malaysia</span></span>
           </div>
         </div>
       </div>
 
       <div class="mt-8 bg-darkBg/60 border border-borderNeon rounded-xl p-6">
         <h2 class="font-cyber font-bold text-white text-sm tracking-wider" data-i18n="career.summary_header">Profile Summary</h2>
-        <p class="text-sm text-textGray mt-3 leading-relaxed">Business Information Systems undergraduate at UTAR with a focus on system design, data security, and web programming. Built and shipped EdenAtlas, a Firebase-backed personal life platform with role-based access and a public resume surface, end to end. Comfortable across HTML, CSS, JavaScript, Python, and SQL, with proven leadership experience chairing a 300-participant university event.</p>
+        <p id="resume-summary" class="text-sm text-textGray mt-3 leading-relaxed">Business Information Systems undergraduate at UTAR with a focus on system design, data security, and web programming. Built and shipped EdenAtlas, a Firebase-backed personal life platform with role-based access and a public resume surface, end to end. Comfortable across HTML, CSS, JavaScript, Python, and SQL, with proven leadership experience chairing a 300-participant university event.</p>
       </div>
     </section>
 
     <!-- Education (resume formula §2) -->
     <section id="education" class="reveal scroll-mt-24 bg-cardBg/90 backdrop-blur-sm p-6 rounded-2xl neon-border-purple">
       <h1 class="font-cyber font-black text-3xl text-white" data-i18n="career.education_header">Education</h1>
-      <div class="mt-5 space-y-4">
-        <div class="bg-darkBg/60 border border-borderNeon rounded-xl p-5">
-          <div class="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-1">
-            <div class="min-w-0">
-              <p class="font-cyber font-bold text-sm text-white">Bachelor of Information Systems (Honours), Business Information Systems</p>
-              <p class="text-xs text-neonPurple font-code mt-0.5">Universiti Tunku Abdul Rahman (UTAR)</p>
-            </div>
-            <span class="text-[11px] font-code text-textGray flex-shrink-0">2023 &ndash; 2026</span>
-          </div>
-          <ul class="mt-3 text-xs text-textGray space-y-1 list-disc list-inside leading-relaxed">
-            <li>CGPA 2.86</li>
-            <li>Relevant coursework: system design, data security, and web programming</li>
-          </ul>
-        </div>
-        <div class="bg-darkBg/60 border border-borderNeon rounded-xl p-5">
-          <div class="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-1">
-            <div class="min-w-0">
-              <p class="font-cyber font-bold text-sm text-white">Diploma in Software Engineering</p>
-              <p class="text-xs text-neonPurple font-code mt-0.5">International College of Advanced Technology Sarawak (iCATS)</p>
-            </div>
-            <span class="text-[11px] font-code text-textGray flex-shrink-0">2020 &ndash; 2023</span>
-          </div>
-          <ul class="mt-3 text-xs text-textGray space-y-1 list-disc list-inside leading-relaxed">
-            <li>CGPA 3.22</li>
-          </ul>
-        </div>
-      </div>
+      <!-- Rendered bilingually by career.js from the shared js/resume-data.js EDUCATION source. -->
+      <div id="education-list" class="mt-5 space-y-4"></div>
     </section>
     <!-- Experience (Career CMS: career_experiences; resume formula §3) -->
     <section id="experience" class="reveal scroll-mt-24 bg-cardBg/90 backdrop-blur-sm p-6 rounded-2xl neon-border-purple">
@@ -244,46 +225,9 @@
     <!-- Leadership & Events (static; resume formula §5 — role | event | date + scope/impact bullets) -->
     <section id="events" class="reveal scroll-mt-24 bg-cardBg/90 backdrop-blur-sm p-6 rounded-2xl neon-border-purple">
       <h1 class="font-cyber font-black text-3xl text-white" data-i18n="career.leadership_header">Leadership & Events</h1>
-      <div class="mt-5 bg-darkBg/60 border border-borderNeon rounded-xl p-5">
-        <div class="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-1">
-          <div class="min-w-0">
-            <p class="font-cyber font-bold text-sm text-white">Chairperson</p>
-            <p class="text-xs text-neonPurple font-code mt-0.5">Ice Breaking Telematch 2026 &middot; University Orientation Event</p>
-          </div>
-          <span class="text-[11px] font-code text-textGray flex-shrink-0">Mar 2026</span>
-        </div>
-        <ul class="mt-3 text-xs text-textGray space-y-1 list-disc list-inside leading-relaxed">
-          <li>Led a university orientation telematch for around 300 new students, heading a committee of 40+ members.</li>
-          <li>Coordinated programme, logistics, publicity, HR, secretariat, and technical teams from planning through event day.</li>
-        </ul>
-      </div>
-      <div class="mt-4 divide-y divide-borderNeon/40">
-        <div class="flex items-center gap-3 py-3">
-          <i data-lucide="users" class="w-4 h-4 text-neonBlue flex-shrink-0"></i>
-          <span class="text-sm text-white flex-1">Chairperson &mdash; Buddhist Society Welcoming Night</span>
-          <span class="text-[11px] font-code text-textGray flex-shrink-0">Oct 2024</span>
-        </div>
-        <div class="flex items-center gap-3 py-3">
-          <i data-lucide="compass" class="w-4 h-4 text-emerald-400 flex-shrink-0"></i>
-          <span class="text-sm text-white flex-1">Program Leader &mdash; ISC 2025</span>
-          <span class="text-[11px] font-code text-textGray flex-shrink-0">2025</span>
-        </div>
-        <div class="flex items-center gap-3 py-3">
-          <i data-lucide="wrench" class="w-4 h-4 text-amber-400 flex-shrink-0"></i>
-          <span class="text-sm text-white flex-1">Technical Head &mdash; Sport Glory Color Run</span>
-          <span class="text-[11px] font-code text-textGray flex-shrink-0">&mdash;</span>
-        </div>
-        <div class="flex items-center gap-3 py-3">
-          <i data-lucide="handshake" class="w-4 h-4 text-rose-400 flex-shrink-0"></i>
-          <span class="text-sm text-white flex-1">HR &amp; Sponsor Committee &mdash; IBT</span>
-          <span class="text-[11px] font-code text-textGray flex-shrink-0">Feb 2025</span>
-        </div>
-        <div class="flex items-center gap-3 py-3">
-          <i data-lucide="users" class="w-4 h-4 text-purple-400 flex-shrink-0"></i>
-          <span class="text-sm text-white flex-1">HR Committee &mdash; Warrior 3.0</span>
-          <span class="text-[11px] font-code text-textGray flex-shrink-0">&mdash;</span>
-        </div>
-      </div>
+      <!-- Rendered bilingually by career.js from the shared js/resume-data.js LEADERSHIP source
+           (entries with bullets → detailed card, others → compact rows). -->
+      <div id="leadership-list" class="mt-5 space-y-4"></div>
     </section>
 
     <!-- Certificates (Career CMS: career_certificates) -->
@@ -319,52 +263,9 @@
     <!-- Skills, Tools & Languages (static; resume formula §7) -->
     <section id="skills" class="reveal scroll-mt-24 bg-cardBg/90 backdrop-blur-sm p-6 rounded-2xl neon-border-purple">
       <h1 class="font-cyber font-black text-3xl text-white" data-i18n="career.skills_header">Skills &amp; Languages</h1>
-      <div class="mt-5 space-y-5">
-        <div class="flex flex-col sm:flex-row sm:items-baseline gap-2 sm:gap-4">
-          <span class="w-48 flex-shrink-0 font-cyber font-bold text-xs text-white tracking-wider" data-i18n="career.skills_languages">Languages</span>
-          <div class="flex flex-wrap gap-2">
-            <span class="px-3 py-1.5 rounded-full bg-darkBg/60 border border-borderNeon text-xs font-code text-textGray">English</span>
-            <span class="px-3 py-1.5 rounded-full bg-darkBg/60 border border-borderNeon text-xs font-code text-textGray">Mandarin</span>
-            <span class="px-3 py-1.5 rounded-full bg-darkBg/60 border border-borderNeon text-xs font-code text-textGray">Malay</span>
-          </div>
-        </div>
-        <div class="flex flex-col sm:flex-row sm:items-baseline gap-2 sm:gap-4">
-          <span class="w-48 flex-shrink-0 font-cyber font-bold text-xs text-white tracking-wider" data-i18n="career.skills_programming">Programming &amp; Technical</span>
-          <div class="flex flex-wrap gap-2">
-            <span class="px-3 py-1.5 rounded-full bg-darkBg/60 border border-borderNeon text-xs font-code text-textGray">HTML</span>
-            <span class="px-3 py-1.5 rounded-full bg-darkBg/60 border border-borderNeon text-xs font-code text-textGray">CSS</span>
-            <span class="px-3 py-1.5 rounded-full bg-darkBg/60 border border-borderNeon text-xs font-code text-textGray">JavaScript</span>
-            <span class="px-3 py-1.5 rounded-full bg-darkBg/60 border border-borderNeon text-xs font-code text-textGray">Python</span>
-            <span class="px-3 py-1.5 rounded-full bg-darkBg/60 border border-borderNeon text-xs font-code text-textGray">SQL</span>
-          </div>
-        </div>
-        <div class="flex flex-col sm:flex-row sm:items-baseline gap-2 sm:gap-4">
-          <span class="w-48 flex-shrink-0 font-cyber font-bold text-xs text-white tracking-wider" data-i18n="career.skills_platforms">Frameworks &amp; Platforms</span>
-          <div class="flex flex-wrap gap-2">
-            <span class="px-3 py-1.5 rounded-full bg-darkBg/60 border border-borderNeon text-xs font-code text-textGray">Firebase Auth</span>
-            <span class="px-3 py-1.5 rounded-full bg-darkBg/60 border border-borderNeon text-xs font-code text-textGray">Firestore</span>
-            <span class="px-3 py-1.5 rounded-full bg-darkBg/60 border border-borderNeon text-xs font-code text-textGray">Firebase Storage</span>
-            <span class="px-3 py-1.5 rounded-full bg-darkBg/60 border border-borderNeon text-xs font-code text-textGray">GitHub Pages</span>
-          </div>
-        </div>
-        <div class="flex flex-col sm:flex-row sm:items-baseline gap-2 sm:gap-4">
-          <span class="w-48 flex-shrink-0 font-cyber font-bold text-xs text-white tracking-wider" data-i18n="career.skills_tools">Tools</span>
-          <div class="flex flex-wrap gap-2">
-            <span class="px-3 py-1.5 rounded-full bg-darkBg/60 border border-borderNeon text-xs font-code text-textGray">Git</span>
-            <span class="px-3 py-1.5 rounded-full bg-darkBg/60 border border-borderNeon text-xs font-code text-textGray">GitHub</span>
-            <span class="px-3 py-1.5 rounded-full bg-darkBg/60 border border-borderNeon text-xs font-code text-textGray">VS Code</span>
-          </div>
-        </div>
-        <div class="flex flex-col sm:flex-row sm:items-baseline gap-2 sm:gap-4">
-          <span class="w-48 flex-shrink-0 font-cyber font-bold text-xs text-white tracking-wider" data-i18n="career.skills_soft">Professional Skills</span>
-          <div class="flex flex-wrap gap-2">
-            <span class="px-3 py-1.5 rounded-full bg-darkBg/60 border border-borderNeon text-xs font-code text-textGray">Leadership</span>
-            <span class="px-3 py-1.5 rounded-full bg-darkBg/60 border border-borderNeon text-xs font-code text-textGray">Communication</span>
-            <span class="px-3 py-1.5 rounded-full bg-darkBg/60 border border-borderNeon text-xs font-code text-textGray">Documentation</span>
-            <span class="px-3 py-1.5 rounded-full bg-darkBg/60 border border-borderNeon text-xs font-code text-textGray">Coordination</span>
-          </div>
-        </div>
-      </div>
+      <!-- Rendered by career.js from the shared js/resume-data.js RESUME_SKILLS source; group
+           labels come from locale keys (data-i18n), language/soft-skill items switch EN⇄中文. -->
+      <div id="skills-list" class="mt-5 space-y-5"></div>
     </section>
 
     <!-- Download CV: prints the page itself (see the @media print rules in styles.css) -->
