@@ -757,6 +757,11 @@
     "error_message_too_long": "That message is too long — try a shorter question.",
     "error_upstream": "The AI service didn't respond — please try again.",
     "error_network": "Couldn't reach the assistant — check your connection.",
-    "error_generic": "Something went wrong. Please try again."
+    "error_generic": "Something went wrong. Please try again.",
+    "evidence_label": "Evidence",
+    "evidence_searched": "Searched",
+    "evidence_sources": "Sources",
+    "evidence_source_count": "{count} sources",
+    "evidence_zero_results": "0 matching records"
   }
 }

@@ -757,6 +757,11 @@
     "error_message_too_long": "消息过长，请尝试更简短的问题。",
     "error_upstream": "AI 服务没有响应，请重试。",
     "error_network": "无法连接到助手，请检查网络。",
-    "error_generic": "出了点问题，请重试。"
+    "error_generic": "出了点问题，请重试。",
+    "evidence_label": "证据",
+    "evidence_searched": "已搜索",
+    "evidence_sources": "来源",
+    "evidence_source_count": "{count} 个来源",
+    "evidence_zero_results": "0 条匹配记录"
   }
 }

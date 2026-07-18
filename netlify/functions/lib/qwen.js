@@ -124,6 +124,70 @@ function createRefRegistry() {
   };
 }
 
+// ---- Server-generated provenance (trust/provenance pass) ----
+//
+// Root cause this section fixes: a follow-up question ("if June?") could be answered by Qwen
+// purely from conversation history — with no tool call at all this turn — while still reading
+// as if it had searched the Owner's data. The frontend already only ever renders source chips
+// from THIS function's own `sources` (never from the model's prose), so that half was already
+// safe; what was missing was a single, explicit, non-model-controlled summary of what actually
+// happened server-side this turn, so the frontend can render an honest "Searched: ... / Sources:
+// ... / N sources" evidence row — or render nothing at all when no personal-data tool ran.
+//
+// Every field below is populated ONLY inside recordSuccess(), which is only ever called (see the
+// round loop in runAgentLoop) right after a tool's OWN validate()+execute() succeeded — never
+// from `msg.content` (the model's free-text answer). Qwen has no channel to write into this
+// object: it can only ever cause a real, allowlisted tool to run or not run. draft_reflection is
+// deliberately never counted here (see PERSONAL_DATA_SOURCE_GROUPS) — it never queries Firestore,
+// it only reorganizes refs a REAL search tool already surfaced earlier this same turn, so it is
+// never itself evidence of a new search.
+const PERSONAL_DATA_SOURCE_GROUPS = {
+  search_memories: ["memories"],
+  find_memories_missing_location: ["memories"],
+  search_journals: ["journal"],
+  list_journey: ["journey"],
+  list_calendar: ["memories", "journal"],
+};
+
+function createProvenanceTracker() {
+  const toolsUsed = [];
+  const resolvedRanges = [];
+  const includedSources = new Set();
+  let resultCount = 0;
+  return {
+    recordSuccess(name, resultPayload) {
+      const groups = PERSONAL_DATA_SOURCE_GROUPS[name];
+      if (!groups) return;
+      toolsUsed.push(name);
+      groups.forEach((g) => includedSources.add(g));
+      // Only list_calendar/list_journey ever carry a resolvedRange — search_memories/
+      // search_journals/find_memories_missing_location have no date-range concept of their own.
+      if (resultPayload && resultPayload.resolvedRange) {
+        resolvedRanges.push({ tool: name, ...resultPayload.resolvedRange });
+      }
+      // `count` (search_*/find_*/list_journey) or `totalItems` (list_calendar, which has no
+      // top-level `count` field of its own) — whichever the tool actually returned. Never
+      // conflated with `sourceCount` (see runAgentLoop's return): this is the tool's own reported
+      // match count, which can legitimately exceed the number of individually-citable sources if
+      // a tool ever caps how many items it hands back a handle for.
+      const count = resultPayload && typeof resultPayload.count === "number"
+        ? resultPayload.count
+        : (resultPayload && typeof resultPayload.totalItems === "number" ? resultPayload.totalItems : 0);
+      resultCount += count;
+    },
+    build(sourceCount) {
+      return {
+        toolsUsed: [...new Set(toolsUsed)],
+        resolvedRanges,
+        includedSources: [...includedSources],
+        excludedSources: ["finance"], // Finance/expenses are never queryable by any tool — always true, not conditional
+        sourceCount,
+        resultCount,
+      };
+    },
+  };
+}
+
 // Runs up to MAX_TOOL_ROUNDS request/tool-execution round-trips against Qwen. `db`/`uid` are
 // the already-verified Firestore Admin handle and Owner uid — every tool executor threads them
 // through untouched; nothing here ever reads a uid or collection name out of the model's output.
@@ -135,6 +199,7 @@ async function runAgentLoop({ qwenConfig, systemPrompt, history, userMessage, sc
   const messages = [{ role: "system", content: systemPrompt }, ...history, { role: "user", content: userMessage }];
   const toolDefs = toolDefsForScopes(scopes);
   const registry = createRefRegistry();
+  const provenanceTracker = createProvenanceTracker();
   const ctx = {
     db,
     uid,
@@ -187,6 +252,13 @@ async function runAgentLoop({ qwenConfig, systemPrompt, history, userMessage, sc
             resultPayload = { error: err instanceof ToolValidationError ? err.message : "tool_execution_failed" };
           }
         }
+        // Provenance is recorded from `resultPayload` itself — the exact object a real tool
+        // executor returned — never from anything the model writes. A resultPayload carrying an
+        // `error` key (unknown tool, bad arguments, or a thrown ToolValidationError/execution
+        // failure) is, by construction, never passed to recordSuccess() below.
+        if (name && resultPayload && resultPayload.error === undefined) {
+          provenanceTracker.recordSuccess(name, resultPayload);
+        }
         messages.push({ role: "tool", tool_call_id: call.id, content: boundedJson(resultPayload, MAX_TOOL_RESULT_CHARS) });
       }
       // any tool_calls beyond MAX_TOOL_CALLS_PER_ROUND are silently not executed, and never
@@ -203,7 +275,8 @@ async function runAgentLoop({ qwenConfig, systemPrompt, history, userMessage, sc
     finalAnswer = "I gathered some information but reached the step limit before finishing. Try asking a more specific question, or narrow the date range.";
   }
 
-  return { answer: finalAnswer, sources: dedupeSources(registry.collected), usage: lastUsage, roundsUsed };
+  const sources = dedupeSources(registry.collected);
+  return { answer: finalAnswer, sources, usage: lastUsage, roundsUsed, provenance: provenanceTracker.build(sources.length) };
 }
 
 module.exports = {

@@ -155,6 +155,11 @@ function systemPrompt(scopes, dateContext) {
     "You can only use the provided tools to look up the Owner's own data; you have no ability to create, edit, delete, publish, or share anything — if asked to perform an action, explain that write actions are not enabled in this version and offer a draft instead where relevant.",
     `The Owner has enabled these data scopes for this conversation: ${scopeList}. Never claim to use a scope that isn't listed.`,
     "Never invent facts about the Owner's data — only state things a tool result actually returned. If a tool returns no results, say so plainly.",
+    // --- Per-turn tool evidence (trust/provenance pass) — fixes a real production gap: a
+    // follow-up like "if June?" was sometimes answered from the previous turn's remembered
+    // result instead of a fresh tool call, so no source chip could ever be shown for it. ---
+    "Every fact you state about the Owner's own Memories, Journal, Journey, or Calendar must come from a tool call made in THIS turn — a previous answer earlier in this conversation is never sufficient evidence for a new question, even a closely related one (e.g. \"what about June?\" right after you answered about July). Whenever the Owner asks about a different date range, place, or topic than your most recent tool call actually covered, call the appropriate tool again before answering — never reuse an earlier turn's tool result for a new range or query.",
+    "If you do not call a tool during this turn, never say you \"searched,\" \"checked,\" \"looked through,\" or \"found\" anything in the Owner's records — those words are only true the moment a tool actually ran. In that case, either answer only from what's already visible in this conversation, or ask a short clarifying question instead.",
     "Keep answers concise and cite which Memories/Journal entries/Journey events you used when relevant.",
     // --- Authoritative date context (task A/B) ---
     `Authoritative current date: currentLocalDate=${dateContext.currentLocalDate}, currentYear=${dateContext.currentYear}, currentMonth=${dateContext.currentMonth}, timeZone=${dateContext.timeZone}.`,
@@ -354,6 +359,10 @@ function createHandler(deps) {
           ok: true,
           answer: result.answer,
           sources: result.sources,
+          // Server-generated, non-model-controlled evidence summary (see qwen.js's
+          // createProvenanceTracker) — the frontend's evidence row is built from this object
+          // only, never from `answer`'s free text.
+          provenance: result.provenance,
           usage: sanitizeUsage(result.usage),
           roundsUsed: result.roundsUsed,
         },

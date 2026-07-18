@@ -402,14 +402,24 @@ const TOOLS = {
       const dayKey = (ms) => localDateString(new Date(ms), ctx.timeZone);
       // Returns the handle if the item was actually included, or null if it fell outside the
       // requested range — the caller must only treat a non-null return as "surfaced" (task D).
+      //
+      // Trust/provenance pass fix: registerRef() used to be called unconditionally for every
+      // in-range item, even ones beyond the 5-per-day `samples` cap below — so an item that was
+      // NEVER actually included in what this tool tells the model could still end up registered
+      // and, via qwen.js's dedupeSources(), surfaced to the frontend as a clickable source chip.
+      // That's a provenance inconsistency in the other direction from the "missing chip" bug this
+      // whole pass audits: a chip implying "the model used this" for something the model was
+      // literally never shown. Fixed by only ever calling registerRef() for an item that actually
+      // gets pushed into `samples` — mirroring this file's own header invariant #2 exactly.
       const bump = (ms, type, id, labelText) => {
         if (ms < args.start.getTime() || ms > args.end.getTime()) return null;
         const key = dayKey(ms);
         if (!byDay.has(key)) byDay.set(key, { date: key, memories: 0, journal: 0, samples: [] });
         const bucket = byDay.get(key);
         bucket[type === "memory" ? "memories" : "journal"] += 1;
+        if (bucket.samples.length >= 5) return null;
         const handle = ctx.registerRef(type, id, labelText);
-        if (bucket.samples.length < 5) bucket.samples.push({ type, handle, title: truncate(labelText || "", 60) });
+        bucket.samples.push({ type, handle, title: truncate(labelText || "", 60) });
         return handle;
       };
       photos.forEach((p) => { const ms = docMillis(p, "uploadedAt"); if (ms) bump(ms, "memory", p.id, p.caption); });

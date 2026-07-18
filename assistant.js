@@ -8,7 +8,7 @@
 // still has to pass the Function's own auth/owner checks (see netlify/functions/assistant.js).
 import { auth } from "./firebase-init.js";
 import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-auth.js";
-import { t } from "./js/i18n.js";
+import { t, getLang } from "./js/i18n.js";
 
 const ENDPOINT = "/.netlify/functions/assistant";
 const CONSENT_KEY = "eden:assistantConsent";
@@ -29,6 +29,17 @@ const SUGGESTED_PROMPTS = [
 
 const SOURCE_PAGE = { memory: "gallery.html", journal: "journal.html", journey: "timeline.html" };
 const SOURCE_ICON = { memory: "image", journal: "book-open", journey: "compass" };
+
+// t(key, vars) falls back to the raw key string when a translation is missing (see js/i18n.js) —
+// this small helper mirrors the `t(key) !== key ? t(key) : fallback` pattern already used
+// throughout this file, but also applies {placeholder} interpolation to the fallback text itself
+// so a missing key never leaves a literal "{count}" on screen.
+function tf(key, fallback, vars) {
+  const val = t(key, vars);
+  if (val !== key) return val;
+  if (!vars) return fallback;
+  return Object.keys(vars).reduce((s, k) => s.replaceAll(`{${k}}`, String(vars[k])), fallback);
+}
 
 // ---- DOM ----
 const messagesEl = document.getElementById("assistant-messages");
@@ -196,6 +207,96 @@ function buildSourceChips(sources) {
   return wrap;
 }
 
+// ---- Evidence row (trust/provenance pass) ----
+//
+// Renders ONLY from `msg.provenance` — the server's own non-model-controlled summary (see
+// netlify/functions/lib/qwen.js's createProvenanceTracker) of which real tool(s) actually ran
+// this turn, never from `msg.content` (the model's free-text answer). This is what makes it safe
+// to treat this row as evidence rather than just more model output: every word in it traces back
+// to a Firestore query this exact request executed and Firebase Admin already scoped to the
+// Owner's own uid.
+
+const EN_MONTHS = ["", "January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+
+function parseYmd(v) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(v || ""));
+  if (!m) return null;
+  return { y: Number(m[1]), mo: Number(m[2]), d: Number(m[3]) };
+}
+
+// Formats a server-resolved "YYYY-MM-DD" start/end pair as a short human range — entirely via
+// string/number formatting, NEVER via `new Date(v)`. Those strings already name a specific
+// Asia/Kuala_Lumpur local calendar day (see lib/date-utils.js); re-parsing "YYYY-MM-DD" with the
+// Date constructor anchors to UTC midnight, which could silently display the wrong day in a
+// browser running in a different time zone — exactly the class of bug this whole feature exists
+// to prevent, so this function is deliberately Date-object-free.
+function formatSearchedRange(startDate, endDate, lang) {
+  const start = parseYmd(startDate);
+  const end = parseYmd(endDate);
+  if (!start || !end) return `${startDate} – ${endDate}`;
+  const isZh = lang === "zh-CN";
+  if (start.y === end.y && start.mo === end.mo) {
+    if (isZh) return start.d === end.d ? `${start.y}年${start.mo}月${start.d}日` : `${start.y}年${start.mo}月${start.d}–${end.d}日`;
+    const month = EN_MONTHS[start.mo] || String(start.mo);
+    return start.d === end.d ? `${start.d} ${month} ${start.y}` : `${start.d}–${end.d} ${month} ${start.y}`;
+  }
+  if (isZh) return `${start.y}年${start.mo}月${start.d}日 – ${end.y}年${end.mo}月${end.d}日`;
+  const sMonth = EN_MONTHS[start.mo] || String(start.mo);
+  const eMonth = EN_MONTHS[end.mo] || String(end.mo);
+  return `${start.d} ${sMonth} ${start.y} – ${end.d} ${eMonth} ${end.y}`;
+}
+
+const SOURCE_GROUP_LABEL_KEY = { memories: "assistant.scope_memories", journal: "assistant.scope_journal", journey: "assistant.scope_journey" };
+
+function sourceGroupLabel(group) {
+  const key = SOURCE_GROUP_LABEL_KEY[group];
+  if (!key) return group;
+  const label = t(key);
+  return label !== key ? label : group;
+}
+
+// Only ever called when `msg.provenance.toolsUsed.length > 0` (see buildBubble) — i.e. at least
+// one real personal-data tool executed successfully this turn. A turn with no such tool call
+// never reaches here, so this row can never appear for an answer that was only ever conversation
+// context/model prose (task: "do not render the row when no personal-data tool ran").
+function buildEvidenceRow(msg) {
+  const prov = msg.provenance;
+  const lang = getLang();
+  const wrap = document.createElement("div");
+  wrap.className = "assistant-evidence-row mt-2 pt-2 border-t border-borderNeon/40 space-y-1.5";
+  wrap.setAttribute("role", "group");
+  wrap.setAttribute("aria-label", tf("assistant.evidence_label", "Evidence"));
+
+  if (Array.isArray(prov.resolvedRanges) && prov.resolvedRanges.length) {
+    const p = document.createElement("p");
+    p.className = "text-[11px] text-textGray";
+    const ranges = prov.resolvedRanges.map((r) => formatSearchedRange(r.startDate, r.endDate, lang)).join("; ");
+    p.textContent = `${tf("assistant.evidence_searched", "Searched")}: ${ranges}`;
+    wrap.appendChild(p);
+  }
+
+  const sourcesLine = document.createElement("p");
+  sourcesLine.className = "text-[11px] text-textGray";
+  const groupNames = (prov.includedSources || []).map(sourceGroupLabel).join(lang === "zh-CN" ? "、" : ", ");
+  const sourcesLabel = tf("assistant.evidence_sources", "Sources");
+  sourcesLine.textContent = groupNames ? `${sourcesLabel}: ${groupNames}` : sourcesLabel;
+  wrap.appendChild(sourcesLine);
+
+  if (!prov.resultCount) {
+    const zero = document.createElement("p");
+    zero.className = "text-[11px] text-textGray";
+    zero.textContent = tf("assistant.evidence_zero_results", "0 matching records");
+    wrap.appendChild(zero);
+  } else if (prov.sourceCount) {
+    const countLine = document.createElement("p");
+    countLine.className = "text-[11px] text-textGray";
+    countLine.textContent = tf("assistant.evidence_source_count", "{count} sources", { count: prov.sourceCount });
+    wrap.appendChild(countLine);
+    if (msg.sources && msg.sources.length) wrap.appendChild(buildSourceChips(msg.sources));
+  }
+  return wrap;
+}
+
 function buildCopyButton() {
   const btn = document.createElement("button");
   btn.type = "button";
@@ -246,7 +347,12 @@ function buildBubble(msg) {
   }
   wrapper.appendChild(body);
 
-  if (!isUser && msg.sources && msg.sources.length) {
+  if (!isUser && msg.provenance && Array.isArray(msg.provenance.toolsUsed) && msg.provenance.toolsUsed.length) {
+    wrapper.appendChild(buildEvidenceRow(msg));
+  } else if (!isUser && msg.sources && msg.sources.length) {
+    // Back-compat only: a conversation restored from sessionStorage that predates this pass
+    // could carry `sources` with no `provenance` at all — still render its chips rather than
+    // silently dropping them, but never fabricate an evidence row/searched-range for it.
     wrapper.appendChild(buildSourceChips(msg.sources));
   }
   if (!isUser && !msg.cancelled) {
@@ -430,7 +536,7 @@ async function sendMessage(text) {
       renderAll();
       return;
     }
-    conversation[pendingIndex] = { role: "assistant", content: data.answer, sources: data.sources, ts: Date.now() };
+    conversation[pendingIndex] = { role: "assistant", content: data.answer, sources: data.sources, provenance: data.provenance, ts: Date.now() };
     saveConversation();
     renderAll();
   } catch (err) {

@@ -1,6 +1,14 @@
 // Minimal network-first service worker for offline shell caching.
 // Deliberately bypasses Firebase/CDN/weather hosts so it never interferes with
 // the auth flow, live Firestore/Storage reads, or third-party API calls.
+// v26 (trust/provenance pass): assistant.js changed again (server-generated evidence-row
+// rendering — "Searched: ...", "Sources: ...", source count, and a "0 matching records" empty
+// state, all built ONLY from the server's own non-model-controlled `provenance` object, never
+// from the model's free text) and locales/en.json+zh-CN.json gained the new
+// assistant.evidence_* keys these render with. netlify/functions/**/*.js also changed
+// (lib/qwen.js's provenance tracker, lib/tools.js's list_calendar fix, assistant.js's system
+// prompt) but, as with every prior Function-only change, isn't part of PRECACHE — Function
+// source is never a static browser asset (see scripts/build-site.js's publish allowlist).
 // v23 (Qwen Atlas Assistant MVP): adds assistant.html/assistant.js to PRECACHE (the new
 // Owner-only page's static client shell — same treatment as every other page/script here).
 // Bumped from v22 specifically because v22 was already deployed as its own separate release
@@ -38,7 +46,7 @@
 // change — index.html is now the public recruiter Portfolio, home.html is the private app
 // landing page), v21 (Trash privacy fix), v20 (Memory Trash + location-edit fix), v19 (canonical
 // location pipeline fix).
-const CACHE = "eden-shell-v25";
+const CACHE = "eden-shell-v26";
 
 const PRECACHE = [
   "index.html", "home.html", "resume.html", "gallery.html", "journal.html", "expenses.html",

@@ -713,6 +713,86 @@ async function run() {
     assert.strictEqual(res.status, 500);
   });
 
+  console.log("\nAbort / New Chat race (mirrors assistant.js's sendMessage()/resetConversation() contract)");
+
+  // A minimal, duplicated reimplementation of assistant.js's pending-message + abort + reset
+  // state machine — not the real DOM code (which needs a browser), but the exact same contract:
+  // a pending assistant bubble is pushed synchronously, the eventual response only ever lands at
+  // that same index, an AbortError replaces it with a cancelled marker (never an answer/sources/
+  // provenance), and reset() clears everything synchronously so a fetch that resolves AFTER
+  // reset can never repopulate the fresh conversation. See assistant.js's own sendMessage()/
+  // resetConversation() for the real, DOM-driven version of this exact logic.
+  function makeChatState() {
+    return { conversation: [], currentController: null };
+  }
+  async function fakeSendMessage(state, text, fetchPromise) {
+    state.conversation.push({ role: "user", content: text });
+    const pendingIndex = state.conversation.length;
+    state.conversation.push({ role: "assistant", content: "", pending: true });
+    const controller = { aborted: false };
+    state.currentController = controller;
+    try {
+      const data = await fetchPromise(controller);
+      if (controller.aborted) throw Object.assign(new Error("aborted"), { name: "AbortError" });
+      state.conversation[pendingIndex] = { role: "assistant", content: data.answer, sources: data.sources, provenance: data.provenance };
+    } catch (err) {
+      if (err && err.name === "AbortError") {
+        if (state.conversation[pendingIndex]) {
+          state.conversation[pendingIndex] = { role: "assistant", content: "Cancelled.", cancelled: true };
+        }
+      } else if (state.conversation[pendingIndex]) {
+        state.conversation.splice(pendingIndex, 1);
+      }
+    } finally {
+      if (state.currentController === controller) state.currentController = null;
+    }
+  }
+  function fakeReset(state) {
+    if (state.currentController) {
+      state.currentController.aborted = true;
+      state.currentController = null;
+    }
+    state.conversation = [];
+  }
+
+  await test("abort race: clicking Stop mid-request never lets a late-resolving response add an answer or evidence row", async () => {
+    const state = makeChatState();
+    let resolveFetch;
+    const fetchPromise = (controller) =>
+      new Promise((resolve, reject) => {
+        resolveFetch = () => {
+          if (controller.aborted) reject(Object.assign(new Error("aborted"), { name: "AbortError" }));
+          else resolve({ answer: "late answer", sources: [{ type: "memory", id: "p1", label: "x" }], provenance: { toolsUsed: ["search_memories"], sourceCount: 1 } });
+        };
+      });
+    const sendPromise = fakeSendMessage(state, "hi", fetchPromise);
+    state.currentController.aborted = true; // simulates the Stop button being clicked
+    resolveFetch();
+    await sendPromise;
+    assert.strictEqual(state.conversation.length, 2);
+    assert.strictEqual(state.conversation[1].cancelled, true);
+    assert.strictEqual(state.conversation[1].provenance, undefined, "a cancelled turn must never carry provenance/sources");
+    assert.strictEqual(state.conversation[1].sources, undefined);
+  });
+
+  await test("New Chat race: reset clears the conversation synchronously, and an in-flight response that resolves afterward never reappears", async () => {
+    const state = makeChatState();
+    let resolveFetch;
+    const fetchPromise = (controller) =>
+      new Promise((resolve, reject) => {
+        resolveFetch = () => {
+          if (controller.aborted) reject(Object.assign(new Error("aborted"), { name: "AbortError" }));
+          else resolve({ answer: "late answer", sources: [], provenance: { toolsUsed: [] } });
+        };
+      });
+    const sendPromise = fakeSendMessage(state, "hi", fetchPromise);
+    fakeReset(state); // New Chat clicked while the request is still in flight
+    assert.deepStrictEqual(state.conversation, [], "New Chat must clear synchronously, not wait for the in-flight request");
+    resolveFetch();
+    await sendPromise;
+    assert.deepStrictEqual(state.conversation, [], "a response for an aborted/reset turn must never repopulate the fresh conversation");
+  });
+
   console.log("\nSafe output rendering (task F) — mirrors assistant.js's stripInlineMarkdown");
 
   // Duplicated verbatim from assistant.js (documented there, per this repo's own established
@@ -777,6 +857,23 @@ async function run() {
       assert.ok(src.includes(`params.get("${param}")`), `${file} must read the ?${param}= query param`);
       assert.ok(src.includes(`${cacheVar}.find(`), `${file} must resolve the id via ${cacheVar}, not a fresh/unscoped query`);
       assert.ok(src.includes("history.replaceState("), `${file} must strip the query param via replaceState`);
+    }
+  });
+
+  await test("static check: gallery.js/journal.js/timeline.js deep-link targets are keyboard-focusable and carry an accessible label (task 5)", async () => {
+    const root = path.resolve(__dirname, "..", "..", "..");
+    const cases = [
+      { file: "gallery.js", varName: "card" },
+      { file: "journal.js", varName: "card" },
+      { file: "timeline.js", varName: "row" },
+    ];
+    for (const { file, varName } of cases) {
+      const src = fs.readFileSync(path.join(root, file), "utf8");
+      assert.ok(new RegExp(`${varName}\\.dataset\\.\\w+ = `).test(src), `${file} must stamp an id onto its ${varName} element`);
+      assert.ok(src.includes(`${varName}.tabIndex = -1`), `${file}'s ${varName} must be programmatically focusable`);
+      assert.ok(src.includes(`${varName}.focus(`), `${file} must actually move focus to the deep-linked ${varName}`);
+      assert.ok(src.includes(`${varName}.setAttribute("aria-label"`), `${file} must set an accessible label on the deep-linked ${varName}`);
+      assert.ok(src.includes(`${varName}.classList.add("eden-deep-link-highlight")`), `${file} must visually highlight the deep-linked ${varName}`);
     }
   });
 
@@ -1517,6 +1614,182 @@ async function run() {
     assert.deepStrictEqual(parsed.resolvedRange, { startDate: "2026-07-01", endDate: "2026-07-31", timeZone: "Asia/Kuala_Lumpur" });
   });
 
+  // ================= Provenance (trust/provenance pass) =================
+  console.log("\nProvenance — server-generated, non-model-controlled evidence metadata");
+
+  await test("root-cause reproduction: a first Calendar query, then a 'what about June?' follow-up, each produce their OWN correct tool call and resolvedRange — never the previous turn's range", async () => {
+    _resetBurstStateForTests();
+    let call1 = 0;
+    const fetchImpl1 = async (_url, opts) => {
+      call1++;
+      if (call1 === 1) {
+        return { ok: true, status: 200, text: async () => JSON.stringify({ choices: [{ message: { content: null, tool_calls: [{ id: "c1", function: { name: "list_calendar", arguments: JSON.stringify({ relativePeriod: "this_month" }) } }] } }] }) };
+      }
+      return { ok: true, status: 200, text: async () => JSON.stringify({ choices: [{ message: { content: "You recorded a few things this month." } }] }) };
+    };
+    const handler1 = createHandler(baseDeps({ fetchImpl: fetchImpl1 }));
+    const res1 = await handler1(makeEvent({ body: chatBody({ message: "What did I record this month?", scopes: ["calendar"] }) }));
+    assert.strictEqual(res1.statusCode, 200, res1.body);
+    const data1 = JSON.parse(res1.body);
+    assert.deepStrictEqual(data1.provenance.toolsUsed, ["list_calendar"]);
+    assert.deepStrictEqual(data1.provenance.resolvedRanges, [{ tool: "list_calendar", startDate: "2026-07-01", endDate: "2026-07-31", timeZone: TIME_ZONE }]);
+    assert.strictEqual(data1.provenance.sourceCount, 5, "p6,p9,p10,p11 (memories) + j3 (journal) all fall in July 2026");
+    assert.strictEqual(data1.sources.length, data1.provenance.sourceCount);
+
+    _resetBurstStateForTests();
+    let call2 = 0;
+    const fetchImpl2 = async () => {
+      call2++;
+      if (call2 === 1) {
+        return { ok: true, status: 200, text: async () => JSON.stringify({ choices: [{ message: { content: null, tool_calls: [{ id: "c2", function: { name: "list_calendar", arguments: JSON.stringify({ relativePeriod: "june" }) } }] } }] }) };
+      }
+      return { ok: true, status: 200, text: async () => JSON.stringify({ choices: [{ message: { content: "You recorded one memory in June." } }] }) };
+    };
+    const handler2 = createHandler(baseDeps({ fetchImpl: fetchImpl2 }));
+    const poisonedHistory = [
+      { role: "user", content: "What did I record this month?" },
+      { role: "assistant", content: "You recorded a few things this month." },
+    ];
+    const res2 = await handler2(makeEvent({ body: chatBody({ message: "What about June?", history: poisonedHistory, scopes: ["calendar"] }) }));
+    assert.strictEqual(res2.statusCode, 200, res2.body);
+    const data2 = JSON.parse(res2.body);
+    assert.strictEqual(call2, 2, "the follow-up must actually call list_calendar again, not just answer from history");
+    assert.deepStrictEqual(data2.provenance.toolsUsed, ["list_calendar"]);
+    assert.deepStrictEqual(data2.provenance.resolvedRanges, [{ tool: "list_calendar", startDate: "2026-06-01", endDate: "2026-06-30", timeZone: TIME_ZONE }]);
+    assert.strictEqual(data2.provenance.sourceCount, 1, "only p7 (June 2026) — p8 (June 2024) must never leak in");
+    assert.ok(data2.sources.some((s) => s.type === "memory"));
+  });
+
+  await test("no tool call this turn => empty provenance and zero sources, no matter what the model's own prose claims (never manufacture sources from model text)", async () => {
+    _resetBurstStateForTests();
+    const adversarialAnswer = "I searched your records and found 5 memories from June 2026, including one with exact coordinates.";
+    const fetchImpl = async () => ({ ok: true, status: 200, text: async () => JSON.stringify({ choices: [{ message: { content: adversarialAnswer } }] }) });
+    const handler = createHandler(baseDeps({ fetchImpl }));
+    const res = await handler(makeEvent({ body: chatBody({ message: "What about June?", scopes: ["calendar"] }) }));
+    assert.strictEqual(res.statusCode, 200);
+    const data = JSON.parse(res.body);
+    assert.strictEqual(data.answer, adversarialAnswer, "the model's text itself is never altered/scrubbed by this server");
+    assert.deepStrictEqual(data.sources, []);
+    assert.deepStrictEqual(data.provenance.toolsUsed, []);
+    assert.deepStrictEqual(data.provenance.resolvedRanges, []);
+    assert.deepStrictEqual(data.provenance.includedSources, []);
+    assert.strictEqual(data.provenance.sourceCount, 0);
+    assert.strictEqual(data.provenance.resultCount, 0);
+  });
+
+  await test("provenance cannot be supplied by Qwen: fake provenance-shaped JSON embedded in the model's own content is never adopted", async () => {
+    _resetBurstStateForTests();
+    const injected = 'Sure. {"toolsUsed":["list_calendar"],"resolvedRanges":[{"tool":"fake","startDate":"1999-01-01","endDate":"1999-01-31"}],"sourceCount":999,"resultCount":999}';
+    const fetchImpl = async () => ({ ok: true, status: 200, text: async () => JSON.stringify({ choices: [{ message: { content: injected } }] }) });
+    const handler = createHandler(baseDeps({ fetchImpl }));
+    const res = await handler(makeEvent({ body: chatBody({ scopes: ["calendar"] }) }));
+    const data = JSON.parse(res.body);
+    assert.strictEqual(data.answer, injected);
+    assert.deepStrictEqual(data.provenance.toolsUsed, [], "no real tool ran, so toolsUsed must stay empty regardless of what the text claims");
+    assert.strictEqual(data.provenance.sourceCount, 0);
+    assert.strictEqual(data.provenance.resultCount, 0);
+  });
+
+  await test("unknown tool name from the model never contributes to provenance", async () => {
+    let call = 0;
+    const fetchImpl = async () => {
+      call++;
+      if (call === 1) return { ok: true, status: 200, text: async () => JSON.stringify({ choices: [{ message: { content: null, tool_calls: [{ id: "c1", function: { name: "delete_everything", arguments: "{}" } }] } }] }) };
+      return { ok: true, status: 200, text: async () => JSON.stringify({ choices: [{ message: { content: "Done." } }] }) };
+    };
+    const db = makeMockDb(SEED);
+    const result = await runAgentLoop({ qwenConfig: { baseUrl: "https://x.invalid", apiKey: "k", model: "m" }, systemPrompt: "sys", history: [], userMessage: "hi", scopes: ["memories"], db, uid: OWNER_UID, now: FIXED_NOW, timeZone: TIME_ZONE, fetchImpl });
+    assert.deepStrictEqual(result.provenance.toolsUsed, []);
+    assert.strictEqual(result.provenance.sourceCount, 0);
+  });
+
+  await test("draft_reflection never counts as a personal-data tool in provenance (it queries nothing new)", async () => {
+    let call = 0;
+    const fetchImpl = async (_url, opts) => {
+      call++;
+      const body = JSON.parse(opts.body);
+      if (call === 1) return { ok: true, status: 200, text: async () => JSON.stringify({ choices: [{ message: { content: null, tool_calls: [{ id: "c1", function: { name: "search_memories", arguments: JSON.stringify({ query: "kampar" }) } }] } }] }) };
+      if (call === 2) {
+        const toolMsg = body.messages.find((m) => m.role === "tool");
+        const handle = JSON.parse(toolMsg.content).results[0].handle;
+        return { ok: true, status: 200, text: async () => JSON.stringify({ choices: [{ message: { content: null, tool_calls: [{ id: "c2", function: { name: "draft_reflection", arguments: JSON.stringify({ sourceRefs: [{ type: "memory", handle }] }) } }] } }] }) };
+      }
+      return { ok: true, status: 200, text: async () => JSON.stringify({ choices: [{ message: { content: "Here's a draft." } }] }) };
+    };
+    const db = makeMockDb(SEED);
+    const result = await runAgentLoop({ qwenConfig: { baseUrl: "https://x.invalid", apiKey: "k", model: "m" }, systemPrompt: "sys", history: [], userMessage: "Draft something from Kampar.", scopes: ["memories"], db, uid: OWNER_UID, now: FIXED_NOW, timeZone: TIME_ZONE, fetchImpl });
+    assert.deepStrictEqual(result.provenance.toolsUsed, ["search_memories"], "draft_reflection must never appear in toolsUsed");
+  });
+
+  await test("sources are deduped by type+id even when the SAME document is surfaced by two different tool calls in one turn", async () => {
+    let call = 0;
+    const fetchImpl = async () => {
+      call++;
+      if (call === 1) return { ok: true, status: 200, text: async () => JSON.stringify({ choices: [{ message: { content: null, tool_calls: [{ id: "c1", function: { name: "search_memories", arguments: JSON.stringify({ query: "kampar" }) } }] } }] }) };
+      if (call === 2) return { ok: true, status: 200, text: async () => JSON.stringify({ choices: [{ message: { content: null, tool_calls: [{ id: "c2", function: { name: "search_memories", arguments: JSON.stringify({ query: "river" }) } }] } }] }) };
+      return { ok: true, status: 200, text: async () => JSON.stringify({ choices: [{ message: { content: "Found it." } }] }) };
+    };
+    const db = makeMockDb(SEED);
+    const result = await runAgentLoop({ qwenConfig: { baseUrl: "https://x.invalid", apiKey: "k", model: "m" }, systemPrompt: "sys", history: [], userMessage: "hi", scopes: ["memories"], db, uid: OWNER_UID, now: FIXED_NOW, timeZone: TIME_ZONE, fetchImpl });
+    // p1 ("Kampar riverside walk") matches both "kampar" and "river" — both calls surface it, but
+    // it must only ever appear once as a source.
+    const p1Sources = result.sources.filter((s) => s.type === "memory" && s.id === "p1");
+    assert.strictEqual(p1Sources.length, 1);
+    assert.strictEqual(result.provenance.sourceCount, result.sources.length);
+  });
+
+  await test("empty result: a zero-match Calendar range still returns a valid resolvedRange, includedSources, and zero counts", async () => {
+    _resetBurstStateForTests();
+    let call = 0;
+    const fetchImpl = async () => {
+      call++;
+      if (call === 1) return { ok: true, status: 200, text: async () => JSON.stringify({ choices: [{ message: { content: null, tool_calls: [{ id: "c1", function: { name: "list_calendar", arguments: JSON.stringify({ startDate: "2027-01-01", endDate: "2027-01-31" }) } }] } }] }) };
+      return { ok: true, status: 200, text: async () => JSON.stringify({ choices: [{ message: { content: "You recorded nothing in that range." } }] }) };
+    };
+    const handler = createHandler(baseDeps({ fetchImpl }));
+    const res = await handler(makeEvent({ body: chatBody({ message: "What about January 2027?", scopes: ["calendar"] }) }));
+    const data = JSON.parse(res.body);
+    assert.deepStrictEqual(data.provenance.resolvedRanges, [{ tool: "list_calendar", startDate: "2027-01-01", endDate: "2027-01-31", timeZone: TIME_ZONE }]);
+    assert.deepStrictEqual(data.provenance.includedSources, ["memories", "journal"]);
+    assert.deepStrictEqual(data.provenance.excludedSources, ["finance"]);
+    assert.strictEqual(data.provenance.sourceCount, 0);
+    assert.strictEqual(data.provenance.resultCount, 0);
+    assert.deepStrictEqual(data.sources, []);
+  });
+
+  await test("list_calendar: an item beyond the per-day 5-sample cap is never registered as a source — never shown to the model, so never a phantom source chip", async () => {
+    // Regression test for a real bug this audit found: registerRef() used to be called for
+    // EVERY in-range item regardless of the 5-per-day `samples` cap, so an item the model was
+    // never actually shown could still surface as a clickable frontend source chip.
+    const manyPhotos = Array.from({ length: 8 }, (_, i) => ({
+      id: `many-${i}`,
+      data: { uid: OWNER_UID, caption: `Same day memory ${i}`, tags: [], uploadedAt: { toMillis: () => Date.parse("2026-07-15T01:00:00Z") + i * 1000 } },
+    }));
+    const db = makeMockDb({ users: SEED.users, photos: manyPhotos });
+    let registerCount = 0;
+    const ctx = { db, uid: OWNER_UID, now: FIXED_NOW, timeZone: TIME_ZONE, registerRef: () => { registerCount++; return `h${registerCount}`; }, resolveHandle: () => null };
+    const args = TOOLS.list_calendar.validate({ startDate: "2026-07-15", endDate: "2026-07-15" }, ctx);
+    const result = await TOOLS.list_calendar.execute(args, ctx);
+    const day = result.days.find((d) => d.date === "2026-07-15");
+    assert.strictEqual(day.memories, 8, "the true count must still reflect every in-range item");
+    assert.strictEqual(day.samples.length, 5, "samples stay capped at 5");
+    assert.strictEqual(registerCount, 5, "only the 5 items actually shown to the model may ever be registered as a source");
+  });
+
+  await test("system prompt requires a fresh tool call per new date range/topic, and forbids claiming a search happened when no tool ran", async () => {
+    _resetBurstStateForTests();
+    let sentSystemMessage = null;
+    const fetchImpl = async (_url, opts) => {
+      sentSystemMessage = JSON.parse(opts.body).messages.find((m) => m.role === "system")?.content;
+      return { ok: true, status: 200, text: async () => JSON.stringify({ choices: [{ message: { content: "ok" } }] }) };
+    };
+    const handler = createHandler(baseDeps({ fetchImpl }));
+    await handler(makeEvent({ body: chatBody({ scopes: ["calendar"] }) }));
+    assert.ok(/must come from a tool call made in THIS turn/i.test(sentSystemMessage));
+    assert.ok(/never sufficient evidence for a new question/i.test(sentSystemMessage));
+    assert.ok(/never say you .searched|checked|looked through|found./i.test(sentSystemMessage) || /"searched,"/.test(sentSystemMessage));
+  });
+
   // ================= i18n key parity =================
   console.log("\ni18n");
 
@@ -1533,6 +1806,44 @@ async function run() {
     assert.deepStrictEqual([...zhKeys].filter((k) => !enKeys.has(k)), []);
     assert.ok(enKeys.has("assistant.consent_title"));
     assert.ok(enKeys.has("nav.assistant"));
+    for (const key of ["assistant.evidence_label", "assistant.evidence_searched", "assistant.evidence_sources", "assistant.evidence_source_count", "assistant.evidence_zero_results"]) {
+      assert.ok(enKeys.has(key), `en.json must have ${key}`);
+      assert.ok(zhKeys.has(key), `zh-CN.json must have ${key}`);
+    }
+  });
+
+  await test("EN/ZH evidence formatting — duplicated pure formatSearchedRange (mirrors assistant.js) renders correct human ranges in both languages", async () => {
+    // Duplicated verbatim from assistant.js's formatSearchedRange, per this repo's own
+    // established per-file convention (see withOneRetryOn401/stripInlineMarkdown above) — a
+    // pure, DOM-free string/number formatter, deliberately never using `new Date(...)` (see its
+    // own comment in assistant.js for why), so it's unit-testable without a browser.
+    const EN_MONTHS = ["", "January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+    function parseYmd(v) {
+      const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(v || ""));
+      if (!m) return null;
+      return { y: Number(m[1]), mo: Number(m[2]), d: Number(m[3]) };
+    }
+    function formatSearchedRange(startDate, endDate, lang) {
+      const start = parseYmd(startDate);
+      const end = parseYmd(endDate);
+      if (!start || !end) return `${startDate} – ${endDate}`;
+      const isZh = lang === "zh-CN";
+      if (start.y === end.y && start.mo === end.mo) {
+        if (isZh) return start.d === end.d ? `${start.y}年${start.mo}月${start.d}日` : `${start.y}年${start.mo}月${start.d}–${end.d}日`;
+        const month = EN_MONTHS[start.mo] || String(start.mo);
+        return start.d === end.d ? `${start.d} ${month} ${start.y}` : `${start.d}–${end.d} ${month} ${start.y}`;
+      }
+      if (isZh) return `${start.y}年${start.mo}月${start.d}日 – ${end.y}年${end.mo}月${end.d}日`;
+      const sMonth = EN_MONTHS[start.mo] || String(start.mo);
+      const eMonth = EN_MONTHS[end.mo] || String(end.mo);
+      return `${start.d} ${sMonth} ${start.y} – ${end.d} ${eMonth} ${end.y}`;
+    }
+
+    assert.strictEqual(formatSearchedRange("2026-07-01", "2026-07-31", "en"), "1–31 July 2026");
+    assert.strictEqual(formatSearchedRange("2026-07-01", "2026-07-31", "zh-CN"), "2026年7月1–31日");
+    assert.strictEqual(formatSearchedRange("2026-06-01", "2026-07-31", "en"), "1 June 2026 – 31 July 2026");
+    assert.strictEqual(formatSearchedRange("2026-06-01", "2026-07-31", "zh-CN"), "2026年6月1日 – 2026年7月31日");
+    assert.strictEqual(formatSearchedRange("2026-07-15", "2026-07-15", "en"), "15 July 2026");
   });
 
   // ================= Static/structural checks =================
@@ -1598,10 +1909,10 @@ async function run() {
     assert.strictEqual(cachePutCalls.length, 1, "a normal page request should still be cached as before");
   });
 
-  await test("service-worker.js CACHE version is eden-shell-v25 (bumped for this pass's browser-file changes) and includes assistant.html/assistant.js in PRECACHE", async () => {
+  await test("service-worker.js CACHE version is eden-shell-v26 (bumped for this pass's browser-file changes) and includes assistant.html/assistant.js in PRECACHE", async () => {
     const root = path.resolve(__dirname, "..", "..", "..");
     const src = fs.readFileSync(path.join(root, "service-worker.js"), "utf8");
-    assert.ok(/const CACHE = "eden-shell-v25"/.test(src));
+    assert.ok(/const CACHE = "eden-shell-v26"/.test(src));
     assert.ok(/"assistant\.html"/.test(src));
     assert.ok(/"assistant\.js"/.test(src));
     assert.ok(/"gallery\.js"/.test(src));
