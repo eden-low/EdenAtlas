@@ -127,6 +127,20 @@ No install or build required — just open [index.html](index.html) in a browser
 npx serve .
 ```
 
+## Deployment: Netlify
+
+Production is [https://edenatlas.netlify.app/](https://edenatlas.netlify.app/) — `netlify.toml`
+publishes the repo root as-is (no build step, matching the buildless architecture above) and
+declares a `netlify/functions` directory for server-side Functions. The repo-root publish is
+paired with explicit 404 redirects for files that aren't part of the deployed product
+(`firestore.rules`, `storage.rules`, internal docs, etc.) — see `netlify.toml`'s comments for
+the full list and reasoning. The only Function that exists today is an unauthenticated
+`/.netlify/functions/health` liveness check with no dependencies and no environment-variable
+reads; see [docs/ai-architecture.md](docs/ai-architecture.md) for the documented (not yet
+built) design of a future authenticated AI-assistant Function. Real secrets belong in Netlify's
+own Project configuration → Environment variables — see `.env.example` for the documented
+variable names (placeholders only, never committed values).
+
 ## Login gate: `auth-guard.js` + `login.html`
 
 Every page except `login.html` is gated: a single `<script type="module" src="auth-guard.js"></script>` tag checks `onAuthStateChanged` and redirects to `login.html?redirect=<page>` if signed out, or reveals the page once a user is confirmed. `login.html` resolves the signer's role (Owner / Friend / Viewer, cached to `localStorage` as `lfj:userMode`), upserts a `users/{uid}` directory doc, writes a `login_logs` doc, and writes a "new login" notification — all before redirecting into the app. This gate is a UX convenience, not the security boundary — real access control is (and remains) enforced by `firestore.rules`/`storage.rules`.
@@ -241,6 +255,7 @@ targets are ≥44px.
 - [OpenWeatherMap](https://openweathermap.org/) Current Weather API for the homepage weather widget
 - Shared custom styles in [styles.css](styles.css); shared behavior in [scripts.js](scripts.js) (scroll-reveal, service-worker registration)
 - A PWA layer: [manifest.json](manifest.json) + [service-worker.js](service-worker.js) (network-first with cache fallback, bypassing Firebase/CDN/weather hosts)
+- [Netlify](https://www.netlify.com/) for hosting (static publish, no build command) and [Netlify Functions](https://docs.netlify.com/functions/overview/) for server-side code — currently just `netlify/functions/health.js`, a dependency-free liveness check; see [Deployment](#deployment-netlify) above and [docs/ai-architecture.md](docs/ai-architecture.md) for what's planned next
 
 ## Design system
 

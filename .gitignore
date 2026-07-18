@@ -1,3 +1,20 @@
 .firebase/
 firebase-debug.log
 node_modules/
+
+# Environment / secrets (Netlify Functions prep) — never commit real values.
+# Production secrets belong in Netlify Project configuration -> Environment variables,
+# not in any file in this repo. See .env.example for the documented variable names.
+.env
+.env.*
+!.env.example
+*.local
+
+# Netlify CLI local state (deploy cache, local function logs) — never needed in git.
+.netlify/
+
+# Firebase Admin / service-account credentials — this project only ever uses the public
+# client-side Firebase Web config (firebase-init.js), never Admin SDK credentials in-repo.
+service-account*.json
+firebase-adminsdk-*.json
+*firebase-adminsdk*.json

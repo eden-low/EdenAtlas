@@ -1236,6 +1236,107 @@ preserved one click away. No Firebase/rules/schema changes, no deploy.
    performed in this environment and is called out as a follow-up, same as prior passes' documented
    test limitations.
 
+**"Netlify Functions prep" (most recent)** — corrects the production URL to the real deployed
+host and adds the scaffolding a future server-side AI assistant will need, without implementing
+that assistant or adding any real credential. No AI provider chosen, no API key added anywhere,
+no Firebase Auth/rules/schema change, no deploy, nothing committed/pushed by this pass.
+1. **Production URL corrected.** The v22 "Portfolio to root" pass shipped canonical/OG/Twitter
+   tags pointing at `https://eden-low.github.io/EJ-resume/` — documented at the time (see that
+   history entry above) as a placeholder that "does not match this repo's actual git remote" and
+   needed confirming before relying on it. The confirmed production URL is
+   `https://edenatlas.netlify.app/` (Netlify, not GitHub Pages) — `index.html`'s canonical/
+   `og:url`/`og:image`/`twitter:image` and `portfolio.html`'s canonical were updated accordingly.
+   Internal navigation was already host-independent relative paths sitewide (audited, not
+   assumed) and needed no change. The old GitHub Pages URL is left as-is in the v22 history
+   bullet itself, since that paragraph is an accurate record of what was shipped and why it was
+   flagged as unconfirmed at the time — rewriting it would erase the reasoning trail; this new
+   entry is the correction, not an edit to that one.
+2. **Service-worker cache stays `eden-shell-v22`.** None of this pass's changes touch any file in
+   `PRECACHE` (`netlify.toml`, `.env.example`, `netlify/functions/health.js`, and
+   `docs/ai-architecture.md` are never fetched by a page's `<head>`/`<script>` tags, so the
+   service worker never needs to know they exist) — verified by re-reading `PRECACHE`'s file
+   list, not assumed. Per this pass's own instructions, v22 is only bumped if it turns out to
+   already be deployed separately from this batch; that's a deploy-order fact this environment
+   can't observe, so the cache stays at v22 and the decision is called out for the user to
+   confirm before deploying.
+3. **`.gitignore`** gained `.env`/`.env.*`(with `!.env.example` un-ignored)/`*.local`/`.netlify/`/
+   `service-account*.json`/`firebase-adminsdk-*.json` blocks, appended after the existing
+   `.firebase/`/`firebase-debug.log`/`node_modules/` lines (none removed). Audited: none of the
+   newly-ignored patterns match any currently-tracked file, so nothing was silently hidden from
+   `git status` — a `.gitignore` addition never untracks a file that's already committed, only
+   the addition of *new* matching files going forward.
+4. **`.env.example`** (new, committed, placeholder names only) documents the env vars a future
+   server-side AI Function will read: `AI_PROVIDER`/`AI_PROVIDER_API_KEY`/`AI_MODEL` (provider
+   not yet chosen), `FIREBASE_PROJECT_ID`/`FIREBASE_SERVICE_ACCOUNT` (Admin SDK — bypasses
+   `firestore.rules`/`storage.rules` entirely, so it's Netlify-environment-only, never a
+   committed file), `ALLOWED_ORIGIN`. States explicitly that real values belong in Netlify
+   Project configuration → Environment variables, never in this file, `netlify.toml`, frontend
+   JS, or a Firestore document.
+5. **`netlify.toml`** (new) — `publish = "."` (kept, not moved to a subdirectory: every page's
+   relative `styles.css`/`scripts.js`/`js/*`/`locales/*`/`images/*` references depend on being
+   siblings, and restructuring that is exactly the kind of large, risky rewrite this repo's own
+   history consistently avoids — see the "Brand & navigation" convention of relabeling instead
+   of renaming files). `functions = "netlify/functions"`. No `[build.command]` (nothing to
+   compile) and deliberately no SPA catch-all rewrite, since every page (`home.html`,
+   `login.html`, `resume.html`, `project.html`, `atlas.html`, etc.) is meant to stay directly
+   reachable at its own path — a `/* -> /index.html 200` rewrite would silently serve the public
+   Portfolio for any unmatched path instead. **Repo-root exposure audit**: publishing `.` means
+   `firestore.rules`/`storage.rules`/`firebase.json`/`.firebaserc`/`CLAUDE.md`/`README.md`/
+   `design-system.md`/`brand-book.md`/`migrate-career.html` (CLAUDE.md already documents this as
+   a one-time page that should've been deleted after running — it never was) and two stray
+   tracked files, `tmp_chats.ts`/`tmp_types.ts` (accidentally-committed `@google/genai` SDK
+   source, unrelated to the site — flagged for the user to delete, not touched by this pass),
+   would otherwise all be publicly reachable at a stable URL. None of these are secrets (see the
+   secret audit below), so this isn't a security hole, but they're not part of the deployed
+   product either — `netlify.toml` shadows each with a `force = true`, `status = 404` redirect
+   rule (`to` deliberately equal to `from`, Netlify's documented pattern for "404 this exact
+   path without redirecting anywhere else") rather than moving files into an allowlisted
+   subdirectory, which would have required the same risky restructure ruled out above. Also adds
+   two sitewide headers (`X-Content-Type-Options: nosniff`, `Referrer-Policy:
+   strict-origin-when-cross-origin`) and `Cache-Control: no-store` on every `/.netlify/
+   functions/*` response — no CSP, since an overly strict `frame-ancestors`/`script-src` is a
+   known way to break the Google Sign-In popup this app depends on, and no CSP was requested or
+   tested this pass.
+6. **`netlify/functions/health.js`** (new) — the first Netlify Function in the repo. Classic
+   `exports.handler` (AWS Lambda-compatible) format, chosen over the newer Web-standard
+   `export default` v2 format specifically because this repo has no `package.json`/`"type":
+   "module"` declaration, so plain CommonJS is the least ambiguous option without adding project
+   tooling. GET returns `200 { ok: true, service: "edenatlas-functions" }`
+   (`Content-Type: application/json; charset=utf-8`, `Cache-Control: no-store`); any other method
+   returns `405` with an `Allow: GET` header. Reads no environment variable, calls no Firestore/
+   Firebase Admin API, and returns nothing derived from the request other than the method check —
+   verified by a scratch deterministic test (see the completion report) asserting the exact
+   response shape for GET/POST/DELETE and that a env var deliberately set before the call never
+   appears in the response body. Production route:
+   `https://edenatlas.netlify.app/.netlify/functions/health`.
+7. **[docs/ai-architecture.md](docs/ai-architecture.md)** (new) — design-only documentation of
+   the intended future flow (browser → authenticated Netlify Function → verified Firebase ID
+   token → optional App Check → allowlisted Agent tools → AI provider → scoped Firestore
+   operations) and its security requirements: never trust a browser-supplied UID, re-derive it
+   from a server-verified ID token; explicitly re-implement per-collection ownership checks in
+   Function code since Firebase Admin bypasses `firestore.rules` entirely (unlike every other
+   write path in this app); read-only tools before any write-capable one; every write needs a
+   user-visible proposal + confirmation, never an autonomous mutation in the same turn a tool is
+   called; permanent deletion, visibility publication, Finance deletion, and friend removal stay
+   permanently outside any Agent tool's reach; rate limits/token budgets/structured audit events;
+   never log private Journal/Memory body content, only that a doc was touched and its id; treat
+   user-generated content as untrusted data in any prompt, never as instructions. Explicitly
+   contrasts this design with the deleted v2.6 `ai.html`/`ai-agent.js` (client-side, trusted a
+   client-supplied uid, wrote directly to `expenses` with no server review) as the anti-pattern
+   this architecture exists to avoid repeating.
+8. **Secret audit (no rotation needed).** Scanned every tracked file and full git history for
+   common secret shapes (`AIzaSy...` 39-char Google API keys, PEM private-key headers, service-
+   account JSON `"private_key"` fields, `GOCSPX-`/`sk-`/`ghp_`/`xox?-`/`AKIA` provider-token
+   prefixes) — the only match anywhere is `firebase-init.js`'s existing Firebase Web config
+   `apiKey`, which is Firebase's public client-side configuration (documented by Firebase as
+   safe to ship to a browser; the real security boundary is `firestore.rules`/`storage.rules`,
+   not keeping this string secret) and was already there before this pass, unchanged. No Admin
+   SDK credential, OAuth client secret, AI provider key, or Netlify token exists in this repo at
+   any point in its history.
+9. **Brand & navigation**: none — no nav pages added, no file renames, no footer version bump
+   (this pass touches deployment/security scaffolding, not the product surface a version bump
+   is meant to track).
+
 ## Architecture
 
 ### Roles and the multi-tenant data model
