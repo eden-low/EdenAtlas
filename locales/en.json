@@ -219,6 +219,7 @@
     "nav_about": "About",
     "nav_resume": "Résumé",
     "enter_app": "Enter EdenAtlas",
+    "open_app": "Open EdenAtlas",
     "hero_cta_work": "View Selected Work",
     "hero_cta_resume": "View / Download Résumé",
     "open_to_opportunities": "Open to opportunities",
@@ -598,6 +599,7 @@
     "tagline": "Your life, beautifully organized.",
     "continue_google": "Continue with Google",
     "privacy": "Your data stays private — only you decide what to share.",
+    "back_to_portfolio": "Back to Portfolio",
     "footer_line": "Built by Jun · Version 3.2"
   },
   "splash": {

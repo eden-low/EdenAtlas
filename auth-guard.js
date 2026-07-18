@@ -40,17 +40,17 @@ onAuthStateChanged(auth, (user) => {
       document.body.classList.remove("auth-check-pending");
       return;
     }
-    const here = location.pathname.split("/").pop() || "index.html";
+    const here = location.pathname.split("/").pop() || "home.html";
     location.href = "login.html?redirect=" + encodeURIComponent(here);
     return;
   }
   // v3.2: owner-heavy pages (Career/Finance/Reports/Time Capsule/Constellation) opt in via
   // `<body data-owner-only="true">` and redirect non-owners to Home with a warm notice, rather
-  // than each page reimplementing the same check — see index.html's `?notice=private_space`
+  // than each page reimplementing the same check — see home.html's `?notice=private_space`
   // handling. Friend-mode navigation (js/sidebar.js, js/mobile-nav.js) already hides these links
   // for non-owners; this is the direct-URL backstop.
   if (document.body.dataset.ownerOnly === "true" && getUserMode() !== "OWNER") {
-    location.href = "index.html?notice=private_space";
+    location.href = "home.html?notice=private_space";
     return;
   }
   document.body.classList.remove("auth-check-pending");

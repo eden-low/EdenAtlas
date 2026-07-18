@@ -510,10 +510,12 @@ body.resume-viewer-mode {
   padding-bottom: 0 !important;
 }
 
-/* Recruiter-facing public pages (portfolio.html, project.html) — a standalone public shell with
-   no private-app sidebar/mobile-nav, so the sitewide `padding-left: var(--sidebar-w)` and mobile
-   top/bottom-bar clearance must be zeroed here (those bars are never injected on these pages).
-   Same class-gated approach as body.resume-viewer-mode above. */
+/* Recruiter-facing public pages (index.html — the public Portfolio root as of the "Portfolio to
+   root" routing change — and project.html; portfolio.html itself is now just a tiny redirect
+   stub with no styles.css link at all) — a standalone public shell with no private-app
+   sidebar/mobile-nav, so the sitewide `padding-left: var(--sidebar-w)` and mobile top/bottom-bar
+   clearance must be zeroed here (those bars are never injected on these pages). Same class-gated
+   approach as body.resume-viewer-mode above. */
 body.public-page {
   padding-left: 0 !important;
   padding-top: 0 !important;

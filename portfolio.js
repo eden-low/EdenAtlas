@@ -1,5 +1,7 @@
-// Recruiter-facing public portfolio (portfolio.html). Fully public — no auth-guard, no
-// private-app sidebar/mobile-nav. Reads the Career CMS (career_projects / career_experiences)
+// Recruiter-facing public portfolio (index.html — the site root, as of the "Portfolio to root"
+// routing change; portfolio.html is now just a redirect stub to index.html, no longer this
+// script's own page). Fully public — no auth-guard, no private-app sidebar/mobile-nav. Reads the
+// Career CMS (career_projects / career_experiences)
 // anonymously via each doc's public read rule (firestore.rules' isCareerReadable → a
 // `visibility == 'public'` career doc is readable with NO request.auth), and falls back to the
 // curated, user-verified content below when the CMS has nothing to show yet.
@@ -8,9 +10,10 @@
 // rendered when the CMS returns no matching public items — the same "graceful fallback to the
 // existing summary" pattern used across this codebase. Once the Owner populates the CMS (marking
 // EdenAtlas / EPMS / the internship project as `featured` with a `slug`), CMS data wins.
-import { db } from "./firebase-init.js";
+import { db, auth } from "./firebase-init.js";
 import { init as i18nInit, getLang, setLang, t } from "./js/i18n.js";
 import { collection, query, where, getDocs } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-firestore.js";
+import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-auth.js";
 // Canonical fallback content — single source of truth shared with career.js / resume.html.
 // EXPERIENCE/PROJECTS were previously duplicated here as local FALLBACK_* constants; LEADERSHIP too.
 import { EXPERIENCE as FALLBACK_EXPERIENCE, PROJECTS as FALLBACK_PROJECTS, LEADERSHIP } from "./js/resume-data.js";
@@ -330,6 +333,32 @@ async function loadCms() {
   }
 }
 
+// ==================== Auth-aware "Enter/Open EdenAtlas" CTA ====================
+// This page is fully public and must render identically whether or not Firebase ever resolves
+// (offline, slow network, auth error) — the markup already defaults to the signed-out state
+// ("Enter EdenAtlas" -> login.html), so this listener only ever *upgrades* that default once a
+// session is confirmed. It never blocks initial render and never redirects a signed-in Owner
+// away from this page (the brief's explicit "don't auto-redirect" requirement) — it just relabels
+// two links. `data-i18n` is deliberately not used on these two elements (see index.html) since
+// their text depends on auth state as well as language; this function is the single source for
+// both and re-runs on `eden:langchange` too so a language switch doesn't revert the label.
+let signedIn = false;
+function appCtaLinks() {
+  return [document.getElementById("enter-app-link"), document.getElementById("enter-app-link-mobile")].filter(Boolean);
+}
+function renderAppCta() {
+  const label = t(signedIn ? "portfolio.open_app" : "portfolio.enter_app");
+  const href = signedIn ? "home.html" : "login.html";
+  appCtaLinks().forEach((el) => {
+    el.textContent = label;
+    el.href = href;
+  });
+}
+onAuthStateChanged(auth, (user) => {
+  signedIn = !!user;
+  renderAppCta();
+});
+
 // ==================== Language toggle + mobile nav ====================
 function syncLangButtons() {
   const zh = L() === "zh";
@@ -361,6 +390,7 @@ document.querySelectorAll(".mobile-menu-link").forEach((a) =>
 document.addEventListener("eden:langchange", () => {
   renderAll();
   syncLangButtons();
+  renderAppCta();
 });
 
 // ==================== Boot ====================
@@ -368,5 +398,6 @@ document.addEventListener("eden:langchange", () => {
   await i18nInit(); // ensures getLang() reflects the resolved language before first render
   renderAll();
   syncLangButtons();
+  renderAppCta(); // repaint once i18n is ready, in case onAuthStateChanged already fired earlier
   loadCms();
 })();

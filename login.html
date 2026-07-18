@@ -65,6 +65,10 @@
       <p id="signin-status" class="mt-4 text-xs font-code text-textGray"></p>
 
       <p class="mt-7 text-[11px] text-textGray/70 leading-relaxed" data-i18n="login.privacy">Your data stays private — only you decide what to share.</p>
+
+      <a href="index.html" class="mt-4 inline-flex items-center gap-1.5 text-[11px] text-textGray/60 hover:text-neonPurple transition-colors">
+        <i class="fa-solid fa-arrow-left text-[10px]"></i> <span data-i18n="login.back_to_portfolio">Back to Portfolio</span>
+      </a>
     </div>
 
     <!-- Post-sign-in transition: card fades out, a small EA-logo loading state fades in, then
@@ -146,9 +150,21 @@
     // the page (and cancel the in-flight login_logs write below) before it can complete.
     let signingIn = false;
 
+    // Same-site, repository-relative allowlist only — a bare filename matching this exact set,
+    // never a path with a slash/colon/protocol (blocks `//evil.example`, `https://...`,
+    // encoded external URLs, etc. by construction, since none of those can match one of these
+    // literal strings). `index.html`/`portfolio.html`/`login.html` are deliberately excluded:
+    // the first two are the public Portfolio (never a "private destination" to return to after
+    // signing in) and the third would be a redirect-to-self loop.
+    const KNOWN_PRIVATE_PAGES = new Set([
+      "home.html", "resume.html", "gallery.html", "atlas.html", "journal.html", "expenses.html",
+      "calendar.html", "dashboard.html", "reports.html", "notifications.html", "timeline.html",
+      "habits.html", "time-capsule.html", "constellation.html", "contact.html", "collections.html",
+      "collection-detail.html", "me.html", "settings.html", "profile.html",
+    ]);
     function getRedirectTarget() {
       const raw = new URLSearchParams(location.search).get("redirect");
-      return raw && /^[a-zA-Z0-9_-]+\.html$/.test(raw) ? raw : "index.html";
+      return raw && KNOWN_PRIVATE_PAGES.has(raw) ? raw : "home.html";
     }
 
     // OWNER (jjun8647@gmail.com) > approved FRIEND (an entry in `friends/{email}`) > VIEWER

@@ -16,7 +16,7 @@ const COLLAPSED_W = "72px";
 // (mobile-nav.js's drawer already omits them from its primary set the same way), so they're
 // kept as a smaller secondary group rather than silently dropped.
 const PRIMARY_LINKS = [
-  { href: "index.html", icon: "home", key: "nav.home", label: "Home" },
+  { href: "home.html", icon: "home", key: "nav.home", label: "Home" },
   { href: "resume.html", icon: "briefcase", key: "nav.career", label: "Career" },
   { href: "gallery.html", icon: "image", key: "nav.memories", label: "Memories" },
   { href: "atlas.html", icon: "map", key: "nav.atlas", label: "Atlas" },
@@ -47,7 +47,7 @@ const SECONDARY_LINKS = [
 // audit. timeline.js is participant-scoped (canParticipate() writes, uid-owned reads) with no
 // Owner-only data, same as every other module already in this list.
 const LIGHT_LINKS = [
-  { href: "index.html", icon: "home", key: "nav.home", label: "Home" },
+  { href: "home.html", icon: "home", key: "nav.home", label: "Home" },
   { href: "gallery.html", icon: "image", key: "nav.memories", label: "Memories" },
   { href: "atlas.html", icon: "map", key: "nav.atlas", label: "Atlas" },
   { href: "journal.html", icon: "book-open", key: "nav.journal", label: "Journal" },
@@ -58,7 +58,7 @@ const LIGHT_LINKS = [
   { href: "habits.html", icon: "list-checks", key: "nav.habits", label: "Habits" },
 ];
 
-const here = location.pathname.split("/").pop() || "index.html";
+const here = location.pathname.split("/").pop() || "home.html";
 let collapsed = localStorage.getItem(COLLAPSE_KEY) === "1";
 let injected = false;
 
@@ -73,6 +73,7 @@ function navRow(item) {
   const a = document.createElement("a");
   a.href = item.href;
   a.title = item.label;
+  if (active) a.setAttribute("aria-current", "page");
   a.className = `flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition-colors ${active ? "bg-neonPurple/15 text-neonPurple" : "text-textGray hover:bg-darkBg/40 hover:text-white"}`;
   a.innerHTML = `<i data-lucide="${item.icon}" class="w-[18px] h-[18px] flex-shrink-0"></i><span class="eden-sidebar-label truncate" data-i18n="${item.key}">${item.label}</span>`;
   return a;

@@ -8,7 +8,7 @@ import { onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/
 import { getLang, setLang, init as initI18n, applyTranslations } from "./i18n.js";
 
 const DRAWER_LINKS = [
-  { href: "index.html", icon: "fa-house", key: "nav.home", label: "Home" },
+  { href: "home.html", icon: "fa-house", key: "nav.home", label: "Home" },
   { href: "resume.html", icon: "fa-scroll", key: "nav.career", label: "Career" },
   { href: "gallery.html", icon: "fa-images", key: "nav.memories", label: "Memories" },
   { href: "atlas.html", icon: "fa-map-location-dot", key: "nav.atlas", label: "Atlas" },
@@ -37,7 +37,7 @@ const OWNER_ONLY_HREFS = new Set(["resume.html", "expenses.html", "reports.html"
 // nav inconsistency). A dedicated array fixes both while leaving DRAWER_LINKS and the Owner's
 // drawer completely untouched.
 const LIGHT_DRAWER_LINKS = [
-  { href: "index.html", icon: "fa-house", key: "nav.home", label: "Home" },
+  { href: "home.html", icon: "fa-house", key: "nav.home", label: "Home" },
   { href: "gallery.html", icon: "fa-images", key: "nav.memories", label: "Memories" },
   { href: "atlas.html", icon: "fa-map-location-dot", key: "nav.atlas", label: "Atlas" },
   { href: "journal.html", icon: "fa-book", key: "nav.journal", label: "Journal" },
@@ -50,7 +50,7 @@ const LIGHT_DRAWER_LINKS = [
 ];
 
 const BOTTOM_ITEMS = [
-  { href: "index.html", icon: "fa-house", key: "mobilenav.home", label: "Home" },
+  { href: "home.html", icon: "fa-house", key: "mobilenav.home", label: "Home" },
   { href: "gallery.html", icon: "fa-images", key: "mobilenav.memories", label: "Memories" },
   { action: "quick-add", icon: "fa-plus", key: "mobilenav.quick_add", label: "Add" },
   { href: "dashboard.html", icon: "fa-user-group", key: "mobilenav.people", label: "Connections" },
@@ -67,7 +67,7 @@ const QUICK_ADD_ITEMS = [
   { href: "time-capsule.html?new=1", icon: "fa-box-archive", key: "mobilenav.new_capsule", label: "New Capsule" },
 ];
 
-const here = location.pathname.split("/").pop() || "index.html";
+const here = location.pathname.split("/").pop() || "home.html";
 
 // user.displayName/email are Google-account-controlled, not app-controlled — escape before
 // interpolating into the insertAdjacentHTML template below.
@@ -184,7 +184,7 @@ function drawerHTML(isOwnerRole, user) {
   const links = visibleLinks.map((item) => {
     const isActive = item.href === here;
     return `
-    <a href="${item.href}" class="mobile-drawer-link${isActive ? " active" : ""} flex items-center gap-3 px-3 py-3 min-h-[44px] rounded-xl ${isActive ? "text-neonPurple bg-neonPurple/10" : "text-white hover:bg-darkBg/40"} transition-colors">
+    <a href="${item.href}" ${isActive ? 'aria-current="page"' : ""} class="mobile-drawer-link${isActive ? " active" : ""} flex items-center gap-3 px-3 py-3 min-h-[44px] rounded-xl ${isActive ? "text-neonPurple bg-neonPurple/10" : "text-white hover:bg-darkBg/40"} transition-colors">
       <i class="fa-solid ${item.icon} w-5 text-center"></i> <span data-i18n="${item.key}">${item.label}</span>
     </a>`;
   }).join("");
@@ -244,7 +244,7 @@ function bottomNavHTML() {
     // squeezed text ("HomeMemories"). truncate is the second half: if a label is ever still
     // wider than its slot, it ellipsizes instead of overflowing past the flex item's box.
     return `
-      <a href="${item.href}" class="flex flex-col items-center justify-center gap-0.5 min-w-0 min-h-[44px] flex-1 ${active ? "text-neonPurple" : "text-textGray"}">
+      <a href="${item.href}" ${active ? 'aria-current="page"' : ""} class="flex flex-col items-center justify-center gap-0.5 min-w-0 min-h-[44px] flex-1 ${active ? "text-neonPurple" : "text-textGray"}">
         <i class="fa-solid ${item.icon}"></i>
         <span class="bottomnav-label w-full text-center truncate text-[10px] font-code" data-i18n="${item.key}">${item.label}</span>
       </a>`;

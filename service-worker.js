@@ -1,16 +1,21 @@
 // Minimal network-first service worker for offline shell caching.
 // Deliberately bypasses Firebase/CDN/weather hosts so it never interferes with
 // the auth flow, live Firestore/Storage reads, or third-party API calls.
-// v21 (Trash privacy fix): gallery.js was edited again (visibility-preserving Trash — see
-// CLAUDE.md's "Trash privacy + ownership-merge fix" note) — cache bumped so an offline-fallback
-// visit can never serve a pre-fix gallery.js. No new PRECACHE entries this pass (no rules files
-// are cached — service workers never cache firestore.rules/storage.rules, those are deployed
-// server-side only). Online behaviour unchanged (network-first).
-// Earlier: v20 (Memory Trash + location-edit fix), v19 (canonical location pipeline fix).
-const CACHE = "eden-shell-v21";
+// v22 ("Portfolio to root" routing change): index.html is now the public recruiter Portfolio
+// (previously portfolio.html's content — see CLAUDE.md's routing-change history note) and the
+// private Personal OS Home moved from index.html to the new home.html. portfolio.html is now a
+// tiny compatibility redirect stub, kept in PRECACHE so old bookmarks/shared links still resolve
+// offline. Cache bumped so an offline-fallback visit can never serve the pre-v22 index.html
+// (which used to be the private Home) under its old meaning, and so every page whose <head> script
+// tags changed (index.html, portfolio.html, resume.html, project.html) or whose JS changed
+// (portfolio.js, auth-guard.js, js/sidebar.js, js/mobile-nav.js) is re-fetched fresh. Online
+// behaviour unchanged (still network-first) — this only affects the offline-fallback path.
+// Earlier: v21 (Trash privacy fix), v20 (Memory Trash + location-edit fix), v19 (canonical
+// location pipeline fix).
+const CACHE = "eden-shell-v22";
 
 const PRECACHE = [
-  "index.html", "resume.html", "gallery.html", "journal.html", "expenses.html",
+  "index.html", "home.html", "resume.html", "gallery.html", "journal.html", "expenses.html",
   "timeline.html", "dashboard.html", "contact.html", "login.html", "settings.html",
   "habits.html", "notifications.html", "calendar.html", "reports.html",
   "profile.html", "atlas.html", "portfolio.html", "project.html",
