@@ -122,7 +122,7 @@
         <!-- Recent Memories -->
         <section id="recent-memories-section" class="hidden">
             <p class="text-[10px] uppercase tracking-[0.2em] text-textGray font-code mb-3 px-1" data-i18n="home.recent_memories">Recent Memories</p>
-            <div id="recent-memories-list" class="reveal-group grid grid-cols-1 sm:grid-cols-2 gap-3"></div>
+            <div id="recent-memories-list" class="grid grid-cols-1 sm:grid-cols-2 gap-3"></div>
             <!-- v3.3.2: Friend Home polish — shown instead of the grid (never both) when a
                  non-owner has nothing recent yet, rather than the section just vanishing.
                  Owner keeps the original "hide the whole section" behavior unchanged. -->
@@ -553,7 +553,16 @@
         function memoryCard(href, icon, label, text) {
             const el = document.createElement("a");
             el.href = href;
-            el.className = "reveal card-lift bg-cardBg/90 neon-border-purple rounded-2xl p-4 flex items-center gap-3 hover:border-neonPurple/40 transition-all";
+            // "is-visible" (not "reveal"): this card is appended well after the page's one-time,
+            // load-time IntersectionObserver setup in scripts.js (that observer only ever scans
+            // for `.reveal` elements once, at DOMContentLoaded) — the same reasoning
+            // gallery.js/journal.js/timeline.js/habits.js/expenses.js/notifications.js/
+            // collections.js/time-capsule.js already document at their own dynamic-card call
+            // sites. A `.reveal` class here would never be observed, so the card would stay at
+            // `.reveal`'s base opacity:0 forever: a fully clickable anchor with no visible
+            // content or click-target boundary — exactly the invisible-navigation-target bug this
+            // comment exists to prevent from being reintroduced.
+            el.className = "is-visible card-lift bg-cardBg/90 neon-border-purple rounded-2xl p-4 flex items-center gap-3 hover:border-neonPurple/40 transition-all";
             el.innerHTML = `
                 <span class="w-9 h-9 rounded-lg bg-neonPurple/10 text-neonPurple flex items-center justify-center text-sm flex-shrink-0"><i class="fa-solid ${icon}"></i></span>
                 <span class="min-w-0">

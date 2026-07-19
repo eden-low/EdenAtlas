@@ -1,6 +1,17 @@
 // Minimal network-first service worker for offline shell caching.
 // Deliberately bypasses Firebase/CDN/weather hosts so it never interferes with
 // the auth flow, live Firestore/Storage reads, or third-party API calls.
+// v31 (Recent Memories invisible-click-target fix): home.html changed — memoryCard() (Home's
+// "Recent Memories" widget) was assigning dynamically-created card anchors the `.reveal` class,
+// but scripts.js's scroll-reveal IntersectionObserver only ever scans for `.reveal` elements
+// once, at DOMContentLoaded, well before these Firestore-driven cards exist in the DOM. They
+// were therefore never observed, so they stayed at `.reveal`'s base `opacity:0` permanently —
+// fully clickable, correctly-routed anchors with no visible content, exactly matching this
+// codebase's own documented convention (see gallery.js/journal.js/timeline.js/habits.js/
+// expenses.js/notifications.js/collections.js/time-capsule.js) that any card appended after
+// page load must use `is-visible`, never `reveal`. Pre-existing bug, not introduced by the v30
+// Tailwind migration (byte-identical in the pre-migration commit) — bumped anyway because
+// home.html is a precached asset and this fix must reach an already-installed worker.
 // v30 (Tailwind local build migration): the runtime Tailwind Play CDN (cdn.tailwindcss.com) is
 // replaced by a pinned local Tailwind v3.4.19 build — every page's `<script
 // src="https://cdn.tailwindcss.com">` and inline `tailwind.config = {...}` block is gone,
@@ -86,7 +97,7 @@
 // change — index.html is now the public recruiter Portfolio, home.html is the private app
 // landing page), v21 (Trash privacy fix), v20 (Memory Trash + location-edit fix), v19 (canonical
 // location pipeline fix).
-const CACHE = "eden-shell-v30";
+const CACHE = "eden-shell-v31";
 
 const PRECACHE = [
   "index.html", "home.html", "resume.html", "gallery.html", "journal.html", "expenses.html",

@@ -130,8 +130,15 @@ async function run() {
   });
 
   await test("tailwind-input.css contains only the three required @tailwind directives", () => {
-    const input = read("tailwind-input.css").trim();
-    assert.strictEqual(input, "@tailwind base;\n@tailwind components;\n@tailwind utilities;");
+    // Normalize line endings before comparing, not the file itself: this repo is edited on both
+    // Windows (core.autocrlf=true checks this out with CRLF) and Unix checkouts (LF) — the
+    // committed blob is LF-only (verified: `git show HEAD:tailwind-input.css` has no \r), so a
+    // platform-specific working-tree line ending is a checkout artifact, not a real content
+    // difference, and must never fail this check. Still asserts the exact three directives, in
+    // the exact order, with no extra content — CRLF/CR normalization only, no other leniency.
+    const raw = read("tailwind-input.css");
+    const normalized = raw.replace(/\r\n?/g, "\n").trim();
+    assert.strictEqual(normalized, "@tailwind base;\n@tailwind components;\n@tailwind utilities;");
   });
 
   await test("tailwind.generated.css exists and is non-empty after build:css", () => {
@@ -184,9 +191,14 @@ async function run() {
     assert.ok(precacheBlock.includes('"tailwind.generated.css"'));
   });
 
-  await test("service-worker.js CACHE is eden-shell-v30", () => {
+  await test("service-worker.js CACHE is at least eden-shell-v30", () => {
+    // Exact-pinned to v30 through the Tailwind migration pass itself; a later, unrelated pass
+    // (e.g. the Recent Memories invisible-click-target fix) is expected to bump this further —
+    // this test only needs to confirm the migration's own bump was never silently reverted.
     const sw = read("service-worker.js");
-    assert.match(sw, /const CACHE = "eden-shell-v30";/);
+    const match = sw.match(/const CACHE = "eden-shell-v(\d+)";/);
+    assert.ok(match, "service-worker.js is missing the expected CACHE = \"eden-shell-vN\" line");
+    assert.ok(Number(match[1]) >= 30, `expected eden-shell-v30 or later, got eden-shell-v${match[1]}`);
   });
 
   await test("cdn.tailwindcss.com is absent from service-worker.js BYPASS_HOSTS", () => {
@@ -217,10 +229,39 @@ async function run() {
     assert.strictEqual(pkg.scripts["watch:css"], "tailwindcss -c tailwind.config.js -i ./tailwind-input.css -o ./tailwind.generated.css --watch");
   });
 
-  await test("existing test scripts (test:functions, test:frontend, test) are unchanged", () => {
+  await test("existing test scripts (test:functions, test:frontend, test) still run every prior suite", () => {
+    // Structural check (split each npm script on "&&" into its individual commands), not a
+    // fragile whole-string equality or a loose "contains somewhere" regex: test:frontend
+    // legitimately grew a new, ADDITIONAL entry (js/__tests__/home-recent-memories.test.js, the
+    // Recent Memories invisible-click-target regression fix) after this migration pass, but every
+    // command that ran before this pass must still be present, unmodified, and in its original
+    // relative order — this is a strict superset check, not a loosened one.
+    const splitCmds = (script) => script.split("&&").map((c) => c.trim());
     const pkg = JSON.parse(read("package.json"));
-    assert.strictEqual(pkg.scripts["test:functions"], "node netlify/functions/__tests__/assistant.test.js && node netlify/functions/__tests__/weather.test.js");
-    assert.strictEqual(pkg.scripts["test:frontend"], "node js/__tests__/date-utils.test.js && node js/__tests__/reflection.test.js");
+
+    const functionsCmds = splitCmds(pkg.scripts["test:functions"]);
+    assert.deepStrictEqual(functionsCmds, [
+      "node netlify/functions/__tests__/assistant.test.js",
+      "node netlify/functions/__tests__/weather.test.js",
+    ]);
+
+    const frontendCmds = splitCmds(pkg.scripts["test:frontend"]);
+    const priorFrontendCmds = [
+      "node js/__tests__/date-utils.test.js",
+      "node js/__tests__/reflection.test.js",
+    ];
+    // Every pre-existing command is still present, in its original relative order (a genuine
+    // ordered-subsequence check, not just an unordered "includes all of" set check).
+    let cursor = 0;
+    priorFrontendCmds.forEach((cmd) => {
+      const idx = frontendCmds.indexOf(cmd, cursor);
+      assert.ok(idx !== -1 && idx >= cursor, `test:frontend dropped or reordered pre-existing command: ${cmd}`);
+      cursor = idx + 1;
+    });
+    // And exactly one new command was added on top — the Recent Memories regression suite —
+    // never a silent removal disguised as a reorder.
+    assert.deepStrictEqual(frontendCmds, [...priorFrontendCmds, "node js/__tests__/home-recent-memories.test.js"]);
+
     assert.strictEqual(pkg.scripts.test, "npm run test:functions && npm run test:frontend");
   });
 
