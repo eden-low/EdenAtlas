@@ -1923,6 +1923,56 @@ noticeable in Dark mode.
    watching it render on a real device, consistent with this branch's own already-documented "not
    performed: interactive browser/device QA" limitation above.
 
+**"...follow-up: PR #6 QA — the resolved layer must be invisible, not just static" (most recent,
+same `audit/dark-light-theme` branch)** — PR #6 manual QA on the pass above found the fix was
+still incomplete: the pulse no longer animated, but the resolved page stayed visibly gray, and
+light secondary text on the Portfolio/Profile hero and Home's date/weather line was unreadable.
+1. **Root cause**: the previous fix only scoped the *animation* to
+   `html:has(body.auth-check-pending)::before`, leaving a static `opacity: 0.55` on the base
+   (resolved-page) `html::before` rule — a permanently-visible dark full-viewport layer is exactly
+   the same underlying problem the animated version had, just frozen at one value instead of
+   oscillating between two. Once auth resolves, that layer must contribute nothing at all, not
+   just stop moving.
+2. **Fix**: the base `html::before` rule now sets `opacity: 0` — fully invisible outside the
+   auth-pending window, no exceptions. `html:has(body.auth-check-pending)::before` sets its own
+   `opacity: 0.55` (matching the pulse animation's own trough, avoiding a jump at either boundary)
+   alongside the animation — `:has()`'s pseudo-class specificity is higher than the bare
+   `html::before` selector, so this correctly overrides the invisible default exactly and only
+   while `body.auth-check-pending` is present. `#eden-splash-mark`'s own independent pulse (tied
+   to the temporary splash overlay, which is a completely separate element/mechanism) is
+   untouched — unaffected by anything in this fix.
+3. **`js/__tests__/auth-pulse-scope.test.js` extended** from 9 to 10 assertions: the old "static
+   opacity matching the trough" test on the *base* rule was replaced with one asserting the base
+   rule is exactly `opacity: 0` (and explicitly rejects any nonzero static value like the old
+   0.55, since that's the literal PR #6 regression); a new assertion confirms the
+   auth-pending-scoped rule sets its own visible `opacity: 0.55`. Re-verified as a real regression
+   guard the same way as the first pass: stashed the fix and re-ran against the exact
+   previously-pushed (and PR #6-flagged) commit — 2 of 10 assertions failed against that real
+   code, then passed again once restored.
+4. **Text-contrast complaint investigated, not blindly patched.** Traced the three flagged
+   locations to their actual markup/classes: Portfolio's `#hero-subhead` (`text-white/90`, forced
+   to `#16151a` by the existing `[class*="text-white"]` light-mode override — no card, sits
+   directly on the page's `#f5f5f7` background, ~17:1 contrast) and `#hero-oneliner`/Home's
+   greeting-date line (`text-textGray`, forced to `#6b6878`, also no card, computed at ~4.97:1
+   against `#f5f5f7` — passes WCAG AA's 4.5:1 floor) sit on the flat page background with no
+   translucent card of their own; Profile's header content sits inside `#profile-header`
+   (`bg-cardBg/90`, i.e. `rgba(255,255,255,0.85)` once light-mode-overridden) — an 85%-opaque
+   surface whose remaining 15% blends with whatever's behind it, which is now nothing but the
+   opaque page background once `html::before` contributes exactly zero, landing its *effective*
+   background within a fraction of a percent of pure white — the same colors read the same as
+   against a flat white card. No element-specific CSS overrides exist for any of the three
+   locations (`grep`-confirmed) that could be fighting the shared `[class*=...]` rules. Per this
+   pass's own instruction to add targeted contrast fixes only if these locations still failed
+   *after* the layer was actually removed, and since every one of these colors already
+   independently meets WCAG AA against its true background once the confounding layer can no
+   longer contribute any pixels, **no additional contrast CSS was added** — real-device/browser
+   re-QA on these three exact locations is recommended to confirm, since this reasoning is
+   computed from the declared CSS values and this environment still has no browser-automation
+   tool to render and sample it directly.
+5. **Verification performed**: `npm run build` (clean), full `npm test` (Assistant 160/160,
+   Weather 37/37, date-utils 9/9, reflection 18/18, home-recent-memories 15/15, the extended
+   auth-pulse-scope 10/10), `npm run test:tailwind-migration` (23/23).
+
 ## Architecture
 
 ### Roles and the multi-tenant data model

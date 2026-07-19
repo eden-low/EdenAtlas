@@ -8,17 +8,20 @@
 // a full-viewport, always-dark layer (the Part 2 fix that made this backplate always-dark, not
 // theme-switching) read as a continuous background flicker, worst in Light mode.
 //
-// The fix scopes the animation itself to `html:has(body.auth-check-pending)::before` -- CSS's
-// own `:has()` relational pseudo-class, universally supported by evergreen browsers this app
-// already targets (including iOS Safari 16.4+) -- so no JS change was needed: auth-guard.js
-// already toggles that exact class today.
+// PR #6 QA follow-up: the first fix only scoped the *animation* to
+// `html:has(body.auth-check-pending)::before`, leaving a static `opacity: 0.55` on the resolved
+// (post-auth) base rule -- which bled through the same translucent glass cards, just frozen
+// instead of oscillating, and measurably degraded the effective contrast of light-gray text
+// sitting on those cards (Portfolio/Profile hero supporting text, Home's date/weather line).
+// The resolved state must be fully invisible (`opacity: 0`), not merely non-animating -- only
+// `html:has(body.auth-check-pending)::before` may be visible at all, and only it may animate.
 //
 // This is a structural check on the real styles.css text (same convention
 // home-recent-memories.test.js already uses for CSS assertions, since this repo has no CSS
 // parser/computed-style test infrastructure), not a live-browser animation trace -- it proves
-// the *shape* of the fix (animation is conditional, not unconditional; reduced-motion still
-// covers the conditional selector; the splash's own separate pulse is untouched) rather than
-// sampling actual frame-by-frame opacity in a real renderer.
+// the *shape* of the fix (resolved state is invisible; only the auth-pending state is visible
+// and animates; reduced-motion still covers the conditional selector; the splash's own separate
+// pulse is untouched) rather than sampling actual frame-by-frame opacity in a real renderer.
 //
 // Run with: node js/__tests__/auth-pulse-scope.test.js
 
@@ -75,16 +78,23 @@ await test("the base (unconditional) html::before rule carries NO animation prop
   assert.ok(!/animation\s*:/.test(rule.block), `base html::before must not carry an animation property. Found block:\n${rule.block}`);
 });
 
-await test("the base html::before rule has a static opacity so it never snaps to fully opaque once the auth-pending animation stops", () => {
+await test("[PR #6 fix] the base (resolved/post-auth) html::before rule is fully invisible -- opacity: 0, not just non-animating -- so no dark layer can bleed through translucent cards once auth resolves", () => {
   const rule = extractRuleBlock(STYLES, "html::before");
   assert.ok(rule, "base html::before rule not found in styles.css");
-  assert.match(rule.block, /opacity\s*:\s*0\.55/, "expected a static opacity matching the pulse animation's own trough value");
+  assert.match(rule.block, /opacity\s*:\s*0\s*;/, `expected the resolved-state opacity to be exactly 0. Found block:\n${rule.block}`);
+  assert.ok(!/opacity\s*:\s*0\.\d/.test(rule.block), `the base rule must not carry any nonzero static opacity (e.g. 0.55) -- that's the exact PR #6 regression. Found:\n${rule.block}`);
 });
 
 await test("the infinite pulse animation is scoped to html:has(body.auth-check-pending)::before -- only while auth-guard.js's own auth-check-pending class is present", () => {
   const rule = extractRuleBlock(STYLES, AUTH_SCOPED_SELECTOR);
   assert.ok(rule, `expected a rule for ${AUTH_SCOPED_SELECTOR} in styles.css`);
   assert.match(rule.block, /animation\s*:\s*eden-auth-pulse\s+1\.6s\s+ease-in-out\s+infinite/, `expected the infinite pulse animation on the scoped selector. Found:\n${rule.block}`);
+});
+
+await test("[PR #6 fix] only the auth-pending state is visible -- html:has(body.auth-check-pending)::before sets its own nonzero opacity, overriding the invisible resolved-state default via higher :has()-pseudo-class specificity", () => {
+  const rule = extractRuleBlock(STYLES, AUTH_SCOPED_SELECTOR);
+  assert.ok(rule, `expected a rule for ${AUTH_SCOPED_SELECTOR} in styles.css`);
+  assert.match(rule.block, /opacity\s*:\s*0\.55/, `expected the auth-pending rule to explicitly set a visible opacity. Found:\n${rule.block}`);
 });
 
 await test("prefers-reduced-motion still disables the pulse -- scoped to the SAME selector (not just the bare html::before), so it actually wins the cascade against the scoped animation rule above (equal specificity, later rule wins)", () => {
