@@ -1937,6 +1937,184 @@ regression test at all. Both closed here.
 8. **Not part of this pass**: no other CDN script in the app was retrofitted with SRI (scoped to
    the two new pins only), no `firestore.rules`/`storage.rules` change, no deploy, nothing merged
    to `main`.
+**"Production Hardening — Dark/Light theme audit" (most recent, `audit/dark-light-theme`
+branch)** — a targeted, code-verified pass (every finding confirmed by reading the actual CSS
+rule and, for contrast claims, computing the real WCAG relative-luminance ratio against this
+codebase's own palette — never asserted from a screenshot or guessed) fixing five real
+light-mode bugs the blanket `html[data-theme="light"] [class*="..."]` override strategy
+(styles.css, "a simple, functional override, not a full redesign" — unchanged as this pass's own
+approach too) had never accounted for:
+1. **Colored/gradient buttons lost contrast, not gained it** — `[class*="text-white"]` forces
+   near-black (#16151a) onto *every* `text-white`-classed element, including labels sitting on a
+   saturated fill (primary purple CTAs, rose/red destructive buttons like Memories' "Permanently
+   Delete," the unread-notification badge) rather than a plain dark surface. Measured against
+   this palette, near-black-on-rose-500/600 comes out to ~3.9:1 — *below* WCAG AA (4.5:1), and
+   worse than the white text these buttons shipped with (~4.7:1). Fixed with a light-mode
+   exception (`[class*="bg-gradient-to-r"]`/`[class*="bg-rose-"]`/`[class*="bg-red-"]`/
+   `[class*="bg-emerald-"]`/`[class*="bg-amber-"]`, each `[class*="text-white"]`) that keeps
+   white text on a self-painted saturated background in both themes.
+2. **The sitewide "EdenAtlas" wordmark could render invisible** — `from-white` (Tailwind's
+   gradient-stop utility backing `text-transparent bg-clip-text bg-gradient-to-r from-white
+   to-neonPurple`, used in ~21 files: every nav brand mark, login's `<h1>`, etc.) starts the
+   text-clip gradient at pure white, which is near-zero contrast against light mode's
+   ~#f5f5f7 page background — the wordmark's first few letters were effectively unreadable.
+   Fixed by overriding only the `--tw-gradient-from` custom property in light mode (`#16151a`),
+   leaving `to-neonPurple` and every other gradient utility on the page untouched.
+3. **`images/logo-mark.png`'s baked-in glow reads as a gray halo on light backgrounds** — the
+   source PNG (kept as-is, never regenerated, per design direction) has a soft drop-shadow
+   designed for a dark canvas; placed directly on a now-light sidebar/mobile-nav/login-card/
+   portfolio-header background (all of which go near-white via the `bg-cardBg`/`bg-darkBg`
+   overrides), that shadow read as a dirty smudge rather than a clean mark. Fixed with a new
+   `.eden-logo-plate` class (`background-color:#0a0a0e; border-radius:999px`) applied to every
+   logo `<img>`/wrapper sitewide (login card + post-sign-in transition mark, the desktop sidebar
+   brand mark, the mobile top bar and drawer-header marks, the Portfolio header mark) — deliberately
+   named apart from `bg-darkBg` so the light-mode override can't re-lighten it. The two
+   full-viewport dark logo treatments (`html::before`'s auth-check pulse mark, `#eden-splash`)
+   had their own light-mode background/text swaps removed instead — both are already framed as a
+   "unified dark brand backplate" and are only ever visible for a brief loading window, so staying
+   dark in both themes reads as an intentional branded beat rather than a mismatch.
+4. **Theme switch required a full reload** — `me.js`'s Save Preferences handler used to write
+   `localStorage` then show "Saved. Reloading to apply theme…" and `location.reload()` after
+   600ms, purely to re-run the `<head>` theme-preload inline script — but every light/dark rule in
+   styles.css is a plain `data-theme` attribute selector with no other JS-rendered state
+   depending on it, so toggling the attribute directly applies every rule instantly. New
+   `applyTheme(theme)` sets/removes `data-theme` and updates the `theme-color` meta tag in one
+   call; the reload is gone.
+5. **`<meta name="theme-color">` never reflected the stored theme at all** (iPhone PWA status bar
+   / Safari toolbar color) — hardcoded `#09090e` in all 25 pages' static `<head>`, with nothing
+   ever writing to it, at load or at runtime. Every page's theme-color meta tag gained a one-line
+   inline `<script>` immediately after it (scripted sitewide edit, byte-identical insertion — the
+   theme-preload script itself, one line earlier in `<head>`, can't touch this tag directly since
+   it runs before the tag exists in the DOM yet) that flips it to `#f5f5f7` when the stored theme
+   is light, mirroring what `applyTheme()` now also does at runtime.
+6. **Focus ring contrast** — `focus-visible:ring-neonPurple`/`focus:ring-neonPurple` (#a78bfa)
+   measures ~2.7:1 against a light-mode background, under WCAG 1.4.11's 3:1 floor for a required
+   non-text UI indicator. A `[class*="ring-neonPurple"]:focus`/`:focus-visible` light-mode
+   override swaps `--tw-ring-color` to a deeper violet (#7c3aed, ~5.7:1) — same hue family, no
+   markup change.
+7. **Deliberately deferred, not silently ignored**: modal backdrops (`bg-darkBg/80
+   backdrop-blur-sm`, the standard convention behind every modal sitewide) lose their intended
+   translucent dark scrim in light mode — the `bg-darkBg` override forces a flat opaque
+   `#f5f5f7`, which still visually separates the modal from the page but no longer shows a
+   dimmed backdrop through the blur. Fixing this correctly needs a dedicated marker class
+   (`.eden-modal-backdrop` or similar) swept across every modal `<div>` in every page — a wider,
+   riskier change than this pass's other fixes, scoped out and recommended as a follow-up rather
+   than attempted here. `border-borderNeon`'s light-mode value (`rgba(0,0,0,0.10)`) is also
+   visibly faint on some card-on-card surfaces and would benefit from real-device visual QA, not
+   flagged as broken outright.
+8. **Verification performed**: `node --check` on every changed `.js` file, `npm run build`, the
+   full `npm test` + `npm run test:tailwind-migration` suites (all pass unmodified — no test
+   needed updating for this pass), and WCAG contrast ratios computed by hand against this
+   codebase's actual documented hex palette (`tailwind.config.js`) for every contrast claim above,
+   not estimated by eye. **Not performed**: interactive browser/device QA (no browser-automation
+   tool available in this environment) — real-device visual confirmation across both themes,
+   especially on an actual iPhone status bar, is recommended before merge, consistent with this
+   repo's own established pattern of calling out what wasn't tested rather than assuming success.
+
+**"...follow-up: infinite auth-pulse regression fix" (most recent, same `audit/dark-light-theme`
+branch)** — manual QA on the pass above found a real regression: the full-page background
+continuously pulsed/flickered, worst on Light mode (both desktop and mobile), present but less
+noticeable in Dark mode.
+1. **Root cause**: `html::before`'s `animation: eden-auth-pulse 1.6s ease-in-out infinite` was
+   unconditional — it never stopped, not just during the brief `body.auth-check-pending` window
+   the surrounding comment already said it was for. Normally hidden behind opaque page content
+   once auth resolves, but this app is full of deliberately translucent, blurred glass cards
+   (`bg-cardBg/90`, `backdrop-blur-sm`, etc. — the whole point of the glassmorphism aesthetic) that
+   let whatever's compositing behind them show through faintly. The pass above's own fix — making
+   this backplate always-dark rather than theme-switching — is what made the always-running
+   animation dramatically more visible specifically in Light mode: a dark, pulsing layer behind
+   near-white translucent cards reads as an obvious flicker, where the old theme-matching version
+   would have blended into a similarly-dark Dark-mode page.
+2. **Fix**: the animation itself is now scoped to `html:has(body.auth-check-pending)::before` —
+   CSS's `:has()` relational pseudo-class (universally supported by every evergreen browser this
+   app already targets, including iOS Safari 16.4+), reaching "up" from the `body` element that
+   actually carries the class to condition `html`'s own pseudo-element, with no JS change needed
+   at all (`auth-guard.js` already toggles that exact class today). The base, non-conditional
+   `html::before` rule keeps a static `opacity: 0.55` (matching the animation's own trough value)
+   instead of defaulting to fully opaque, so the transition from "animating" to "static" at the
+   auth-resolved boundary is a value the eye already saw mid-pulse, not a visible jump.
+   `prefers-reduced-motion`'s override was re-scoped to the identical selector (equal specificity
+   is required for the cascade tie-break — a mismatched selector would have let the higher-
+   specificity animating rule win regardless of source order, silently breaking reduced-motion
+   for the whole auth-check window). `#eden-splash-mark`'s own separate, always-tied-to-its-own-
+   element pulse (visible only while the temporary splash overlay itself is on screen) is
+   untouched — this was never part of the bug, and stays exactly as it was, per the preferred
+   behavior of keeping a pulse only on the temporary splash, never on the permanent layer.
+3. **New `js/__tests__/auth-pulse-scope.test.js`** (9 assertions, wired into `test:frontend`) — a
+   structural check on the real `styles.css` text (same convention `home-recent-memories.test.js`
+   already uses for CSS assertions, since this repo has no CSS-parser/computed-style test
+   infrastructure): the base `html::before` rule carries no `animation` property; the scoped
+   `:has()` rule carries the infinite animation; `prefers-reduced-motion` overrides the *same*
+   selector, positioned after it in source order; the base `body` rule (the actual page
+   background) never carries an `animation` property (only its existing one-shot fade-in
+   `transition`, which is fine and untouched); `#eden-splash-mark` still has its own independent
+   pulse and reduced-motion override; the `@media print` override is unaffected. **Verified as a
+   real regression guard, not a tautology**: manually stashed the CSS fix and re-ran the suite —
+   5 of 9 assertions failed against the actual pre-fix rule (confirmed, not assumed), then passed
+   again once the fix was restored.
+4. A pre-existing test needed the same kind of update as the Part 3 follow-up's identical
+   situation: `scripts/__tests__/tailwind-migration.test.js`'s pinned `test:frontend` command list
+   folded `home-recent-memories.test.js` into its baseline and added `auth-pulse-scope.test.js` as
+   the new addition — an ordered-superset check, not a loosened one.
+5. **Verification performed**: `npm run build` (clean), full `npm test` (Assistant 160/160,
+   Weather 37/37, date-utils 9/9, reflection 18/18, home-recent-memories 15/15, the new
+   auth-pulse-scope 9/9), `npm run test:tailwind-migration` (23/23) — every command run
+   individually with its exact pass count recorded. **Not performed**: a live browser/device
+   trace of actual frame-by-frame opacity (no browser-automation tool available in this
+   environment) — the fix and its test both operate on the CSS's declared structure, which is a
+   faithful proxy for the browser's actual cascade/animation behavior but not a substitute for
+   watching it render on a real device, consistent with this branch's own already-documented "not
+   performed: interactive browser/device QA" limitation above.
+
+**"...follow-up: PR #6 QA — the resolved layer must be invisible, not just static" (most recent,
+same `audit/dark-light-theme` branch)** — PR #6 manual QA on the pass above found the fix was
+still incomplete: the pulse no longer animated, but the resolved page stayed visibly gray, and
+light secondary text on the Portfolio/Profile hero and Home's date/weather line was unreadable.
+1. **Root cause**: the previous fix only scoped the *animation* to
+   `html:has(body.auth-check-pending)::before`, leaving a static `opacity: 0.55` on the base
+   (resolved-page) `html::before` rule — a permanently-visible dark full-viewport layer is exactly
+   the same underlying problem the animated version had, just frozen at one value instead of
+   oscillating between two. Once auth resolves, that layer must contribute nothing at all, not
+   just stop moving.
+2. **Fix**: the base `html::before` rule now sets `opacity: 0` — fully invisible outside the
+   auth-pending window, no exceptions. `html:has(body.auth-check-pending)::before` sets its own
+   `opacity: 0.55` (matching the pulse animation's own trough, avoiding a jump at either boundary)
+   alongside the animation — `:has()`'s pseudo-class specificity is higher than the bare
+   `html::before` selector, so this correctly overrides the invisible default exactly and only
+   while `body.auth-check-pending` is present. `#eden-splash-mark`'s own independent pulse (tied
+   to the temporary splash overlay, which is a completely separate element/mechanism) is
+   untouched — unaffected by anything in this fix.
+3. **`js/__tests__/auth-pulse-scope.test.js` extended** from 9 to 10 assertions: the old "static
+   opacity matching the trough" test on the *base* rule was replaced with one asserting the base
+   rule is exactly `opacity: 0` (and explicitly rejects any nonzero static value like the old
+   0.55, since that's the literal PR #6 regression); a new assertion confirms the
+   auth-pending-scoped rule sets its own visible `opacity: 0.55`. Re-verified as a real regression
+   guard the same way as the first pass: stashed the fix and re-ran against the exact
+   previously-pushed (and PR #6-flagged) commit — 2 of 10 assertions failed against that real
+   code, then passed again once restored.
+4. **Text-contrast complaint investigated, not blindly patched.** Traced the three flagged
+   locations to their actual markup/classes: Portfolio's `#hero-subhead` (`text-white/90`, forced
+   to `#16151a` by the existing `[class*="text-white"]` light-mode override — no card, sits
+   directly on the page's `#f5f5f7` background, ~17:1 contrast) and `#hero-oneliner`/Home's
+   greeting-date line (`text-textGray`, forced to `#6b6878`, also no card, computed at ~4.97:1
+   against `#f5f5f7` — passes WCAG AA's 4.5:1 floor) sit on the flat page background with no
+   translucent card of their own; Profile's header content sits inside `#profile-header`
+   (`bg-cardBg/90`, i.e. `rgba(255,255,255,0.85)` once light-mode-overridden) — an 85%-opaque
+   surface whose remaining 15% blends with whatever's behind it, which is now nothing but the
+   opaque page background once `html::before` contributes exactly zero, landing its *effective*
+   background within a fraction of a percent of pure white — the same colors read the same as
+   against a flat white card. No element-specific CSS overrides exist for any of the three
+   locations (`grep`-confirmed) that could be fighting the shared `[class*=...]` rules. Per this
+   pass's own instruction to add targeted contrast fixes only if these locations still failed
+   *after* the layer was actually removed, and since every one of these colors already
+   independently meets WCAG AA against its true background once the confounding layer can no
+   longer contribute any pixels, **no additional contrast CSS was added** — real-device/browser
+   re-QA on these three exact locations is recommended to confirm, since this reasoning is
+   computed from the declared CSS values and this environment still has no browser-automation
+   tool to render and sample it directly.
+5. **Verification performed**: `npm run build` (clean), full `npm test` (Assistant 160/160,
+   Weather 37/37, date-utils 9/9, reflection 18/18, home-recent-memories 15/15, the extended
+   auth-pulse-scope 10/10), `npm run test:tailwind-migration` (23/23).
 
 ## Architecture
 
