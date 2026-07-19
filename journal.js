@@ -32,6 +32,23 @@ function esc(s) {
   return String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 }
 
+// Follow-up security fix: escaping entry.content *before* marked.parse() (the original fix)
+// neutralized raw <script>/<img onerror> tags, but not a Markdown-generated
+// [text](javascript:...) link — marked.js's own built-in URL sanitizer was removed upstream in
+// v5 (2023), and this app's CDN version was never pinned, so nothing was actually blocking that
+// scheme. Pre-escaping also broke legitimate Markdown (`>` blockquotes, `<url>` autolinks) by
+// mangling the syntax characters before the parser ever saw them. The canonical fix — used here
+// instead — is the standard marked+DOMPurify pairing: let marked.parse() run on the RAW content
+// (so all real Markdown syntax works, including blockquotes/autolinks), then run DOMPurify.
+// sanitize() on the resulting HTML. DOMPurify strips javascript:/data: URIs, on* event-handler
+// attributes, and <script>/<iframe>/<object> by default — no custom config needed, since a
+// narrower-than-default config risks accidentally permitting something DOMPurify's own defaults
+// already block. marked/DOMPurify are both loaded pinned-with-SRI in journal.html (see that
+// file), so window.marked/window.DOMPurify are guaranteed present here.
+function renderMarkdownSafe(content) {
+  return DOMPurify.sanitize(marked.parse(content || ""));
+}
+
 const MOOD_META = {
   happy: { emoji: "😊", i18nKey: "journal.mood_happy" },
   calm: { emoji: "😌", i18nKey: "journal.mood_calm" },
@@ -210,7 +227,7 @@ function journalCard(entry) {
           ${isMine ? `<button class="edit-entry-btn text-textGray hover:text-neonPurple transition-colors" title="${i18nT("common.edit_metadata")}"><i class="fa-solid fa-pen text-xs"></i></button>` : ""}
         </div>
       </div>
-      <div class="text-sm text-textGray leading-relaxed journal-body">${expanded ? marked.parse(esc(entry.content || "")) : snippet(entry.content || "")}</div>
+      <div class="text-sm text-textGray leading-relaxed journal-body">${expanded ? renderMarkdownSafe(entry.content) : snippet(entry.content || "")}</div>
       <div class="flex flex-wrap items-center gap-1.5">${tagsHtml}${entry.locationName ? `<span class="text-[10px] font-code px-2 py-0.5 rounded-full border border-borderNeon text-textGray"><i class="fa-solid fa-location-dot mr-1"></i>${esc(entry.locationName)}</span>` : ""}</div>
       <p class="text-[11px] text-textGray/70 font-code">${formatTimestamp(entry.createdAt)}</p>
     </div>`;
