@@ -1851,6 +1851,93 @@ in `calendar.js`, `js/location-search.js`, and *some* of `portfolio.js`/`profile
    rules-layer gap — every rule correctly allows the reads that make the unescaped renders
    reachable; the bug was always client-side, at the render boundary), no deploy, nothing merged.
 
+**"...follow-up: Markdown sanitizer + regression coverage" (most recent, same
+`audit/security-reliability-ux` branch)** — a review-only pass over the prior entry's fixes
+found the Journal Markdown fix was incomplete, and that none of the pass's fixes had any
+regression test at all. Both closed here.
+1. **The `marked.parse(esc(content))` fix only closed half the vulnerability.** Escaping before
+   parsing neutralizes raw HTML tags (`<script>`, `<img onerror>`), but does nothing about a URL
+   *Markdown itself generates* — `[click me](javascript:alert(1))` contains none of `& < > "`, so
+   `esc()` passes it through untouched, and marked then emits a live `<a href="javascript:...">`.
+   marked's own built-in URL sanitizer was removed upstream in v5 (2023); this app's `<script
+   src="https://cdn.jsdelivr.net/npm/marked/marked.min.js">` was also unpinned ("latest," never a
+   fixed version), so nothing was actually blocking that scheme. Pre-escaping also silently broke
+   legitimate Markdown — `>` blockquotes and `<url>` autolinks depend on those exact characters
+   reaching the parser unescaped. Fixed with the canonical pairing instead: `journal.js`'s
+   `renderMarkdownSafe(content)` now runs `DOMPurify.sanitize(marked.parse(content))` — marked
+   parses the *raw* content (blockquotes/autolinks/safe links all work again), then DOMPurify
+   strips `javascript:`/`data:` URIs, `on*` event-handler attributes, and `<script>`/`<iframe>` by
+   default (no custom config — a narrower-than-default config risks accidentally permitting
+   something DOMPurify's own defaults already block).
+2. **Both libraries pinned to exact versions with Subresource Integrity** — `journal.html`'s two
+   `<script>` tags now read `marked@18.0.6/lib/marked.umd.js` and
+   `dompurify@3.4.12/dist/purify.min.js`, each with an `integrity="sha384-..."` +
+   `crossorigin="anonymous"` pair. The SRI hashes were computed locally (`sha384` of the exact
+   npm-installed file, via Node's own `crypto` module) rather than copied from a webpage — jsdelivr's
+   npm-mirror CDN serves the literal, unmodified npm tarball contents at that exact versioned path,
+   and npm's own install-time integrity check already guarantees the local `node_modules` copy is
+   authentic, so the locally-computed hash is guaranteed to match what the CDN serves. This is the
+   first use of SRI anywhere in the codebase — scoped to just these two tags, not retrofitted
+   sitewide (every other CDN script stays as it was; a sitewide SRI pass is a separate, larger
+   decision this narrow fix didn't make unilaterally).
+3. **`marked`/`DOMPurify`/`jsdom` added as pinned, exact-version `devDependencies`** (`--save-exact`,
+   no caret/tilde, matching `tailwindcss`'s existing pin) — dev/test-only, never shipped: the
+   frontend still loads both libraries from the pinned CDN URLs above, unaffected by this
+   `package.json` change. They exist so the new test suite can exercise the *real* installed
+   versions (the exact same version numbers as the CDN pins) end-to-end in Node — `jsdom` supplies
+   the `window` DOMPurify requires to run at all outside a browser, and doubles as the HTML parser
+   the tests use to inspect sanitizer output structurally (no `<script>` element, no `onerror`
+   attribute, etc.) rather than substring-matching the output string.
+4. **New `js/__tests__/xss-security.test.js`** (33 assertions, wired into `test:frontend`) —
+   behavioral, not source-regex: every test extracts the *real* function body out of the shipped
+   `.js` file (same `extractFunctionSource()` technique `home-recent-memories.test.js` already
+   established) and executes it against real attack payloads, then parses the result with jsdom to
+   inspect the actual DOM tree. Covers: `esc()` behaviorally (script/onerror/quote-and-ampersand
+   escaping, null/undefined handling, plus a byte-identity drift check across all 10 other files
+   that duplicate it — a future edit to one copy without the rest would silently reopen the gap
+   there); the Journal sanitizer (script/onerror/`data:`-URI/`<iframe>` stripped; blockquotes/
+   autolinks/safe links preserved; **the OLD pre-fix implementation is reconstructed inline and
+   proven to still leak a live `javascript:` href against the real `marked` instance** — literal
+   before/after evidence captured as a permanent regression guard, not just a claim); `career.js`'s
+   `safeHref()` (rejects `javascript:`/`data:`/`vbscript:`, allows real `http(s)://`, escapes
+   attribute-breakout attempts); `global-search.js`'s `resultLabel()` using the *real*
+   `publicDisplayName()` from `js/identity.js` (not a hand-stubbed copy); and `atlas.js`'s
+   `marker.bindTooltip()` call site (Leaflet treats a tooltip string as HTML by default via
+   `setContent()` → `innerHTML` — a non-obvious injection point a plain `grep innerHTML` sweep
+   would miss entirely). A final structural test independently re-confirms Section-by-section what
+   the tests above already showed behaviorally: no `esc()`/`safeHref()`/`renderMarkdownSafe()`
+   result ever reaches an `addDoc`/`updateDoc`/`setDoc` call in any of the 12 fixed files —
+   escaping is render-only, never written back to Firestore, so there is no double-escaping risk
+   on a value's next render.
+5. **One real bug caught while wiring the sandbox, not by the library itself**: `safeHref()`'s
+   tests initially failed for *valid* `https://`/`http://` URLs too — `vm.createContext()` doesn't
+   inherit Node's own globals, so the extracted function's `new URL(...)` threw a bare
+   `ReferenceError: URL is not defined` inside the isolated sandbox, was swallowed by `safeHref()`'s
+   own `try/catch`, and silently returned `""` for every input. Fixed by explicitly injecting `URL`
+   into the sandbox — a reminder that this extraction technique needs every global the extracted
+   function actually touches (`URL`, `location`, `DOMPurify`, `marked`, `esc`) supplied by hand, or
+   failures manifest as the tested function's own catch-all error paths rather than a Node error.
+6. **A pre-existing test needed updating, not weakening** —
+   `scripts/__tests__/tailwind-migration.test.js`'s "existing test scripts still run every prior
+   suite" check pins the exact ordered command list inside `test:frontend` (by design — it already
+   folded in `home-recent-memories.test.js` once before, per its own comment, specifically to catch
+   a *silent removal* disguised as a reorder). Updated the same way again: `home-recent-
+   memories.test.js` moved from "the new addition" into the pinned baseline list, and `xss-
+   security.test.js` became the new addition on top — an ordered-superset check, not a loosened
+   one; dropping or reordering any prior command still fails this test.
+7. **Verification performed**: `npm run build` (clean), `npm run test:functions` (both suites
+   actually executed and counted — Assistant 160/160, Weather 37/37), `npm run test:frontend`
+   (75/75 — date-utils 9, reflection 18, home-recent-memories 15, the new xss-security 33),
+   `npm run test:tailwind-migration` (23/23, after the pinned-command-list fix above) — all four
+   commands run individually and their exact pass counts recorded, not inferred from a single
+   `npm test`. Confirmed `site/`'s allowlisted build output carries no `node_modules`/test-file
+   leakage from the three new devDependencies. Re-merged into a local, unpushed
+   `integration/part2-part3` branch alongside Part 2 (Dark/Light) with a full rebuild/retest — see
+   that branch for the merge-conflict/regression report.
+8. **Not part of this pass**: no other CDN script in the app was retrofitted with SRI (scoped to
+   the two new pins only), no `firestore.rules`/`storage.rules` change, no deploy, nothing merged
+   to `main`.
+
 ## Architecture
 
 ### Roles and the multi-tenant data model

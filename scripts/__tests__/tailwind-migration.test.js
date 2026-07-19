@@ -246,9 +246,13 @@ async function run() {
     ]);
 
     const frontendCmds = splitCmds(pkg.scripts["test:frontend"]);
+    // "Prior" here means "predates the stored-XSS regression suite added by this pass" —
+    // home-recent-memories.test.js was itself the new addition the last time this exact
+    // assertion was updated (see git history); it's now folded into the prior/baseline list.
     const priorFrontendCmds = [
       "node js/__tests__/date-utils.test.js",
       "node js/__tests__/reflection.test.js",
+      "node js/__tests__/home-recent-memories.test.js",
     ];
     // Every pre-existing command is still present, in its original relative order (a genuine
     // ordered-subsequence check, not just an unordered "includes all of" set check).
@@ -258,9 +262,9 @@ async function run() {
       assert.ok(idx !== -1 && idx >= cursor, `test:frontend dropped or reordered pre-existing command: ${cmd}`);
       cursor = idx + 1;
     });
-    // And exactly one new command was added on top — the Recent Memories regression suite —
-    // never a silent removal disguised as a reorder.
-    assert.deepStrictEqual(frontendCmds, [...priorFrontendCmds, "node js/__tests__/home-recent-memories.test.js"]);
+    // And exactly one new command was added on top — the stored-XSS behavioral regression suite
+    // (js/__tests__/xss-security.test.js) — never a silent removal disguised as a reorder.
+    assert.deepStrictEqual(frontendCmds, [...priorFrontendCmds, "node js/__tests__/xss-security.test.js"]);
 
     assert.strictEqual(pkg.scripts.test, "npm run test:functions && npm run test:frontend");
   });
