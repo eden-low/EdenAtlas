@@ -24,6 +24,14 @@ import {
   getDownloadURL,
 } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-storage.js";
 
+// Security audit fix: entry.title/content/tags/locationName are Firestore-stored free text —
+// any participant can write them, and journals default to isMineOrPublic (public/connections
+// entries are readable by other signed-in users) — so every interpolation into innerHTML below
+// must be escaped. Same implementation as calendar.js's pre-existing esc(), for consistency.
+function esc(s) {
+  return String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+}
+
 const MOOD_META = {
   happy: { emoji: "😊", i18nKey: "journal.mood_happy" },
   calm: { emoji: "😌", i18nKey: "journal.mood_calm" },
@@ -124,7 +132,7 @@ function formatTimestamp(ts) {
 
 function snippet(text, max = 160) {
   const flat = text.replace(/[#*_`>~-]/g, "").replace(/\s+/g, " ").trim();
-  return flat.length > max ? `${flat.slice(0, max)}&hellip;` : flat;
+  return flat.length > max ? `${esc(flat.slice(0, max))}&hellip;` : esc(flat);
 }
 
 function entryKey(entry) {
@@ -185,16 +193,16 @@ function journalCard(entry) {
   card.tabIndex = -1; // programmatically focusable (for the deep-link highlight) without joining the normal Tab order
 
   const tagsHtml = (entry.tags || [])
-    .map((t) => `<span class="text-[10px] font-code px-2 py-0.5 rounded-full border border-borderNeon text-textGray">#${t}</span>`)
+    .map((t) => `<span class="text-[10px] font-code px-2 py-0.5 rounded-full border border-borderNeon text-textGray">#${esc(t)}</span>`)
     .join(" ");
   const user = auth.currentUser;
   const isMine = !!user && entry.uid === user.uid;
 
   card.innerHTML = `
-    ${entry.imageUrl ? `<img src="${entry.imageUrl}" alt="" class="w-full h-40 object-cover">` : ""}
+    ${entry.imageUrl ? `<img src="${esc(entry.imageUrl)}" alt="" class="w-full h-40 object-cover">` : ""}
     <div class="p-4 space-y-2.5">
       <div class="flex items-start justify-between gap-3">
-        <h2 class="text-sm font-semibold leading-snug">${mood ? `${mood.emoji} ` : ""}${entry.title}</h2>
+        <h2 class="text-sm font-semibold leading-snug">${mood ? `${mood.emoji} ` : ""}${esc(entry.title)}</h2>
         <div class="flex items-center gap-1.5 flex-shrink-0">
           <span class="text-[10px] font-code px-2 py-0.5 rounded-full border ${vis.cls}">
             <i class="fa-solid ${vis.icon}"></i>
@@ -202,8 +210,8 @@ function journalCard(entry) {
           ${isMine ? `<button class="edit-entry-btn text-textGray hover:text-neonPurple transition-colors" title="${i18nT("common.edit_metadata")}"><i class="fa-solid fa-pen text-xs"></i></button>` : ""}
         </div>
       </div>
-      <div class="text-sm text-textGray leading-relaxed journal-body">${expanded ? marked.parse(entry.content || "") : snippet(entry.content || "")}</div>
-      <div class="flex flex-wrap items-center gap-1.5">${tagsHtml}${entry.locationName ? `<span class="text-[10px] font-code px-2 py-0.5 rounded-full border border-borderNeon text-textGray"><i class="fa-solid fa-location-dot mr-1"></i>${entry.locationName}</span>` : ""}</div>
+      <div class="text-sm text-textGray leading-relaxed journal-body">${expanded ? marked.parse(esc(entry.content || "")) : snippet(entry.content || "")}</div>
+      <div class="flex flex-wrap items-center gap-1.5">${tagsHtml}${entry.locationName ? `<span class="text-[10px] font-code px-2 py-0.5 rounded-full border border-borderNeon text-textGray"><i class="fa-solid fa-location-dot mr-1"></i>${esc(entry.locationName)}</span>` : ""}</div>
       <p class="text-[11px] text-textGray/70 font-code">${formatTimestamp(entry.createdAt)}</p>
     </div>`;
 
