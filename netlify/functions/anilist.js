@@ -28,6 +28,7 @@ const { OPERATIONS, AniListValidationError } = require("./lib/anilist-operations
 const { getCached, setCached } = require("./lib/anilist-cache");
 const { checkBurst } = require("./lib/rate-limit");
 const { FirebaseConfigError } = require("./lib/firebase-admin");
+const { readGeneratedDeployOrigins } = require("./lib/deploy-origin");
 
 // Duplicated from firebase-init.js on purpose — see assistant.js's identical comment: this
 // Function can't import a browser ES module, and re-deriving "who is the Owner" from two
@@ -72,12 +73,45 @@ function corsHeaders(origin) {
   };
 }
 
+// Netlify Deploy Previews and branch deploys get their own real, unpredictable-per-PR origin
+// (e.g. https://deploy-preview-12--edenatlas.netlify.app), which can never be listed in the
+// static ALLOWED_ORIGIN env var ahead of time. env.DEPLOY_PRIME_URL/env.DEPLOY_URL are RAW
+// strings — in production they come from the build-time snapshot lib/deploy-origin.js reads (see
+// buildProductionDeps() below), in tests they're whatever fixture value a test supplies — either
+// way this function is the one place that normalizes and validates them, via `new URL(value)
+// .origin`, exactly as required: NEVER a suffix/prefix match against "*.netlify.app" (that would
+// let ANY Netlify-hosted site, including someone else's project, pass this check merely by
+// forging an Origin header that ends the right way — deliberately not implemented). A malformed
+// value (not a valid URL, or an unexpected scheme) normalizes to null and is silently dropped,
+// never crashes the handler. The final Set comparison the caller does is a plain exact-string
+// `Set.has(rawIncomingOriginHeader)` — never re-parsed or re-normalized — which is what actually
+// defeats userinfo/trailing-dot/prefix/suffix bypass attempts: a browser's Origin header is
+// already in canonical serialized-origin form, so any of those tricks simply produces a string
+// that doesn't literally match anything in the Set.
+function normalizeExactOrigin(rawUrl) {
+  if (typeof rawUrl !== "string" || rawUrl.trim() === "") return null;
+  try {
+    const parsed = new URL(rawUrl.trim());
+    if (parsed.protocol !== "https:" && parsed.protocol !== "http:") return null;
+    return parsed.origin;
+  } catch {
+    return null;
+  }
+}
+
 function resolveAllowedOrigins(env) {
   const configured = String(env.ALLOWED_ORIGIN || "")
     .split(",")
     .map((s) => s.trim())
     .filter(Boolean);
-  return new Set([...configured, ...LOCAL_DEV_ORIGINS]);
+  // DEPLOY_PRIME_URL is checked first (the stable per-deploy-context URL; same value as
+  // production's own URL when this Function happens to run in a production context), DEPLOY_URL
+  // second (the unique-per-build URL, which changes on every new commit to the same PR) — both
+  // are added when present and valid, not "DEPLOY_URL only as a fallback," since the browser may
+  // have loaded either one depending on which link was actually opened.
+  const deployOrigins = [normalizeExactOrigin(env.DEPLOY_PRIME_URL), normalizeExactOrigin(env.DEPLOY_URL)]
+    .filter(Boolean);
+  return new Set([...configured, ...deployOrigins, ...LOCAL_DEV_ORIGINS]);
 }
 
 function getHeader(event, name) {
@@ -327,8 +361,21 @@ function buildProductionDeps() {
     return app;
   }
 
+  // DEPLOY_PRIME_URL/DEPLOY_URL are not in process.env at Function runtime (confirmed against
+  // Netlify's own docs — see lib/deploy-origin.js's header comment), so this reads the build-time
+  // snapshot instead. Computed once per cold start (these values never change for the lifetime of
+  // a deployed Function instance), same as every other env value below. `process.env.DEPLOY_*` is
+  // still checked first and preferred if it's ever actually present — a forward-compatible
+  // fallback order, not a claim that it currently is.
+  const generatedDeployOrigins = readGeneratedDeployOrigins();
+  const env = {
+    ...process.env,
+    DEPLOY_PRIME_URL: process.env.DEPLOY_PRIME_URL || generatedDeployOrigins.deployPrimeUrl || undefined,
+    DEPLOY_URL: process.env.DEPLOY_URL || generatedDeployOrigins.deployUrl || undefined,
+  };
+
   return {
-    env: process.env,
+    env,
     now: () => new Date(),
     ensureFirebaseAdmin: async () => { ensureApp(); },
     verifyIdToken: (token) => getAuth(ensureApp()).verifyIdToken(token, true),

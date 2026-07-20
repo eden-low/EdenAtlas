@@ -10,6 +10,11 @@ node_modules/
 # rebuilt by `npm run build:css` on every build, never hand-edited, never committed.
 /tailwind.generated.css
 
+# Generated Deploy Preview origin snapshot for netlify/functions/anilist.js (scripts/generate-
+# deploy-origin.js) — not a secret (an https URL), rebuilt by `npm run build` on every build,
+# never hand-edited, never committed.
+/netlify/functions/lib/deploy-origin.generated.json
+
 # Environment / secrets (Netlify Functions prep) — never commit real values.
 # Production secrets belong in Netlify Project configuration -> Environment variables,
 # not in any file in this repo. See .env.example for the documented variable names.

@@ -147,6 +147,127 @@ async function run() {
     assert.strictEqual(res.statusCode, 403);
   });
 
+  // ---- Deploy Preview origin allowlist (production regression: 403 origin_not_allowed on a
+  // Netlify Deploy Preview even though Owner login + Discover both worked). DEPLOY_PRIME_URL/
+  // DEPLOY_URL are read here exactly the way production reads them: as RAW env values (in
+  // production, sourced from the build-time snapshot lib/deploy-origin.js reads — see
+  // buildProductionDeps() — never from process.env directly, since Netlify doesn't expose those
+  // two at Function runtime). Every test below drives real values through env into
+  // resolveAllowedOrigins()/normalizeExactOrigin(), not a mocked/bypassed version of that logic. ----
+
+  const PREVIEW_PRIME_ORIGIN = "https://deploy-preview-12--edenatlas.netlify.app";
+  const PREVIEW_BUILD_ORIGIN = "https://64f3a9c1b2d8e7f001a2b3c4--edenatlas.netlify.app";
+
+  await test("the production edenatlas origin is still allowed with no DEPLOY_PRIME_URL/DEPLOY_URL set at all", async () => {
+    const deps = makeDeps({ env: baseEnv({ DEPLOY_PRIME_URL: undefined, DEPLOY_URL: undefined }) });
+    const res = await createHandler(deps)(baseEvent({ httpMethod: "OPTIONS" }));
+    assert.strictEqual(res.statusCode, 204);
+    assert.strictEqual(res.headers["Access-Control-Allow-Origin"], PROD_ORIGIN);
+  });
+
+  await test("an exact DEPLOY_PRIME_URL origin is allowed (POST reaches auth, not rejected at CORS)", async () => {
+    const deps = makeDeps({ env: baseEnv({ DEPLOY_PRIME_URL: PREVIEW_PRIME_ORIGIN }) });
+    const res = await createHandler(deps)(baseEvent({ headers: { origin: PREVIEW_PRIME_ORIGIN } }));
+    assert.strictEqual(res.statusCode, 200);
+    assert.strictEqual(res.headers["Access-Control-Allow-Origin"], PREVIEW_PRIME_ORIGIN);
+    assert.strictEqual(res.headers.Vary, "Origin");
+  });
+
+  await test("OPTIONS from an exact DEPLOY_PRIME_URL origin returns 204 with that exact origin echoed back", async () => {
+    const deps = makeDeps({ env: baseEnv({ DEPLOY_PRIME_URL: PREVIEW_PRIME_ORIGIN }) });
+    const res = await createHandler(deps)(baseEvent({ httpMethod: "OPTIONS", headers: { origin: PREVIEW_PRIME_ORIGIN } }));
+    assert.strictEqual(res.statusCode, 204);
+    assert.strictEqual(res.headers["Access-Control-Allow-Origin"], PREVIEW_PRIME_ORIGIN);
+    assert.strictEqual(res.headers["Access-Control-Allow-Methods"], "POST, OPTIONS");
+    assert.strictEqual(res.headers.Vary, "Origin");
+  });
+
+  await test("an exact DEPLOY_URL origin is allowed independently of DEPLOY_PRIME_URL", async () => {
+    const deps = makeDeps({ env: baseEnv({ DEPLOY_PRIME_URL: PREVIEW_PRIME_ORIGIN, DEPLOY_URL: PREVIEW_BUILD_ORIGIN }) });
+    const res = await createHandler(deps)(baseEvent({ headers: { origin: PREVIEW_BUILD_ORIGIN } }));
+    assert.strictEqual(res.statusCode, 200);
+    assert.strictEqual(res.headers["Access-Control-Allow-Origin"], PREVIEW_BUILD_ORIGIN);
+  });
+
+  await test("DEPLOY_URL alone (no DEPLOY_PRIME_URL) is still allowed", async () => {
+    const deps = makeDeps({ env: baseEnv({ DEPLOY_PRIME_URL: undefined, DEPLOY_URL: PREVIEW_BUILD_ORIGIN }) });
+    const res = await createHandler(deps)(baseEvent({ headers: { origin: PREVIEW_BUILD_ORIGIN } }));
+    assert.strictEqual(res.statusCode, 200);
+  });
+
+  await test("a DIFFERENT project's Deploy Preview origin is rejected — not a suffix/wildcard netlify.app match", async () => {
+    const deps = makeDeps({ env: baseEnv({ DEPLOY_PRIME_URL: PREVIEW_PRIME_ORIGIN }) });
+    const res = await createHandler(deps)(baseEvent({ headers: { origin: "https://deploy-preview-12--some-other-project.netlify.app" } }));
+    assert.strictEqual(res.statusCode, 403);
+    assert.strictEqual(JSON.parse(res.body).error, "origin_not_allowed");
+  });
+
+  await test("a forged unrelated *.netlify.app origin is rejected even with a Deploy Preview configured", async () => {
+    const deps = makeDeps({ env: baseEnv({ DEPLOY_PRIME_URL: PREVIEW_PRIME_ORIGIN, DEPLOY_URL: PREVIEW_BUILD_ORIGIN }) });
+    const res = await createHandler(deps)(baseEvent({ headers: { origin: "https://totally-unrelated-site.netlify.app" } }));
+    assert.strictEqual(res.statusCode, 403);
+  });
+
+  await test("a prefix-bypass attempt (extra text glued in front, no separator) is rejected", async () => {
+    const deps = makeDeps({ env: baseEnv({ DEPLOY_PRIME_URL: PREVIEW_PRIME_ORIGIN }) });
+    const res = await createHandler(deps)(baseEvent({ headers: { origin: "https://evildeploy-preview-12--edenatlas.netlify.app" } }));
+    assert.strictEqual(res.statusCode, 403);
+  });
+
+  await test("a suffix-bypass attempt (allowed origin as a prefix of a longer attacker-controlled host) is rejected", async () => {
+    const deps = makeDeps({ env: baseEnv({ DEPLOY_PRIME_URL: PREVIEW_PRIME_ORIGIN }) });
+    const res = await createHandler(deps)(baseEvent({ headers: { origin: "https://deploy-preview-12--edenatlas.netlify.app.evil.com" } }));
+    assert.strictEqual(res.statusCode, 403);
+  });
+
+  await test("a trailing-dot FQDN bypass attempt is rejected (exact string match, no DNS-style normalization)", async () => {
+    const deps = makeDeps({ env: baseEnv({ DEPLOY_PRIME_URL: PREVIEW_PRIME_ORIGIN }) });
+    const res = await createHandler(deps)(baseEvent({ headers: { origin: "https://deploy-preview-12--edenatlas.netlify.app." } }));
+    assert.strictEqual(res.statusCode, 403);
+  });
+
+  await test("a userinfo-smuggling incoming Origin header is rejected — the raw header is never re-parsed/host-extracted, only exact-string-compared", async () => {
+    // The actual attack surface for a userinfo trick is the INCOMING (attacker-controlled)
+    // Origin header, not env.DEPLOY_PRIME_URL (a Netlify build-injected, trusted value — not
+    // something an external caller can influence). A naive implementation that re-parsed the
+    // incoming header and checked only its hostname could be fooled by
+    // "https://attacker.example@edenatlas.netlify.app" (userinfo=attacker.example,
+    // host=edenatlas.netlify.app) into treating it as the real edenatlas.netlify.app origin. This
+    // Function never does that — it does a plain `Set.has(rawOriginHeaderString)` — so the exact
+    // literal string below, which is not itself a member of the allowed set, must be rejected.
+    const deps = makeDeps(); // PROD_ORIGIN allowed via default ALLOWED_ORIGIN
+    const res = await createHandler(deps)(baseEvent({ httpMethod: "OPTIONS", headers: { origin: "https://attacker.example@edenatlas.netlify.app" } }));
+    assert.strictEqual(res.statusCode, 403);
+  });
+
+  await test("a malformed DEPLOY_PRIME_URL/DEPLOY_URL is ignored, never crashes the handler", async () => {
+    const deps = makeDeps({ env: baseEnv({ DEPLOY_PRIME_URL: "not a valid url", DEPLOY_URL: "also-not::valid" }) });
+    const res = await createHandler(deps)(baseEvent({ httpMethod: "OPTIONS" }));
+    assert.strictEqual(res.statusCode, 204); // production origin still works
+    assert.strictEqual(res.headers["Access-Control-Allow-Origin"], PROD_ORIGIN);
+    const rejected = await createHandler(deps)(baseEvent({ httpMethod: "OPTIONS", headers: { origin: "not a valid url" } }));
+    assert.strictEqual(rejected.statusCode, 403);
+  });
+
+  await test("an empty-string DEPLOY_PRIME_URL/DEPLOY_URL is ignored, never crashes the handler", async () => {
+    const deps = makeDeps({ env: baseEnv({ DEPLOY_PRIME_URL: "", DEPLOY_URL: "" }) });
+    const res = await createHandler(deps)(baseEvent({ httpMethod: "OPTIONS" }));
+    assert.strictEqual(res.statusCode, 204);
+  });
+
+  await test("localhost dev origins are unaffected by a Deploy Preview being configured", async () => {
+    const deps = makeDeps({ env: baseEnv({ DEPLOY_PRIME_URL: PREVIEW_PRIME_ORIGIN }) });
+    const res = await createHandler(deps)(baseEvent({ httpMethod: "OPTIONS", headers: { origin: "http://localhost:8888" } }));
+    assert.strictEqual(res.statusCode, 204);
+    assert.strictEqual(res.headers["Access-Control-Allow-Origin"], "http://localhost:8888");
+  });
+
+  await test("localhost dev origins still work with no Deploy Preview configured at all (unchanged baseline)", async () => {
+    const deps = makeDeps({ env: baseEnv({ DEPLOY_PRIME_URL: undefined, DEPLOY_URL: undefined }) });
+    const res = await createHandler(deps)(baseEvent({ httpMethod: "OPTIONS", headers: { origin: "http://127.0.0.1:3000" } }));
+    assert.strictEqual(res.statusCode, 204);
+  });
+
   await test("GET is rejected with 405 and an Allow header", async () => {
     const res = await createHandler(makeDeps())(baseEvent({ httpMethod: "GET" }));
     assert.strictEqual(res.statusCode, 405);

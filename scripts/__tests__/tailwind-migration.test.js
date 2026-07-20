@@ -222,11 +222,17 @@ async function run() {
     assert.ok(!/tailwindcss/.test(toml), "netlify.toml must not duplicate the Tailwind CLI invocation");
   });
 
-  await test("package.json build script runs build:css before build-site.js", () => {
+  await test("package.json build script runs build:css, then generate-deploy-origin, then build-site.js", () => {
+    // Updated by the Atlas Assistant Deploy Preview CORS fix — pkg.scripts.build legitimately
+    // grew a new step (scripts/generate-deploy-origin.js, which must run before Netlify bundles
+    // Functions with esbuild, i.e. before this whole command finishes; its exact position
+    // relative to build-site.js doesn't matter functionally, since the two write to unrelated
+    // locations, but stays between build:css and build-site.js for a stable, documented order).
     const pkg = JSON.parse(read("package.json"));
-    assert.strictEqual(pkg.scripts.build, "npm run build:css && node scripts/build-site.js");
+    assert.strictEqual(pkg.scripts.build, "npm run build:css && node scripts/generate-deploy-origin.js && node scripts/build-site.js");
     assert.strictEqual(pkg.scripts["build:css"], "tailwindcss -c tailwind.config.js -i ./tailwind-input.css -o ./tailwind.generated.css --minify");
     assert.strictEqual(pkg.scripts["watch:css"], "tailwindcss -c tailwind.config.js -i ./tailwind-input.css -o ./tailwind.generated.css --watch");
+    assert.strictEqual(pkg.scripts["generate:deploy-origin"], "node scripts/generate-deploy-origin.js");
   });
 
   await test("existing test scripts (test:functions, test:frontend, test) still run every prior suite", () => {
@@ -284,6 +290,7 @@ async function run() {
     assert.ok(gi.includes("/tailwind.generated.css"));
     assert.ok(gi.includes("/site/"));
     assert.ok(gi.includes("node_modules/"));
+    assert.ok(gi.includes("/netlify/functions/lib/deploy-origin.generated.json"));
   });
 
   console.log(`\n${pass} passed, ${fail} failed`);
