@@ -25,6 +25,7 @@
 // see assistant.js's identical header note on why (CommonJS Function runtime vs. browser ESM).
 
 const { OPERATIONS, AniListValidationError, CONTENT_FILTER_POLICY_VERSION } = require("./lib/anilist-operations");
+const { callAniList, AniListUpstreamError, safeAniListFailureMetadata } = require("./lib/anilist-transport");
 const { getCached, setCached } = require("./lib/anilist-cache");
 const { checkBurst } = require("./lib/rate-limit");
 const { FirebaseConfigError } = require("./lib/firebase-admin");
@@ -47,7 +48,6 @@ const LOCAL_DEV_ORIGINS = [
   "http://localhost:8000", "http://127.0.0.1:8000",
 ];
 
-const ANILIST_ENDPOINT = "https://graphql.anilist.co";
 const MAX_BODY_BYTES = 2000; // generous for {"operation":"...","args":{...}} with room to spare
 const UPSTREAM_TIMEOUT_MS = 8000;
 const ALLOWED_OPERATIONS = Object.keys(OPERATIONS); // ["browse", "search", "details", "batch"]
@@ -151,42 +151,6 @@ function parseRequestBody(raw) {
     return { error: "invalid_args" };
   }
   return { value: { operation: body.operation, args: body.args || {} } };
-}
-
-class UpstreamError extends Error {
-  constructor(message, code) {
-    super(message);
-    this.code = code; // "timeout" | "http" | "malformed" | "network"
-  }
-}
-
-async function callAniList(fetchImpl, query, variables, timeoutMs) {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
-  let res;
-  try {
-    res = await fetchImpl(ANILIST_ENDPOINT, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Accept: "application/json" },
-      body: JSON.stringify({ query, variables }),
-      signal: controller.signal,
-    });
-  } catch (err) {
-    if (err && err.name === "AbortError") throw new UpstreamError("anilist request timed out", "timeout");
-    throw new UpstreamError("anilist request failed", "network");
-  } finally {
-    clearTimeout(timer);
-  }
-  if (!res.ok) {
-    // AniList returns a structured GraphQL error body even on non-2xx — never echoed to the
-    // client or logged verbatim; only this sanitized classification is.
-    throw new UpstreamError(`anilist http ${res.status}`, "http");
-  }
-  const data = await res.json().catch(() => null);
-  if (!data || typeof data !== "object" || !data.data) {
-    throw new UpstreamError("anilist returned a malformed payload", "malformed");
-  }
-  return data.data;
 }
 
 // The only place this file logs anything about an auth/config failure — mirrors assistant.js's/
@@ -332,13 +296,15 @@ function createHandler(deps) {
 
     // 10. Call AniList, sanitize to the fixed allowlisted field set, cache briefly, return.
     try {
-      const raw = await callAniList(deps.fetchImpl || fetch, query, variables, UPSTREAM_TIMEOUT_MS);
+      const raw = await callAniList({ fetchImpl: deps.fetchImpl, query, variables, timeoutMs: UPSTREAM_TIMEOUT_MS });
       const sanitized = opDef.sanitize(raw);
       deps.setCached(cacheKey, variables, sanitized, now.getTime());
       return jsonResponse(200, { ok: true, ...sanitized }, baseHeaders);
     } catch (err) {
-      if (err instanceof UpstreamError) {
-        console.error(`[anilist] upstream call failed: code=${err.code}`);
+      if (err instanceof AniListUpstreamError) {
+        const meta = safeAniListFailureMetadata(err);
+        const status = meta.status === null ? "" : ` upstream_status=${meta.status}`;
+        console.error(`[anilist] upstream call failed: operation=${operation} stage=${meta.stage} code=${meta.code}${status}`);
         if (err.code === "timeout") return jsonResponse(504, { ok: false, error: "anilist_upstream_timeout" }, baseHeaders);
         return jsonResponse(502, { ok: false, error: "anilist_upstream_error" }, baseHeaders);
       }

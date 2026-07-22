@@ -17,6 +17,7 @@ const {
   canonicalizeDescription, sha256Hex, sourceHashOf, parseStrictJsonValue, stripUnsafeMarkup,
   historyFingerprint, boundFollowedHistory,
 } = require("../lib/discover-ai-operations.js");
+const { OPERATIONS } = require("../lib/anilist-operations.js");
 const { _resetDiscoverAiCacheForTests } = require("../lib/discover-ai-cache.js");
 const { FirebaseConfigError } = require("../lib/firebase-admin.js");
 const { _resetBurstStateForTests, checkBurst, checkAndIncrementDailyUsage } = require("../lib/rate-limit.js");
@@ -187,12 +188,13 @@ function makeFetch({ anilistDetails, anilistThisSeason, anilistTrending, qwen } 
   const qwenCalls = [];
   const impl = async (url, opts) => {
     const body = opts && opts.body ? JSON.parse(opts.body) : null;
-    calls.push({ url, body });
+    const call = { url, method: opts && opts.method, headers: opts && opts.headers, body };
+    calls.push(call);
     if (isQwenBody(body)) {
-      qwenCalls.push({ url, body });
+      qwenCalls.push(call);
       return resolveHandler(qwen, body, qwenCalls.length);
     }
-    anilistCalls.push({ url, body });
+    anilistCalls.push(call);
     let handler;
     if (body && body.variables && typeof body.variables.id === "number") handler = anilistDetails;
     else if (body && body.variables && body.variables.season) handler = anilistThisSeason;
@@ -211,11 +213,19 @@ function anilistOk(dataObj) {
 function anilistHttpError(status) {
   return { ok: false, status, json: async () => ({}) };
 }
+function anilistGraphqlError(message = "simulated GraphQL failure") {
+  return { ok: true, status: 200, json: async () => ({ data: null, errors: [{ message }] }) };
+}
 function anilistAbort() {
   return () => {
     const e = new Error("simulated abort");
     e.name = "AbortError";
     throw e;
+  };
+}
+function anilistNetworkError() {
+  return () => {
+    throw new Error("simulated network failure");
   };
 }
 
@@ -245,6 +255,24 @@ function defaultFetch(overrides = {}) {
     qwen: qwenOk('{"translatedText":"这是一个关于英雄拯救世界的故事。"}'),
     ...overrides,
   });
+}
+
+function assertAniListRequestContract(call, expectedRequest) {
+  assert.strictEqual(call.url, "https://graphql.anilist.co");
+  assert.strictEqual(call.method, "POST");
+  assert.deepStrictEqual(call.headers, { "Content-Type": "application/json", Accept: "application/json" });
+  assert.deepStrictEqual(call.body, expectedRequest);
+}
+
+async function captureConsoleError(fn) {
+  const originalError = console.error;
+  const logged = [];
+  console.error = (...args) => logged.push(args.join(" "));
+  try {
+    return { value: await fn(), logged };
+  } finally {
+    console.error = originalError;
+  }
 }
 
 function makeDeps(overrides = {}) {
@@ -517,8 +545,23 @@ async function run() {
     const res = await createHandler(deps)(baseEvent({ body: JSON.stringify({ operation: "translate_description", args: { anilistId: 501 } }) }));
     assert.strictEqual(res.statusCode, 200);
     assert.strictEqual(fetchImpl.anilistCalls.length, 1);
-    assert.strictEqual(fetchImpl.anilistCalls[0].body.variables.id, 501);
+    assertAniListRequestContract(fetchImpl.anilistCalls[0], OPERATIONS.details.buildRequest({ id: 501 }));
     assert.strictEqual(fetchImpl.anilistCalls[0].body.variables.isAdult, false, "the existing isAdult:false policy is reused unchanged");
+  });
+
+  await test("translate_description: production wiring falls back to global fetch when fetchImpl is undefined", async () => {
+    const originalFetch = global.fetch;
+    const fetchImpl = defaultFetch();
+    global.fetch = fetchImpl;
+    try {
+      const deps = makeDeps({ fetchImpl: undefined });
+      const res = await createHandler(deps)(baseEvent());
+      assert.strictEqual(res.statusCode, 200);
+      assert.strictEqual(fetchImpl.anilistCalls.length, 1, "the production-style dependency must reach AniList through global fetch");
+      assert.strictEqual(fetchImpl.qwenCalls.length, 1, "Qwen should run only after AniList succeeds");
+    } finally {
+      global.fetch = originalFetch;
+    }
   });
 
   await test("translate_description: response shape matches the spec exactly", async () => {
@@ -651,10 +694,42 @@ async function run() {
   await test("translate_description: AniList timeout maps to 504, no retry (exactly one AniList call attempted)", async () => {
     const fetchImpl = defaultFetch({ anilistDetails: anilistAbort() });
     const deps = makeDeps({ fetchImpl });
-    const res = await createHandler(deps)(baseEvent());
+    const { value: res, logged } = await captureConsoleError(() => createHandler(deps)(baseEvent()));
     assert.strictEqual(res.statusCode, 504);
     assert.strictEqual(fetchImpl.anilistCalls.length, 1, "no automatic retry after a timeout");
     assert.strictEqual(fetchImpl.qwenCalls.length, 0);
+    assert.ok(logged.join("\\n").includes("operation=translate_description stage=request code=timeout"));
+  });
+
+  await test("translate_description: an HTTP-200 GraphQL error is rejected before Qwen and logged as safe metadata only", async () => {
+    const sensitiveMessage = "GraphQL failed near a full private-looking description that must not be logged";
+    const fetchImpl = defaultFetch({ anilistDetails: anilistGraphqlError(sensitiveMessage) });
+    const { value: res, logged } = await captureConsoleError(() => createHandler(makeDeps({ fetchImpl }))(baseEvent()));
+    assert.strictEqual(res.statusCode, 502);
+    assert.strictEqual(JSON.parse(res.body).error, "anilist_upstream_error");
+    assert.strictEqual(fetchImpl.qwenCalls.length, 0);
+    const combined = logged.join("\\n");
+    assert.ok(combined.includes("operation=translate_description stage=graphql code=graphql upstream_status=200"));
+    assert.ok(!combined.includes(sensitiveMessage));
+  });
+
+  await test("translate_description: upstream 429 and other non-2xx responses are classified separately, with zero Qwen calls", async () => {
+    for (const { status, code } of [{ status: 429, code: "rate_limited" }, { status: 503, code: "http" }]) {
+      const fetchImpl = defaultFetch({ anilistDetails: anilistHttpError(status) });
+      const { value: res, logged } = await captureConsoleError(() => createHandler(makeDeps({ fetchImpl }))(baseEvent()));
+      assert.strictEqual(res.statusCode, 502);
+      assert.strictEqual(JSON.parse(res.body).error, "anilist_upstream_error");
+      assert.strictEqual(fetchImpl.qwenCalls.length, 0, `Qwen must not run after AniList HTTP ${status}`);
+      assert.ok(logged.join("\\n").includes(`operation=translate_description stage=http code=${code} upstream_status=${status}`));
+    }
+  });
+
+  await test("translate_description: a network failure is classified separately and never reaches Qwen", async () => {
+    const fetchImpl = defaultFetch({ anilistDetails: anilistNetworkError() });
+    const { value: res, logged } = await captureConsoleError(() => createHandler(makeDeps({ fetchImpl }))(baseEvent()));
+    assert.strictEqual(res.statusCode, 502);
+    assert.strictEqual(fetchImpl.qwenCalls.length, 0);
+    assert.ok(logged.join("\\n").includes("operation=translate_description stage=request code=network"));
   });
 
   await test("translate_description: Qwen timeout maps to 502, no retry (exactly one Qwen call attempted)", async () => {
@@ -775,8 +850,28 @@ async function run() {
     const res = await createHandler(deps)(baseEvent({ body: JSON.stringify({ operation: "recommend", args: { locale: "en" } }) }));
     assert.strictEqual(res.statusCode, 200);
     assert.strictEqual(fetchImpl.anilistCalls.length, 2, "exactly one This Season call + one Trending call");
-    const perPageValues = fetchImpl.anilistCalls.map((c) => c.body.variables.perPage);
-    assert.deepStrictEqual(perPageValues.sort(), [20, 20]);
+    assertAniListRequestContract(
+      fetchImpl.anilistCalls[0],
+      OPERATIONS.browse.buildRequest({ mode: "this_season", page: 1, perPage: 20 }, { now: FIXED_NOW })
+    );
+    assertAniListRequestContract(
+      fetchImpl.anilistCalls[1],
+      OPERATIONS.browse.buildRequest({ mode: "trending", page: 1, perPage: 20 }, { now: FIXED_NOW })
+    );
+  });
+
+  await test("recommend: production wiring falls back to global fetch for both candidate requests when fetchImpl is undefined", async () => {
+    const originalFetch = global.fetch;
+    const fetchImpl = defaultFetch({ qwen: qwenOk('{"recommendations":[]}') });
+    global.fetch = fetchImpl;
+    try {
+      const res = await createHandler(makeDeps({ fetchImpl: undefined }))(baseEvent({ body: JSON.stringify({ operation: "recommend", args: { locale: "en" } }) }));
+      assert.strictEqual(res.statusCode, 200);
+      assert.strictEqual(fetchImpl.anilistCalls.length, 2);
+      assert.strictEqual(fetchImpl.qwenCalls.length, 1);
+    } finally {
+      global.fetch = originalFetch;
+    }
   });
 
   await test("recommend: every followed AniList id is excluded from candidates regardless of status, including watching/completed — not just dropped", async () => {
@@ -987,9 +1082,29 @@ async function run() {
   await test("recommend: AniList timeout during candidate-gathering maps to 504, no retry, Qwen never called", async () => {
     const fetchImpl = defaultFetch({ anilistThisSeason: anilistAbort() });
     const deps = makeDeps({ fetchImpl });
-    const res = await createHandler(deps)(baseEvent({ body: JSON.stringify({ operation: "recommend", args: { locale: "en" } }) }));
+    const { value: res, logged } = await captureConsoleError(() => createHandler(deps)(baseEvent({ body: JSON.stringify({ operation: "recommend", args: { locale: "en" } }) })));
     assert.strictEqual(res.statusCode, 504);
     assert.strictEqual(fetchImpl.qwenCalls.length, 0);
+    assert.strictEqual(fetchImpl.anilistCalls.length, 2, "the two planned candidate calls may start, but no retry may add a third");
+    assert.ok(logged.join("\\n").includes("operation=recommend stage=request code=timeout"));
+  });
+
+  await test("recommend: GraphQL, 429, non-2xx, and network failures are distinguished and always keep Qwen at zero calls", async () => {
+    const cases = [
+      { overrides: { anilistThisSeason: anilistGraphqlError() }, stage: "graphql", code: "graphql", status: 200 },
+      { overrides: { anilistThisSeason: anilistHttpError(429) }, stage: "http", code: "rate_limited", status: 429 },
+      { overrides: { anilistTrending: anilistHttpError(502) }, stage: "http", code: "http", status: 502 },
+      { overrides: { anilistThisSeason: anilistNetworkError() }, stage: "request", code: "network", status: null },
+    ];
+    for (const c of cases) {
+      const fetchImpl = defaultFetch(c.overrides);
+      const { value: res, logged } = await captureConsoleError(() => createHandler(makeDeps({ fetchImpl }))(baseEvent({ body: JSON.stringify({ operation: "recommend", args: { locale: "en" } }) })));
+      assert.strictEqual(res.statusCode, 502);
+      assert.strictEqual(JSON.parse(res.body).error, "anilist_upstream_error");
+      assert.strictEqual(fetchImpl.qwenCalls.length, 0, `Qwen must stay at zero for AniList code=${c.code}`);
+      const expected = `operation=recommend stage=${c.stage} code=${c.code}` + (c.status === null ? "" : ` upstream_status=${c.status}`);
+      assert.ok(logged.join("\\n").includes(expected));
+    }
   });
 
   await test("recommend: Qwen timeout maps to 502, no retry (exactly one Qwen call)", async () => {

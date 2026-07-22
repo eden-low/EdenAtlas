@@ -50,6 +50,7 @@ const {
   selectValidRecommendations,
 } = require("./lib/discover-ai-operations");
 const { OPERATIONS, sanitizeMediaDetail } = require("./lib/anilist-operations");
+const { callAniList, AniListUpstreamError, safeAniListFailureMetadata } = require("./lib/anilist-transport");
 const { getCachedRecommendation, setCachedRecommendation } = require("./lib/discover-ai-cache");
 const { checkAndIncrementDailyUsage } = require("./lib/rate-limit");
 const { callQwenChatCompletions, QwenError } = require("./lib/qwen");
@@ -74,7 +75,6 @@ const LOCAL_DEV_ORIGINS = [
   "http://localhost:8000", "http://127.0.0.1:8000",
 ];
 
-const ANILIST_ENDPOINT = "https://graphql.anilist.co";
 const ANILIST_TIMEOUT_MS = 8000; // matches anilist.js's own UPSTREAM_TIMEOUT_MS
 const MAX_BODY_BYTES = 500; // {"operation":"...","args":{"anilistId":123}} — generous, still tiny
 const ALLOWED_OPERATIONS = ["translate_description", "recommend"];
@@ -172,40 +172,6 @@ function parseRequestBody(raw) {
     return { error: "invalid_args" };
   }
   return { value: { operation: body.operation, args: body.args || {} } };
-}
-
-class AniListUpstreamError extends Error {
-  constructor(message, code) {
-    super(message);
-    this.code = code; // "timeout" | "http" | "malformed" | "network"
-  }
-}
-
-// A single, non-retried call to AniList's GraphQL endpoint — same shape as anilist.js's own
-// callAniList(), duplicated here (not imported) so this Function's AniList transport has no
-// runtime dependency on anilist.js at all, matching the "separate Function, not a modification of
-// anilist.js" instruction literally, not just in spirit.
-async function callAniListRaw(fetchImpl, query, variables) {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), ANILIST_TIMEOUT_MS);
-  let res;
-  try {
-    res = await fetchImpl(ANILIST_ENDPOINT, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Accept: "application/json" },
-      body: JSON.stringify({ query, variables }),
-      signal: controller.signal,
-    });
-  } catch (err) {
-    if (err && err.name === "AbortError") throw new AniListUpstreamError("anilist request timed out", "timeout");
-    throw new AniListUpstreamError("anilist request failed", "network");
-  } finally {
-    clearTimeout(timer);
-  }
-  if (!res.ok) throw new AniListUpstreamError(`anilist http ${res.status}`, "http");
-  const data = await res.json().catch(() => null);
-  if (!data || typeof data !== "object" || !data.data) throw new AniListUpstreamError("anilist returned a malformed payload", "malformed");
-  return data.data;
 }
 
 // Extracts and defensively validates `message.content` out of a raw Qwen chat-completion
@@ -336,7 +302,9 @@ function createHandler(deps) {
         return jsonResponse(502, { ok: false, error: "discover_ai_upstream_error" }, baseHeaders);
       }
       if (err instanceof AniListUpstreamError) {
-        console.error(`[discover-ai] AniList call failed: code=${err.code}`);
+        const meta = safeAniListFailureMetadata(err);
+        const status = meta.status === null ? "" : ` upstream_status=${meta.status}`;
+        console.error(`[discover-ai] AniList call failed: operation=${operation} stage=${meta.stage} code=${meta.code}${status}`);
         if (err.code === "timeout") return jsonResponse(504, { ok: false, error: "anilist_upstream_timeout" }, baseHeaders);
         return jsonResponse(502, { ok: false, error: "anilist_upstream_error" }, baseHeaders);
       }
@@ -365,7 +333,7 @@ async function handleTranslate({ deps, args, uid, db, now, baseHeaders }) {
   // excluded-genre sanitizer every other AniList surface in this app uses, never re-implemented or
   // weakened here.
   const detailsReq = OPERATIONS.details.buildRequest({ id: anilistId });
-  const raw = await callAniListRaw(deps.fetchImpl, detailsReq.query, detailsReq.variables);
+  const raw = await callAniList({ fetchImpl: deps.fetchImpl, ...detailsReq, timeoutMs: ANILIST_TIMEOUT_MS });
   const sanitized = sanitizeMediaDetail(raw && raw.Media);
   if (!sanitized) {
     // Genuinely missing OR filtered out by isAdult/excluded-genre — an adult/excluded title must
@@ -475,8 +443,8 @@ async function handleRecommend({ deps, args, uid, db, now, baseHeaders }) {
   const thisSeasonReq = OPERATIONS.browse.buildRequest({ mode: "this_season", page: 1, perPage: CANDIDATE_PAGE_SIZE }, { now });
   const trendingReq = OPERATIONS.browse.buildRequest({ mode: "trending", page: 1, perPage: CANDIDATE_PAGE_SIZE }, { now });
   const [thisSeasonData, trendingData] = await Promise.all([
-    callAniListRaw(deps.fetchImpl, thisSeasonReq.query, thisSeasonReq.variables),
-    callAniListRaw(deps.fetchImpl, trendingReq.query, trendingReq.variables),
+    callAniList({ fetchImpl: deps.fetchImpl, ...thisSeasonReq, timeoutMs: ANILIST_TIMEOUT_MS }),
+    callAniList({ fetchImpl: deps.fetchImpl, ...trendingReq, timeoutMs: ANILIST_TIMEOUT_MS }),
   ]);
   const thisSeasonItems = (thisSeasonData && thisSeasonData.Page && thisSeasonData.Page.media) || [];
   const trendingItems = (trendingData && trendingData.Page && trendingData.Page.media) || [];

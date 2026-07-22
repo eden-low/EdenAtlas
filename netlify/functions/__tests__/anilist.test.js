@@ -76,10 +76,15 @@ function makeMediaFixture(overrides = {}) {
   };
 }
 
-function makeFakeFetch({ status = 200, data = null, malformedJson = false, throwAbort = false, throwNetwork = false } = {}) {
+function makeFakeFetch({ status = 200, data = null, errors = null, malformedJson = false, throwAbort = false, throwNetwork = false } = {}) {
   const calls = [];
   const impl = async (url, opts) => {
-    calls.push({ url, body: opts && opts.body ? JSON.parse(opts.body) : null });
+    calls.push({
+      url,
+      method: opts && opts.method,
+      headers: opts && opts.headers,
+      body: opts && opts.body ? JSON.parse(opts.body) : null,
+    });
     if (throwAbort) {
       const err = new Error("simulated abort");
       err.name = "AbortError";
@@ -91,7 +96,7 @@ function makeFakeFetch({ status = 200, data = null, malformedJson = false, throw
       status,
       json: async () => {
         if (malformedJson) throw new Error("not json");
-        return { data };
+        return { data, ...(errors ? { errors } : {}) };
       },
     };
   };
@@ -736,6 +741,20 @@ async function run() {
 
   await test("a non-2xx upstream response maps to 502, never echoing the raw AniList error body", async () => {
     const deps = makeDeps({ fetchImpl: makeFakeFetch({ status: 400, data: null }) });
+    const res = await createHandler(deps)(baseEvent());
+    assert.strictEqual(res.statusCode, 502);
+    assert.strictEqual(JSON.parse(res.body).error, "anilist_upstream_error");
+  });
+
+  await test("an upstream HTTP 429 keeps the existing 502 anilist_upstream_error client contract", async () => {
+    const deps = makeDeps({ fetchImpl: makeFakeFetch({ status: 429 }) });
+    const res = await createHandler(deps)(baseEvent());
+    assert.strictEqual(res.statusCode, 502);
+    assert.strictEqual(JSON.parse(res.body).error, "anilist_upstream_error");
+  });
+
+  await test("an HTTP-200 GraphQL error is rejected with the existing 502 anilist_upstream_error client contract", async () => {
+    const deps = makeDeps({ fetchImpl: makeFakeFetch({ data: null, errors: [{ message: "simulated" }] }) });
     const res = await createHandler(deps)(baseEvent());
     assert.strictEqual(res.statusCode, 502);
     assert.strictEqual(JSON.parse(res.body).error, "anilist_upstream_error");
