@@ -2,9 +2,9 @@
 // pass's whole Phase 1 safeguard set depends on (which Firebase project loads, whether Discover
 // writes are blocked, the non-Production banner, the noindex header). resolveEnvironment() is
 // tested as the pure function it is (explicit fixture inputs, no globals); getEnvironment()/
-// isStaging()/isStagingWithoutIsolatedBackend()/mountNonProductionBanner() are tested against a
-// real jsdom `window`/`document` so the actual window.__EDEN_BUILD__ wiring (not just the pure
-// helper) is exercised.
+// isStaging()/isPreProduction()/mountNonProductionBanner() are tested against a real jsdom
+// `window`/`document` so the actual window.__EDEN_BUILD__ wiring (not just the pure helper) is
+// exercised.
 //
 // Run with: node js/__tests__/environment.test.js (or `npm run test:frontend`).
 
@@ -35,9 +35,17 @@ const {
 (async () => {
   // ---- resolveEnvironment(): pure function, every real Netlify context ----
 
-  await test("Netlify production context always resolves to PRODUCTION, regardless of branch/hostname", async () => {
+  await test("Netlify production context resolves to PRODUCTION only on the configured Production branch (main)", async () => {
     assert.strictEqual(resolveEnvironment({ netlifyContext: "production", branch: "main", hostname: "edenatlas.netlify.app" }), ENV.PRODUCTION);
-    assert.strictEqual(resolveEnvironment({ netlifyContext: "production", branch: "staging" }), ENV.PRODUCTION);
+  });
+
+  await test("Netlify production context on any OTHER branch is never trusted as PRODUCTION (deploy-context policy: 'never silently fall back')", async () => {
+    assert.notStrictEqual(resolveEnvironment({ netlifyContext: "production", branch: "staging" }), ENV.PRODUCTION);
+    assert.notStrictEqual(resolveEnvironment({ netlifyContext: "production", branch: "some-hotfix-branch" }), ENV.PRODUCTION);
+  });
+
+  await test("Netlify dev context resolves to ENV.DEV", async () => {
+    assert.strictEqual(resolveEnvironment({ netlifyContext: "dev" }), ENV.DEV);
   });
 
   await test("branch-deploy + branch=staging resolves to STAGING", async () => {
@@ -104,14 +112,18 @@ const {
     });
   });
 
-  await test("isStagingWithoutIsolatedBackend: true only when Staging AND the active project equals Production's", async () => {
+  await test("isPreProduction(): true for both the literal staging branch AND any other Deploy Preview/branch deploy — the deploy-context policy fix", async () => {
     await withBuildInfo({ context: "branch-deploy", branch: "staging" }, "staging--edenatlas.netlify.app", async (mod) => {
-      assert.strictEqual(mod.isStagingWithoutIsolatedBackend("lfj-profolio", "lfj-profolio"), true);
-      assert.strictEqual(mod.isStagingWithoutIsolatedBackend("edenatlas-staging", "lfj-profolio"), false);
+      assert.strictEqual(mod.isPreProduction(), true);
+    });
+    await withBuildInfo({ context: "deploy-preview", branch: "pr-42" }, "deploy-preview-42--edenatlas.netlify.app", async (mod) => {
+      assert.strictEqual(mod.isPreProduction(), true);
+    });
+    await withBuildInfo({ context: "branch-deploy", branch: "feat/some-other-branch" }, "some-hash--edenatlas.netlify.app", async (mod) => {
+      assert.strictEqual(mod.isPreProduction(), true);
     });
     await withBuildInfo({ context: "production", branch: "main" }, "edenatlas.netlify.app", async (mod) => {
-      // Same project id, but NOT Staging — this must never trip the guard on Production itself.
-      assert.strictEqual(mod.isStagingWithoutIsolatedBackend("lfj-profolio", "lfj-profolio"), false);
+      assert.strictEqual(mod.isPreProduction(), false);
     });
   });
 

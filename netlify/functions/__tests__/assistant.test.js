@@ -19,7 +19,7 @@ const { runAgentLoop, callQwenChatCompletions, QwenError } = require("../lib/qwe
 const { checkBurst, checkAndIncrementDailyUsage, _resetBurstStateForTests } = require("../lib/rate-limit.js");
 const {
   FirebaseConfigError, parseServiceAccount, initializeFirebaseAdmin,
-  assertProjectMatchesBuildContext, PRODUCTION_PROJECT_ID,
+  enforceDeployContextPolicy, resolveDeployRole, DEPLOY_ROLE, PRODUCTION_PROJECT_ID,
 } = require("../lib/firebase-admin.js");
 const dateUtils = require("../lib/date-utils.js");
 
@@ -353,9 +353,17 @@ async function run() {
     };
   }
 
+  // Deploy-context fixtures shared by every initializeFirebaseAdmin() call below — defined here
+  // (not down in the dedicated policy section) since the context-policy gate now runs on EVERY
+  // call, so even tests that only care about parseServiceAccount/cert/PEM behavior need a
+  // Production-shaped buildContext to get past it. See the dedicated "Deploy-context policy"
+  // section further down for the full resolveDeployRole()/enforceDeployContextPolicy() matrix.
+  const PRODUCTION_CTX = { context: "production", branch: "main", expectedStagingProjectId: null };
+  const PREPROD_STAGING_CTX = { context: "branch-deploy", branch: "staging", expectedStagingProjectId: "edenatlas-staging" };
+
   await test("parseServiceAccount: a valid service-account object parses and initializes successfully", async () => {
     const fake = makeFakeModularAdmin();
-    const app = initializeFirebaseAdmin({ ...fake, projectId: "lfj-profolio", serviceAccountRaw: JSON.stringify(VALID_SA) });
+    const app = initializeFirebaseAdmin({ ...fake, projectId: "lfj-profolio", serviceAccountRaw: JSON.stringify(VALID_SA), buildContext: PRODUCTION_CTX });
     assert.ok(app.__app);
     assert.strictEqual(fake.getApps().length, 1);
   });
@@ -422,7 +430,7 @@ async function run() {
     const cert = (sa) => { certCalled = true; return { __cert: true, sa }; };
     const garbageKeySA = { ...VALID_SA, private_key: "-----BEGIN PRIVATE KEY-----\nnot-real-key-material\n-----END PRIVATE KEY-----\n" };
     assert.throws(
-      () => initializeFirebaseAdmin({ ...fake, cert, projectId: "lfj-profolio", serviceAccountRaw: JSON.stringify(garbageKeySA) }),
+      () => initializeFirebaseAdmin({ ...fake, cert, projectId: "lfj-profolio", serviceAccountRaw: JSON.stringify(garbageKeySA), buildContext: PRODUCTION_CTX }),
       (err) => err instanceof FirebaseConfigError && err.stage === "admin_initialization" && err.code === "config/invalid-private-key"
     );
     assert.strictEqual(certCalled, false, "must reject before ever reaching cert()");
@@ -431,7 +439,7 @@ async function run() {
   await test("initializeFirebaseAdmin: a credential/private-key that fails cert() throws FirebaseConfigError(stage=admin_initialization), never leaking the raw SDK error", async () => {
     const fake = makeFakeModularAdmin({ failCert: true });
     assert.throws(
-      () => initializeFirebaseAdmin({ ...fake, projectId: "lfj-profolio", serviceAccountRaw: JSON.stringify(VALID_SA) }),
+      () => initializeFirebaseAdmin({ ...fake, projectId: "lfj-profolio", serviceAccountRaw: JSON.stringify(VALID_SA), buildContext: PRODUCTION_CTX }),
       (err) => err instanceof FirebaseConfigError && err.stage === "admin_initialization" && err.code === "config/init-failed" && !err.message.includes("OpenSSL") && !err.message.includes("PEM")
     );
   });
@@ -439,70 +447,141 @@ async function run() {
   await test("initializeFirebaseAdmin: initializeApp() itself throwing is also classified as stage=admin_initialization", async () => {
     const fake = makeFakeModularAdmin({ failInit: true });
     assert.throws(
-      () => initializeFirebaseAdmin({ ...fake, projectId: "lfj-profolio", serviceAccountRaw: JSON.stringify(VALID_SA) }),
+      () => initializeFirebaseAdmin({ ...fake, projectId: "lfj-profolio", serviceAccountRaw: JSON.stringify(VALID_SA), buildContext: PRODUCTION_CTX }),
       (err) => err instanceof FirebaseConfigError && err.stage === "admin_initialization"
     );
   });
 
   await test("initializeFirebaseAdmin: reuses the existing app on a warm instance, never re-validates", async () => {
     const fake = makeFakeModularAdmin();
-    const first = initializeFirebaseAdmin({ ...fake, projectId: "lfj-profolio", serviceAccountRaw: JSON.stringify(VALID_SA) });
+    const first = initializeFirebaseAdmin({ ...fake, projectId: "lfj-profolio", serviceAccountRaw: JSON.stringify(VALID_SA), buildContext: PRODUCTION_CTX });
     // Second call passes garbage — if it were re-parsed/re-validated this would throw, but
     // getApps().length is already 1, so initializeFirebaseAdmin must short-circuit to getApp().
-    const second = initializeFirebaseAdmin({ ...fake, projectId: "lfj-profolio", serviceAccountRaw: "{not json at all" });
+    const second = initializeFirebaseAdmin({ ...fake, projectId: "lfj-profolio", serviceAccountRaw: "{not json at all", buildContext: PRODUCTION_CTX });
     assert.strictEqual(first, second);
   });
 
-  console.log("\nStaging/Production Firebase Admin isolation (Gap 1 fix, assertProjectMatchesBuildContext)");
+  console.log("\nDeploy-context policy (Production/Pre-production/Dev/Unknown — every non-Production deploy is pre-production)");
 
-  // Every scenario the follow-up task explicitly asked for, tested directly against the pure
-  // classifier first (fast, no PEM/crypto involved), then end-to-end through
-  // initializeFirebaseAdmin() with the real fake modular Admin SDK — proving the check actually
-  // runs, in the right order, for a real init call.
+  // Every scenario the review explicitly asked for, tested directly against the pure classifier
+  // first (fast, no PEM/crypto involved), then end-to-end through initializeFirebaseAdmin() with
+  // the real fake modular Admin SDK — proving the policy actually runs, in the right order, for a
+  // real init call. This SUPERSEDES the old, looser "only the literal `staging` branch is
+  // restricted, everything else (Deploy Preview, unknown contexts) is unrestricted" policy — see
+  // resolveDeployRole()'s own header comment in lib/firebase-admin.js for exactly what changed
+  // and why an earlier version of this policy was not acceptable.
 
   const STAGING_CTX = { context: "branch-deploy", branch: "staging", expectedStagingProjectId: "edenatlas-staging" };
-  const PRODUCTION_CTX = { context: "production", branch: "main", expectedStagingProjectId: null };
-  const PREVIEW_CTX = { context: "deploy-preview", branch: "pr-42", expectedStagingProjectId: null };
+  const OTHER_BRANCH_DEPLOY_CTX = { context: "branch-deploy", branch: "feat/some-feature", expectedStagingProjectId: "edenatlas-staging" };
+  const PREVIEW_CTX = { context: "deploy-preview", branch: "pr-42", expectedStagingProjectId: "edenatlas-staging" };
+  const PREVIEW_CTX_NO_STAGING_CONFIGURED = { context: "deploy-preview", branch: "pr-99", expectedStagingProjectId: null };
+  const PRODUCTION_WRONG_BRANCH_CTX = { context: "production", branch: "some-hotfix-branch", expectedStagingProjectId: null };
+  const DEV_CTX = { context: "dev", branch: null, expectedStagingProjectId: null };
+  const UNKNOWN_CTX_BLANK = { context: null, branch: null, expectedStagingProjectId: null };
+  const UNKNOWN_CTX_MALFORMED = { context: "some-future-netlify-context-this-code-has-never-heard-of", branch: "main", expectedStagingProjectId: null };
+  const EMULATOR_ENV = { FIRESTORE_EMULATOR_HOST: "127.0.0.1:8080" };
 
-  await test("assertProjectMatchesBuildContext: staging client + staging Admin project succeeds (no throw)", () => {
-    assertProjectMatchesBuildContext("edenatlas-staging", STAGING_CTX);
+  // ---- resolveDeployRole(): pure classifier ----
+
+  await test("resolveDeployRole: production context + the configured Production branch (main) -> production", () => {
+    assert.strictEqual(resolveDeployRole(PRODUCTION_CTX), DEPLOY_ROLE.PRODUCTION);
   });
 
-  await test("assertProjectMatchesBuildContext: staging context + PRODUCTION project id throws config/production-credentials-in-staging", () => {
+  await test("resolveDeployRole: production context on any OTHER branch -> unknown, never production", () => {
+    assert.strictEqual(resolveDeployRole(PRODUCTION_WRONG_BRANCH_CTX), DEPLOY_ROLE.UNKNOWN);
+  });
+
+  await test("resolveDeployRole: deploy-preview -> pre-production", () => {
+    assert.strictEqual(resolveDeployRole(PREVIEW_CTX), DEPLOY_ROLE.PRE_PRODUCTION);
+  });
+
+  await test("resolveDeployRole: branch-deploy -> pre-production for ANY branch, not just the literal `staging` branch", () => {
+    assert.strictEqual(resolveDeployRole(STAGING_CTX), DEPLOY_ROLE.PRE_PRODUCTION);
+    assert.strictEqual(resolveDeployRole(OTHER_BRANCH_DEPLOY_CTX), DEPLOY_ROLE.PRE_PRODUCTION);
+  });
+
+  await test("resolveDeployRole: dev context -> dev", () => {
+    assert.strictEqual(resolveDeployRole(DEV_CTX), DEPLOY_ROLE.DEV);
+  });
+
+  await test("resolveDeployRole: missing/null/malformed context -> unknown", () => {
+    assert.strictEqual(resolveDeployRole(null), DEPLOY_ROLE.UNKNOWN);
+    assert.strictEqual(resolveDeployRole(UNKNOWN_CTX_BLANK), DEPLOY_ROLE.UNKNOWN);
+    assert.strictEqual(resolveDeployRole(UNKNOWN_CTX_MALFORMED), DEPLOY_ROLE.UNKNOWN);
+  });
+
+  // ---- enforceDeployContextPolicy(): the 10 explicitly requested scenarios ----
+
+  await test("1. Production + Production credentials succeeds", () => {
+    enforceDeployContextPolicy({ resolvedProjectId: PRODUCTION_PROJECT_ID, buildContext: PRODUCTION_CTX, env: {} });
+  });
+
+  await test("2. Production + staging credentials fails (project consistency required)", () => {
     assert.throws(
-      () => assertProjectMatchesBuildContext(PRODUCTION_PROJECT_ID, STAGING_CTX),
-      (err) => err instanceof FirebaseConfigError && err.stage === "credential_validation" && err.code === "config/production-credentials-in-staging"
+      () => enforceDeployContextPolicy({ resolvedProjectId: "edenatlas-staging", buildContext: PRODUCTION_CTX, env: {} }),
+      (err) => err instanceof FirebaseConfigError && err.code === "config/unexpected-project-in-production"
     );
   });
 
-  await test("assertProjectMatchesBuildContext: staging context + a project id that matches neither Production nor the expected staging project throws config/staging-project-mismatch", () => {
+  await test("3. Deploy Preview + staging credentials succeeds", () => {
+    enforceDeployContextPolicy({ resolvedProjectId: "edenatlas-staging", buildContext: PREVIEW_CTX, env: {} });
+  });
+
+  await test("4. Deploy Preview + Production credentials fails closed", () => {
     assert.throws(
-      () => assertProjectMatchesBuildContext("some-other-unrelated-project", STAGING_CTX),
-      (err) => err instanceof FirebaseConfigError && err.code === "config/staging-project-mismatch"
+      () => enforceDeployContextPolicy({ resolvedProjectId: PRODUCTION_PROJECT_ID, buildContext: PREVIEW_CTX, env: {} }),
+      (err) => err instanceof FirebaseConfigError && err.code === "config/production-credentials-in-preproduction"
     );
   });
 
-  await test("assertProjectMatchesBuildContext: staging context with no expectedStagingProjectId configured STILL rejects the Production project id (the primary guard doesn't depend on it)", () => {
-    const stagingNoExpected = { context: "branch-deploy", branch: "staging", expectedStagingProjectId: null };
+  await test("5. Branch deploy (any branch, not just staging) + Production credentials fails closed", () => {
     assert.throws(
-      () => assertProjectMatchesBuildContext(PRODUCTION_PROJECT_ID, stagingNoExpected),
-      (err) => err.code === "config/production-credentials-in-staging"
+      () => enforceDeployContextPolicy({ resolvedProjectId: PRODUCTION_PROJECT_ID, buildContext: OTHER_BRANCH_DEPLOY_CTX, env: {} }),
+      (err) => err.code === "config/production-credentials-in-preproduction"
     );
   });
 
-  await test("assertProjectMatchesBuildContext: Production behavior is completely unchanged — the Production project id in a Production context never throws", () => {
-    assertProjectMatchesBuildContext(PRODUCTION_PROJECT_ID, PRODUCTION_CTX);
+  await test("6. Staging branch + staging credentials succeeds", () => {
+    enforceDeployContextPolicy({ resolvedProjectId: "edenatlas-staging", buildContext: STAGING_CTX, env: {} });
   });
 
-  await test("assertProjectMatchesBuildContext: a non-staging, non-production context (Deploy Preview) is unrestricted — never blocks Production's own project id either", () => {
-    assertProjectMatchesBuildContext(PRODUCTION_PROJECT_ID, PREVIEW_CTX);
-    assertProjectMatchesBuildContext("edenatlas-staging", PREVIEW_CTX);
+  await test("7. Unknown context + any real credentials fails closed (Production's own project id included — no exceptions)", () => {
+    assert.throws(
+      () => enforceDeployContextPolicy({ resolvedProjectId: PRODUCTION_PROJECT_ID, buildContext: null, env: {} }),
+      (err) => err instanceof FirebaseConfigError && err.code === "config/unknown-deploy-context"
+    );
+    assert.throws(
+      () => enforceDeployContextPolicy({ resolvedProjectId: "edenatlas-staging", buildContext: UNKNOWN_CTX_MALFORMED, env: {} }),
+      (err) => err.code === "config/unknown-deploy-context"
+    );
   });
 
-  await test("assertProjectMatchesBuildContext: a missing/null buildContext (generated file absent — no build ever ran) is unrestricted, same as an unknown context", () => {
-    assertProjectMatchesBuildContext(PRODUCTION_PROJECT_ID, null);
-    assertProjectMatchesBuildContext(PRODUCTION_PROJECT_ID, { context: null, branch: null, expectedStagingProjectId: null });
+  await test("8. Dev + emulator configuration succeeds", () => {
+    enforceDeployContextPolicy({ resolvedProjectId: "any-project-at-all", buildContext: DEV_CTX, env: EMULATOR_ENV });
   });
+
+  await test("9. Dev without emulator/mock configuration fails closed", () => {
+    assert.throws(
+      () => enforceDeployContextPolicy({ resolvedProjectId: PRODUCTION_PROJECT_ID, buildContext: DEV_CTX, env: {} }),
+      (err) => err instanceof FirebaseConfigError && err.code === "config/dev-without-emulator"
+    );
+  });
+
+  await test("Pre-production with NO staging project configured at all fails closed — never silently shares Production's project (even when the resolved id happens not to literally equal Production's)", () => {
+    assert.throws(
+      () => enforceDeployContextPolicy({ resolvedProjectId: "some-other-unconfigured-project", buildContext: PREVIEW_CTX_NO_STAGING_CONFIGURED, env: {} }),
+      (err) => err instanceof FirebaseConfigError && err.code === "config/staging-not-configured"
+    );
+  });
+
+  await test("Pre-production with a project id matching neither Production nor the configured staging project fails closed (config/staging-project-mismatch)", () => {
+    assert.throws(
+      () => enforceDeployContextPolicy({ resolvedProjectId: "some-totally-unrelated-project", buildContext: PREVIEW_CTX, env: {} }),
+      (err) => err.code === "config/staging-project-mismatch"
+    );
+  });
+
+  // ---- End-to-end through initializeFirebaseAdmin() with the real fake modular Admin SDK ----
 
   await test("initializeFirebaseAdmin: staging client + staging Admin project succeeds end-to-end", async () => {
     const fake = makeFakeModularAdmin();
@@ -514,7 +593,7 @@ async function run() {
     assert.ok(app.__app);
   });
 
-  await test("initializeFirebaseAdmin: staging context + Production Admin project FAILS CLOSED before cert()/initializeApp() are ever called", async () => {
+  await test("initializeFirebaseAdmin: pre-production + Production Admin project FAILS CLOSED before cert()/initializeApp() are ever called", async () => {
     const fake = makeFakeModularAdmin();
     let certCalled = false;
     const cert = (sa) => { certCalled = true; return { __cert: true, sa }; };
@@ -522,48 +601,42 @@ async function run() {
       () => initializeFirebaseAdmin({
         ...fake, cert, projectId: PRODUCTION_PROJECT_ID,
         serviceAccountRaw: JSON.stringify(VALID_SA), // VALID_SA.project_id is already "lfj-profolio"
-        buildContext: STAGING_CTX,
+        buildContext: PREVIEW_CTX,
       }),
-      (err) => err instanceof FirebaseConfigError && err.code === "config/production-credentials-in-staging"
+      (err) => err instanceof FirebaseConfigError && err.code === "config/production-credentials-in-preproduction"
     );
     assert.strictEqual(certCalled, false, "must fail before the private key is ever touched");
     assert.strictEqual(fake.getApps().length, 0, "no app must be registered");
   });
 
-  await test("initializeFirebaseAdmin: missing Admin credentials in a staging context still fails closed the ordinary way (empty FIREBASE_SERVICE_ACCOUNT)", async () => {
-    const fake = makeFakeModularAdmin();
-    assert.throws(
-      () => initializeFirebaseAdmin({ ...fake, projectId: "edenatlas-staging", serviceAccountRaw: "", buildContext: STAGING_CTX }),
-      (err) => err instanceof FirebaseConfigError && err.code === "config/empty"
-    );
-  });
-
-  await test("initializeFirebaseAdmin: Production's own behavior is byte-for-byte unchanged by passing a buildContext at all", async () => {
-    const fake = makeFakeModularAdmin();
-    const app = initializeFirebaseAdmin({
-      ...fake, projectId: "lfj-profolio", serviceAccountRaw: JSON.stringify(VALID_SA), buildContext: PRODUCTION_CTX,
-    });
-    assert.ok(app.__app);
-  });
-
-  await test("initializeFirebaseAdmin: omitting buildContext entirely (every pre-existing call site/test) defaults to null and is fully unrestricted, exactly as before this fix", async () => {
-    const fake = makeFakeModularAdmin();
-    const app = initializeFirebaseAdmin({ ...fake, projectId: "lfj-profolio", serviceAccountRaw: JSON.stringify(VALID_SA) });
-    assert.ok(app.__app);
-  });
-
-  await test("initializeFirebaseAdmin: the isolation check re-runs on EVERY call, including a warm-instance reuse attempt — a Staging cold start that lands on a container previously warmed for a different config can't slip past it", async () => {
+  await test("10. Warm Admin instances cannot bypass context validation — a container warmed as Production, then hypothetically re-invoked as pre-production with Production's own project id, is still rejected", async () => {
     const fake = makeFakeModularAdmin();
     // First call: legitimately Production.
     initializeFirebaseAdmin({ ...fake, projectId: "lfj-profolio", serviceAccountRaw: JSON.stringify(VALID_SA), buildContext: PRODUCTION_CTX });
     assert.strictEqual(fake.getApps().length, 1);
-    // A hypothetical second call on the same warm `fake` state, now claiming to be Staging with
-    // Production's project id, must still be rejected — proving the check runs BEFORE the
-    // getApps().length short-circuit, not only on a cold/first call.
+    // A hypothetical second call on the same warm `fake` state, now claiming to be a Deploy
+    // Preview with Production's project id, must still be rejected — proving the policy check
+    // runs BEFORE the getApps().length short-circuit, not only on a cold/first call.
     assert.throws(
-      () => initializeFirebaseAdmin({ ...fake, projectId: "lfj-profolio", serviceAccountRaw: JSON.stringify(VALID_SA), buildContext: STAGING_CTX }),
-      (err) => err.code === "config/production-credentials-in-staging"
+      () => initializeFirebaseAdmin({ ...fake, projectId: "lfj-profolio", serviceAccountRaw: JSON.stringify(VALID_SA), buildContext: PREVIEW_CTX }),
+      (err) => err.code === "config/production-credentials-in-preproduction"
     );
+  });
+
+  await test("initializeFirebaseAdmin: dev context with FIRESTORE_EMULATOR_HOST succeeds; without it, fails closed before any credential parsing", async () => {
+    const fakeOk = makeFakeModularAdmin();
+    const appOk = initializeFirebaseAdmin({
+      ...fakeOk, projectId: "any-dev-project", serviceAccountRaw: JSON.stringify({ ...VALID_SA, project_id: "any-dev-project" }),
+      buildContext: DEV_CTX, env: EMULATOR_ENV,
+    });
+    assert.ok(appOk.__app);
+
+    const fakeFail = makeFakeModularAdmin();
+    assert.throws(
+      () => initializeFirebaseAdmin({ ...fakeFail, projectId: "any-dev-project", serviceAccountRaw: "{not even valid json", buildContext: DEV_CTX, env: {} }),
+      (err) => err instanceof FirebaseConfigError && err.code === "config/dev-without-emulator"
+    );
+    assert.strictEqual(fakeFail.getApps().length, 0);
   });
 
   console.log("\nReal firebase-admin v14 package (production-wiring smoke test)");
@@ -616,6 +689,13 @@ async function run() {
       cert,
       projectId: "edenatlas-smoke-test",
       serviceAccountRaw: JSON.stringify(testServiceAccount),
+      // A Dev context with an emulator configured is the simplest role that accepts an arbitrary
+      // project id (Production/Pre-production both require an exact match against a fixed
+      // expected id) — this smoke test only cares about exercising the REAL installed
+      // firebase-admin package's init chain, not the deploy-context policy itself (already
+      // covered exhaustively above).
+      buildContext: { context: "dev", branch: null, expectedStagingProjectId: null },
+      env: { FIRESTORE_EMULATOR_HOST: "127.0.0.1:8080" },
     });
 
     assert.ok(app, "initializeFirebaseAdmin must return a real App instance from the real package");

@@ -30,23 +30,51 @@ export const ENV = Object.freeze({
   PRODUCTION: "production",
   STAGING: "staging",
   DEPLOY_PREVIEW: "deploy-preview",
+  DEV: "dev",
   DEVELOPMENT: "development",
 });
 
 const PRODUCTION_HOST = "edenatlas.netlify.app";
+// The configured Production branch — mirrors netlify/functions/lib/firebase-admin.js's own
+// PRODUCTION_BRANCH exactly (that file can't import this ES module, hence the duplication, same
+// convention as PRODUCTION_PROJECT_ID's duplication there). A `CONTEXT=production` build that
+// somehow isn't actually building this branch is never silently treated as Production client-side
+// either — see resolveEnvironment() below.
+const PRODUCTION_BRANCH = "main";
 
 // Pure — takes exactly what it needs, nothing read from `window`/`location` here. netlifyContext
-// is Netlify's own build-time `CONTEXT` value: "production", "deploy-preview", or
-// "branch-deploy" (see https://docs.netlify.com/configure-builds/environment-variables/
+// is Netlify's own build-time `CONTEXT` value: "production", "deploy-preview", "branch-deploy",
+// or "dev" (Netlify Dev — see https://docs.netlify.com/configure-builds/environment-variables/
 // #build-metadata). `branch` is Netlify's `BRANCH`. `hostname` is provided by the caller (real
 // callers pass `location.hostname`; tests pass a fixture string) and is used ONLY as a
 // last-resort fallback for contexts where no build ran at all (a plain static file server with
 // no `npm run build` step) — never as the primary signal.
+//
+// Deploy-context policy (matches the server-side policy in netlify/functions/lib/
+// firebase-admin.js's resolveDeployRole() exactly, so a build is never classified one way for
+// Firebase config selection and a different way for the banner/UI):
+//   - PRODUCTION: context=="production" AND branch==the configured Production branch. A
+//     Production context on any OTHER branch is never trusted as Production.
+//   - STAGING / DEPLOY_PREVIEW: pre-production (see isPreProduction() below) — ANY branch-deploy
+//     (not just the literal "staging" branch) or deploy-preview counts, deliberately broader than
+//     this file's own history: an earlier version only treated the literal `staging` branch as
+//     needing an isolated Firebase project, which left every OTHER Deploy Preview/branch deploy
+//     silently using Production's Firebase config client-side — exactly the "silently fall back
+//     to Production" bug this policy exists to close.
+//   - DEV: Netlify Dev's own local context.
+//   - DEVELOPMENT: no build info at all (a fresh checkout, a bare static file server) — the
+//     long-standing "just open the file" local dev path this buildless app has always supported;
+//     deliberately NOT hardened into a fail-closed state here (unlike the server-side Functions
+//     policy) since there is no Firebase Emulator wiring in this browser codebase to fail
+//     open/closed AROUND — see the completion report for the explicit scoping decision.
 export function resolveEnvironment({ netlifyContext, branch, hostname } = {}) {
-  if (netlifyContext === "production") return ENV.PRODUCTION;
+  if (netlifyContext === "production") {
+    return branch === PRODUCTION_BRANCH ? ENV.PRODUCTION : ENV.DEVELOPMENT;
+  }
   if (netlifyContext === "branch-deploy" && branch === "staging") return ENV.STAGING;
   if (netlifyContext === "deploy-preview") return ENV.DEPLOY_PREVIEW;
   if (netlifyContext === "branch-deploy") return ENV.DEPLOY_PREVIEW; // any other branch deploy: preview-like, never staging
+  if (netlifyContext === "dev") return ENV.DEV;
   if (hostname === PRODUCTION_HOST) return ENV.PRODUCTION; // fallback safety net only, e.g. no build ever ran
   return ENV.DEVELOPMENT;
 }
@@ -84,20 +112,17 @@ export function isStaging() {
   return getEnvironment() === ENV.STAGING;
 }
 
-export function isNonProduction() {
-  return getEnvironment() !== ENV.PRODUCTION;
+// Broader than isStaging(): true for BOTH the literal `staging` branch deploy AND any other
+// Deploy Preview/branch deploy — every one of these is "pre-production" and must use a staging
+// Firebase project (or fail closed), never Production's. See resolveEnvironment()'s own header
+// comment for why this is deliberately wider than the old isStaging()-only check.
+export function isPreProduction() {
+  const env = getEnvironment();
+  return env === ENV.STAGING || env === ENV.DEPLOY_PREVIEW;
 }
 
-// True when this build resolves to Staging but has no dedicated staging Firebase project
-// configured (see firebase-init.js's getFirebaseConfig()) — i.e. a Staging deploy that would
-// otherwise be talking to the SAME Firestore/Storage project as Production. Callers (currently
-// Discover's follow/status/remove/notification-subscribe writes — see discover.js) use this to
-// fail closed on writes rather than silently letting a staging smoke test mutate production data.
-// This is deliberately NOT "isStaging() alone" — once a real staging Firebase project is
-// configured (STAGING_FIREBASE_* build env vars set), this flips to false automatically and
-// staging becomes a normal, fully writable, isolated environment.
-export function isStagingWithoutIsolatedBackend(currentProjectId, productionProjectId) {
-  return isStaging() && currentProjectId === productionProjectId;
+export function isNonProduction() {
+  return getEnvironment() !== ENV.PRODUCTION;
 }
 
 // Phase 1 safeguard: "Add an obvious non-Production indicator in staging." One shared
@@ -110,7 +135,11 @@ export function isStagingWithoutIsolatedBackend(currentProjectId, productionProj
 export function mountNonProductionBanner(doc = document) {
   if (!isNonProduction() || doc.getElementById("eden-env-banner")) return null;
   const env = getEnvironment();
-  const label = env === ENV.STAGING ? "STAGING" : env === ENV.DEPLOY_PREVIEW ? "DEPLOY PREVIEW" : "DEVELOPMENT";
+  const label =
+    env === ENV.STAGING ? "STAGING" :
+    env === ENV.DEPLOY_PREVIEW ? "DEPLOY PREVIEW" :
+    env === ENV.DEV ? "DEV" :
+    "DEVELOPMENT";
   const bar = doc.createElement("div");
   bar.id = "eden-env-banner";
   bar.setAttribute("role", "status");

@@ -36,15 +36,24 @@
 // module has already succeeded.
 
 const crypto = require("node:crypto");
-const { isStagingBuildContext } = require("./build-context");
 
 const STAGES = ["json_parse", "credential_validation", "admin_initialization"];
 
 // Duplicated from firebase-init.js on purpose — same convention as OWNER_EMAIL's own duplication
 // across every Netlify Function (this module can't import a browser ES module; re-deriving "which
 // project is Production" from an independent hardcoded source is deliberate defense-in-depth, not
-// an oversight). Used ONLY by assertProjectMatchesBuildContext() below, never for any other check.
+// an oversight). Used ONLY by the deploy-context policy below, never for any other check.
 const PRODUCTION_PROJECT_ID = "lfj-profolio";
+// Mirrors js/environment.js's own PRODUCTION_BRANCH exactly (that file can't import this
+// CommonJS module, hence the duplication — same convention as PRODUCTION_PROJECT_ID above).
+const PRODUCTION_BRANCH = "main";
+
+const DEPLOY_ROLE = Object.freeze({
+  PRODUCTION: "production",
+  PRE_PRODUCTION: "pre-production",
+  DEV: "dev",
+  UNKNOWN: "unknown",
+});
 
 class FirebaseConfigError extends Error {
   constructor(message, stage, code) {
@@ -135,41 +144,120 @@ function assertPrivateKeyIsUsable(privateKey) {
   }
 }
 
-// Gap 1 fix (Staging/Production Firebase Admin isolation): a browser-side guard
+// Classifies a build into exactly one deploy role, from the SAME build-time CONTEXT/BRANCH
+// snapshot js/environment.js's resolveEnvironment() classifies client-side (kept deliberately in
+// sync — see that function's own header comment). Pure, no I/O.
+//
+//   - PRODUCTION: CONTEXT=="production" AND BRANCH==the configured Production branch. A
+//     "production" context building some OTHER branch (a misconfigured Netlify Production-branch
+//     setting, a manual promotion) is never trusted as Production — see the UNKNOWN fallthrough.
+//   - PRE_PRODUCTION: CONTEXT=="deploy-preview" OR CONTEXT=="branch-deploy" — EVERY branch
+//     deploy, not just the literal `staging` branch (an earlier version of this policy only
+//     restricted the `staging` branch specifically, leaving every other Deploy Preview/branch
+//     deploy free to use Production credentials with no check at all — that gap is what this
+//     revision closes).
+//   - DEV: CONTEXT=="dev" (Netlify Dev's own local context).
+//   - UNKNOWN: anything else — missing/null buildContext (no build ever ran), a malformed/
+//     unrecognized CONTEXT value, or a "production" context on the wrong branch. Deliberately
+//     the most restrictive bucket (see enforceDeployContextPolicy() below) — "Unknown, missing or
+//     malformed context must fail closed," not fail open the way an earlier version of this file
+//     treated an unrecognized context.
+function resolveDeployRole(buildContext) {
+  const context = buildContext && buildContext.context;
+  const branch = buildContext && buildContext.branch;
+  if (context === "production") {
+    return branch === PRODUCTION_BRANCH ? DEPLOY_ROLE.PRODUCTION : DEPLOY_ROLE.UNKNOWN;
+  }
+  if (context === "deploy-preview" || context === "branch-deploy") return DEPLOY_ROLE.PRE_PRODUCTION;
+  if (context === "dev") return DEPLOY_ROLE.DEV;
+  return DEPLOY_ROLE.UNKNOWN;
+}
+
+// The actual server-side security boundary (Gap 1, tightened): a browser-side guard
 // (js/environment.js's isStagingWritesUnsafe(), which discover.js's writes already check) is a
-// UX safeguard, not a security boundary — Firebase Admin bypasses firestore.rules entirely, so
-// nothing about the browser's own environment detection can stop a misconfigured Staging Function
-// from reading/writing PRODUCTION Firestore via Admin. This is the actual, server-side boundary:
-// called as the FIRST thing initializeFirebaseAdmin() does, on every call (including a warm
-// invocation that's about to take the getApps().length reuse shortcut below) — a Staging build
-// whose resolved Admin credentials turn out to be Production's project, or don't match the
-// explicitly-configured expected Staging project, is refused before any Firestore/Auth/Messaging
-// call is ever possible. `buildContext` is deliberately unrelated to `projectId`/
-// `serviceAccountRaw` (it comes from a SEPARATE build-time snapshot, scripts/generate-function-
-// context.js — see lib/build-context.js) specifically so a misconfiguration that sets
-// FIREBASE_PROJECT_ID/FIREBASE_SERVICE_ACCOUNT to Production's values in the Staging Netlify
-// context can't just "agree with itself" the way it would if this check only cross-referenced
-// those same two env vars. A context that isn't verifiably Staging (buildContext missing/null,
-// Production, a Deploy Preview, local dev) is UNRESTRICTED by this check — Production must never
-// be blocked by a Staging-only rule, and an unknown context fails open here on purpose (the
-// missing-credentials / malformed-JSON / bad-private-key checks below already fail closed for
-// every context regardless).
-function assertProjectMatchesBuildContext(resolvedProjectId, buildContext) {
-  if (!isStagingBuildContext(buildContext)) return;
-  if (resolvedProjectId === PRODUCTION_PROJECT_ID) {
-    throw new FirebaseConfigError(
-      "Staging build resolved Firebase Admin credentials to the PRODUCTION project — refusing to initialize",
-      "credential_validation",
-      "config/production-credentials-in-staging"
-    );
+// UX safeguard, never a security boundary — Firebase Admin bypasses firestore.rules entirely, so
+// nothing about the browser can stop a misconfigured Function from reading/writing PRODUCTION
+// Firestore via Admin. Called as the FIRST thing initializeFirebaseAdmin() does, on every call
+// (including a warm invocation about to take the getApps().length reuse shortcut below) — so a
+// warm container can never bypass this by skipping straight to a cached app.
+//
+// Every deploy role's rule, explicitly (never an implicit "everything else is fine" branch):
+//   PRODUCTION      — resolvedProjectId MUST equal PRODUCTION_PROJECT_ID. Anything else (e.g. a
+//                      staging service account somehow deployed into the Production context)
+//                      fails closed — "project consistency" is required, not just "not obviously
+//                      wrong."
+//   PRE_PRODUCTION  — resolvedProjectId must NEVER equal PRODUCTION_PROJECT_ID (checked first,
+//                      unconditionally — this is what makes "never silently fall back to
+//                      Production" true even before considering whether staging is configured at
+//                      all), AND a staging project must actually be configured
+//                      (buildContext.expectedStagingProjectId, sourced from
+//                      STAGING_FIREBASE_PROJECT_ID) AND resolvedProjectId must equal it exactly.
+//                      No staging project configured -> fail closed (not "fall back to sharing
+//                      Production's project, guarded by the browser," which is what this file
+//                      used to do before this revision).
+//   DEV             — requires explicit emulator configuration: `env.FIRESTORE_EMULATOR_HOST` set
+//                      (the real, standard Firebase Emulator Suite variable — recognized natively
+//                      by the Admin SDK's own Firestore client, not a var invented for this
+//                      check). Missing -> fail closed.
+//   UNKNOWN         — always fails closed, unconditionally, regardless of resolvedProjectId.
+function enforceDeployContextPolicy({ resolvedProjectId, buildContext, env }) {
+  const role = resolveDeployRole(buildContext);
+
+  if (role === DEPLOY_ROLE.PRODUCTION) {
+    if (resolvedProjectId !== PRODUCTION_PROJECT_ID) {
+      throw new FirebaseConfigError(
+        "Production context resolved Firebase Admin credentials to a non-Production project — refusing to initialize",
+        "credential_validation",
+        "config/unexpected-project-in-production"
+      );
+    }
+    return;
   }
-  if (buildContext.expectedStagingProjectId && resolvedProjectId !== buildContext.expectedStagingProjectId) {
-    throw new FirebaseConfigError(
-      "Staging build's Firebase Admin project id does not match the configured staging project (STAGING_FIREBASE_PROJECT_ID)",
-      "credential_validation",
-      "config/staging-project-mismatch"
-    );
+
+  if (role === DEPLOY_ROLE.PRE_PRODUCTION) {
+    if (resolvedProjectId === PRODUCTION_PROJECT_ID) {
+      throw new FirebaseConfigError(
+        "A pre-production build (Deploy Preview / branch deploy, including staging) resolved Firebase Admin credentials to the PRODUCTION project — refusing to initialize",
+        "credential_validation",
+        "config/production-credentials-in-preproduction"
+      );
+    }
+    const expected = buildContext && buildContext.expectedStagingProjectId;
+    if (!expected) {
+      throw new FirebaseConfigError(
+        "Pre-production requires a configured staging Firebase project (STAGING_FIREBASE_PROJECT_ID) — none is set, failing closed",
+        "credential_validation",
+        "config/staging-not-configured"
+      );
+    }
+    if (resolvedProjectId !== expected) {
+      throw new FirebaseConfigError(
+        "Pre-production build's Firebase Admin project id does not match the configured staging project",
+        "credential_validation",
+        "config/staging-project-mismatch"
+      );
+    }
+    return;
   }
+
+  if (role === DEPLOY_ROLE.DEV) {
+    const hasEmulatorConfig = !!(env && env.FIRESTORE_EMULATOR_HOST);
+    if (!hasEmulatorConfig) {
+      throw new FirebaseConfigError(
+        "Local Netlify Dev context requires explicit emulator configuration (FIRESTORE_EMULATOR_HOST) — none is set, failing closed",
+        "credential_validation",
+        "config/dev-without-emulator"
+      );
+    }
+    return;
+  }
+
+  // DEPLOY_ROLE.UNKNOWN — no exceptions, no fallback, always refused.
+  throw new FirebaseConfigError(
+    "Unknown, missing, or malformed deploy context — refusing to initialize Firebase Admin",
+    "credential_validation",
+    "config/unknown-deploy-context"
+  );
 }
 
 // Initializes (or reuses) the Admin app for this warm Function instance, using firebase-admin
@@ -178,13 +266,17 @@ function assertProjectMatchesBuildContext(resolvedProjectId, buildContext) {
 // assistant.js's production wiring) — rather than a legacy `admin` namespace object, both
 // because that namespace no longer has the shape this code needs in v14 (see the header
 // comment) and so this module stays independently testable with injectable fakes, without the
-// real firebase-admin package installed. `buildContext` defaults to null (Gap 1's isolation
-// check above is then a no-op) so every pre-existing call site/test that doesn't pass it keeps
-// working unchanged — production wiring in each Function's buildProductionDeps() always passes
-// the real snapshot (see anilist.js/discover-ai.js/assistant.js/weather.js/
-// anime-airing-check.js).
-function initializeFirebaseAdmin({ getApps, getApp, initializeApp, cert, projectId, serviceAccountRaw, buildContext = null }) {
-  assertProjectMatchesBuildContext(projectId, buildContext);
+// real firebase-admin package installed.
+//
+// `buildContext` defaults to `null` and `env` defaults to `process.env` — a missing/omitted
+// `buildContext` resolves to DEPLOY_ROLE.UNKNOWN, which `enforceDeployContextPolicy()` ALWAYS
+// refuses (see that function's own comment — this is a deliberate tightening from an earlier
+// version of this file, where an unrecognized context was unrestricted). Every real call site
+// (each Function's buildProductionDeps()) always passes the real snapshot; a test that wants to
+// exercise credential/PEM/cert logic without the context-policy gate getting in the way must pass
+// an explicit Production-shaped buildContext (see assistant.test.js's PRODUCTION_CTX fixture).
+function initializeFirebaseAdmin({ getApps, getApp, initializeApp, cert, projectId, serviceAccountRaw, buildContext = null, env = process.env }) {
+  enforceDeployContextPolicy({ resolvedProjectId: projectId, buildContext, env });
   if (getApps().length) return getApp();
 
   const serviceAccount = parseServiceAccount(serviceAccountRaw, projectId);
@@ -207,5 +299,6 @@ function initializeFirebaseAdmin({ getApps, getApp, initializeApp, cert, project
 
 module.exports = {
   FirebaseConfigError, parseServiceAccount, initializeFirebaseAdmin, STAGES,
-  assertProjectMatchesBuildContext, PRODUCTION_PROJECT_ID,
+  enforceDeployContextPolicy, resolveDeployRole, DEPLOY_ROLE,
+  PRODUCTION_PROJECT_ID, PRODUCTION_BRANCH,
 };

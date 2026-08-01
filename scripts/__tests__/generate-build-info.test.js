@@ -14,7 +14,9 @@
 const assert = require("node:assert");
 const fs = require("node:fs");
 
-const { generate, OUT_PATH, FCM_CONFIG_OUT_PATH, PRODUCTION_FIREBASE_CONFIG } = require("../generate-build-info.js");
+const {
+  generate, OUT_PATH, FCM_CONFIG_OUT_PATH, PRODUCTION_FIREBASE_CONFIG, PREPRODUCTION_PLACEHOLDER_CONFIG,
+} = require("../generate-build-info.js");
 
 let pass = 0;
 let fail = 0;
@@ -90,21 +92,37 @@ const FULL_STAGING_ENV = {
     });
   });
 
-  await test("a Staging build with only a PARTIAL staging config (e.g. missing STAGING_FIREBASE_APP_ID) falls back to Production's project, never a half-populated config", () => {
+  await test("a Staging build with only a PARTIAL staging config (e.g. missing STAGING_FIREBASE_APP_ID) falls back to the inert placeholder — never a half-populated config, and NEVER Production's real project (deploy-context policy: never silently fall back to Production)", () => {
     const partial = { ...FULL_STAGING_ENV };
     delete partial.STAGING_FIREBASE_APP_ID;
     withEnv(partial, () => {
       const info = generate();
       assert.strictEqual(info.stagingFirebaseConfig, null);
       const fcmConfig = JSON.parse(fs.readFileSync(FCM_CONFIG_OUT_PATH, "utf8").replace(/^.*self\.__EDEN_FCM_CONFIG__\s*=\s*/s, "").replace(/;\s*$/, ""));
-      assert.strictEqual(fcmConfig.firebaseConfig.projectId, PRODUCTION_FIREBASE_CONFIG.projectId);
+      assert.strictEqual(fcmConfig.firebaseConfig.projectId, PREPRODUCTION_PLACEHOLDER_CONFIG.projectId);
+      assert.notStrictEqual(fcmConfig.firebaseConfig.projectId, PRODUCTION_FIREBASE_CONFIG.projectId);
     });
   });
 
-  await test("a Deploy Preview (or any non-staging branch-deploy) never uses a staging config, even if all six staging vars happen to be set", () => {
+  await test("a Deploy Preview or any OTHER branch deploy DOES use a fully-configured staging config, not just the literal `staging` branch (deploy-context policy: every pre-production context is treated the same)", () => {
     withEnv({ ...FULL_STAGING_ENV, CONTEXT: "branch-deploy", BRANCH: "some-other-feature-branch" }, () => {
+      generate();
       const fcmConfig = JSON.parse(fs.readFileSync(FCM_CONFIG_OUT_PATH, "utf8").replace(/^.*self\.__EDEN_FCM_CONFIG__\s*=\s*/s, "").replace(/;\s*$/, ""));
-      assert.strictEqual(fcmConfig.firebaseConfig.projectId, PRODUCTION_FIREBASE_CONFIG.projectId);
+      assert.strictEqual(fcmConfig.firebaseConfig.projectId, "edenatlas-staging");
+    });
+    withEnv({ ...FULL_STAGING_ENV, CONTEXT: "deploy-preview", BRANCH: "pr-42" }, () => {
+      generate();
+      const fcmConfig = JSON.parse(fs.readFileSync(FCM_CONFIG_OUT_PATH, "utf8").replace(/^.*self\.__EDEN_FCM_CONFIG__\s*=\s*/s, "").replace(/;\s*$/, ""));
+      assert.strictEqual(fcmConfig.firebaseConfig.projectId, "edenatlas-staging");
+    });
+  });
+
+  await test("a Deploy Preview or branch deploy WITHOUT any staging config uses the inert placeholder — never Production's real project", () => {
+    withEnv({ CONTEXT: "deploy-preview", BRANCH: "pr-99" }, () => {
+      generate();
+      const fcmConfig = JSON.parse(fs.readFileSync(FCM_CONFIG_OUT_PATH, "utf8").replace(/^.*self\.__EDEN_FCM_CONFIG__\s*=\s*/s, "").replace(/;\s*$/, ""));
+      assert.strictEqual(fcmConfig.firebaseConfig.projectId, PREPRODUCTION_PLACEHOLDER_CONFIG.projectId);
+      assert.notStrictEqual(fcmConfig.firebaseConfig.projectId, PRODUCTION_FIREBASE_CONFIG.projectId);
     });
   });
 

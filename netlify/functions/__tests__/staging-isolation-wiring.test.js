@@ -1,12 +1,13 @@
 // Structural regression guards for Gap 1 (Staging/Production Firebase Admin isolation): proves,
 // by reading the actual shipped source of every Function that initializes Firebase Admin, that
-// each one actually wires the new buildContext-aware isolation check through — not just that
-// lib/firebase-admin.js's assertProjectMatchesBuildContext() exists and works in isolation (see
-// assistant.test.js's own dedicated section for that). A future new Function (or an edit to an
-// existing one) that forgets to pass `buildContext` would silently lose this protection with no
-// other test able to catch it, since assertProjectMatchesBuildContext() defaults to a no-op when
-// buildContext is omitted (by design, for backward compatibility — see that function's own
-// header comment).
+// each one actually wires the new buildContext-aware deploy-context policy through — not just
+// that lib/firebase-admin.js's enforceDeployContextPolicy()/resolveDeployRole() exist and work in
+// isolation (see assistant.test.js's own dedicated "Deploy-context policy" section for that). A
+// future new Function (or an edit to an existing one) that forgets to pass `buildContext` would
+// silently fall into DEPLOY_ROLE.UNKNOWN, which now ALWAYS fails closed regardless of context —
+// so the failure mode for a missing wire-up is "this Function never works at all," not a silent
+// security gap, but it's still worth catching here directly rather than via a confusing runtime
+// failure.
 //
 // Run with: node netlify/functions/__tests__/staging-isolation-wiring.test.js (or
 // `npm run test:functions`).
@@ -44,14 +45,26 @@ async function test(name, fn) {
     await test(`${file}: requires lib/build-context.js and passes readGeneratedBuildContext() as buildContext into initializeFirebaseAdmin()`, () => {
       assert.ok(/require\(["']\.\/lib\/build-context["']\)/.test(src), `${file} does not require ./lib/build-context`);
       assert.ok(/readGeneratedBuildContext\s*\(\s*\)/.test(src), `${file} never calls readGeneratedBuildContext()`);
-      // The initializeFirebaseAdmin({...}) call block itself must contain the buildContext key —
-      // matched as a contiguous slice from "initializeFirebaseAdmin({" to the next "});" so this
-      // can't pass merely because both strings appear SOMEWHERE unrelated in the file.
+      // The initializeFirebaseAdmin({...}) call block itself must reference buildContext — either
+      // inline (`buildContext: readGeneratedBuildContext()`) or via a local variable that was
+      // itself assigned from readGeneratedBuildContext() (`const buildContext =
+      // readGeneratedBuildContext(); ... initializeFirebaseAdmin({ ..., buildContext, ... })`,
+      // anime-airing-check.js's own shape — it also exposes buildContext on the returned deps
+      // object for its own dry-run-default logic, so a single read is reused for both purposes).
+      // Matched as a contiguous slice from "initializeFirebaseAdmin({" to the next "});" so this
+      // can't pass merely because the strings appear SOMEWHERE unrelated in the file.
       const callMatch = /initializeFirebaseAdmin\(\{[\s\S]*?\}\);/.exec(src);
       assert.ok(callMatch, `${file}: could not find an initializeFirebaseAdmin({...}) call block`);
+      const referencesBuildContext = /\bbuildContext\b\s*[:,}]/.test(callMatch[0]);
+      assert.ok(referencesBuildContext, `${file}: initializeFirebaseAdmin({...}) call block does not reference buildContext at all`);
+      if (/buildContext:\s*readGeneratedBuildContext\(\)/.test(callMatch[0])) {
+        return; // inline form — already proven directly
+      }
+      // Shorthand/variable form — confirm the variable actually originates from
+      // readGeneratedBuildContext(), not some unrelated local named buildContext.
       assert.ok(
-        /buildContext:\s*readGeneratedBuildContext\(\)/.test(callMatch[0]),
-        `${file}: initializeFirebaseAdmin({...}) call block does not set buildContext: readGeneratedBuildContext()`
+        /const\s+buildContext\s*=\s*readGeneratedBuildContext\(\)/.test(src),
+        `${file}: a "buildContext" variable is referenced but never assigned from readGeneratedBuildContext()`
       );
     });
 
