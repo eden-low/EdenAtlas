@@ -2,12 +2,19 @@
 // protected page (right after scripts.js) — no per-page wiring needed. Redirects to login.html
 // if signed out; reveals the page (removes body.auth-check-pending, see styles.css) once resolved.
 import { auth, db, getUserMode } from "./firebase-init.js";
+import { mountNonProductionBanner } from "./js/environment.js";
 import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-auth.js";
 import { collection, query, where, getDocs } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-firestore.js";
 
 const fallbackTimer = setTimeout(() => {
   document.body.classList.remove("auth-check-pending");
 }, 6000);
+
+// Phase 1 safeguard #9: "Add an obvious non-Production indicator in staging." Runs
+// unconditionally at module load, not inside onAuthStateChanged, so it shows regardless of
+// sign-in state. See js/environment.js's mountNonProductionBanner() for the shared
+// implementation (also called from login.html, the one page that doesn't load this module).
+mountNonProductionBanner();
 
 // Unread-notification badge on the nav's Notifications link, present on every protected page.
 // No-ops on any page that doesn't have the element (e.g. login.html has no nav at all). Every

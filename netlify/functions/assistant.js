@@ -415,6 +415,7 @@ function buildProductionDeps() {
   const { getAuth } = require("firebase-admin/auth");
   const { getFirestore } = require("firebase-admin/firestore");
   const { initializeFirebaseAdmin } = require("./lib/firebase-admin");
+  const { readGeneratedBuildContext } = require("./lib/build-context");
   let app = null; // memoized ONLY on success — see ensureApp()'s comment
 
   // Once per warm Function instance: the first successful call caches `app` and every later
@@ -427,6 +428,8 @@ function buildProductionDeps() {
   // `getApp` imported from `firebase-admin/app` above.
   function ensureApp() {
     if (app) return app;
+    // buildContext: Gap 1 (Staging/Production Firebase Admin isolation) — see
+    // lib/firebase-admin.js's assertProjectMatchesBuildContext().
     app = initializeFirebaseAdmin({
       getApps,
       getApp,
@@ -434,6 +437,7 @@ function buildProductionDeps() {
       cert,
       projectId: process.env.FIREBASE_PROJECT_ID,
       serviceAccountRaw: process.env.FIREBASE_SERVICE_ACCOUNT,
+      buildContext: readGeneratedBuildContext(),
     });
     return app;
   }

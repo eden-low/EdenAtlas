@@ -150,6 +150,136 @@ configuration → Environment variables — see `.env.example` for the documente
 dependency a Function needs (`firebase-admin`) — the frontend itself installs nothing and stays
 exactly as buildless as described above.
 
+## Staging environment
+
+A `staging` Git branch, deployed as a Netlify **branch deploy** (a stable URL, not a per-PR Deploy
+Preview) — configured once in the Netlify UI (Site configuration → Build & deploy → Deploy
+contexts → Branch deploys → add `staging`), not in `netlify.toml`, since Netlify already injects
+`CONTEXT=branch-deploy`/`BRANCH=staging` into that build automatically. `js/environment.js`
+resolves this into `ENV.STAGING` at build time (via `scripts/generate-build-info.js` →
+`js/build-info.generated.js`, never a hostname guess) and: shows an "⚠ STAGING" banner on every
+page (`auth-guard.js`/`login.html`), sets `X-Robots-Tag: noindex, nofollow` on the whole deploy
+(`scripts/build-site.js`), and — the important part — **blocks Discover's Firestore writes**
+(`isStagingWritesUnsafe()`) whenever Staging has no dedicated Firebase project of its own,
+so a staging smoke test can never mutate Production data. CORS needs no extra config: the existing
+Deploy-Preview-origin mechanism (`netlify/functions/lib/deploy-origin.js`) already auto-allows
+whatever origin a branch deploy's own `DEPLOY_PRIME_URL` resolves to. See `netlify.toml`'s
+"Staging" comment block for the exact manual Netlify/Firebase Console steps this repo cannot
+perform on its own (enabling the branch deploy, adding the resulting domain to Firebase
+Authorized domains, and — optionally — provisioning a real separate staging Firebase project via
+the six `STAGING_FIREBASE_*` variables in `.env.example`).
+
+**Deploy-context policy — every non-Production deploy is pre-production.** The browser-side guard
+above is a UX safeguard, not a security boundary — Firebase Admin bypasses `firestore.rules`
+entirely, so every Function that initializes Admin (`anilist.js`, `discover-ai.js`, `assistant.js`,
+`weather.js`, `anime-airing-check.js`) needs its OWN isolation, independent of anything the browser
+does. `netlify/functions/lib/firebase-admin.js`'s `enforceDeployContextPolicy()` (built on
+`resolveDeployRole()`) is that boundary — it runs first thing inside `initializeFirebaseAdmin()`
+(before even the warm-instance reuse shortcut, so it can't be skipped on a warm container), from a
+build-time snapshot of Netlify's own `CONTEXT`/`BRANCH` (`netlify/functions/lib/build-context.js`
+— the server-side twin of `js/environment.js`'s browser-side detection, same "Functions can't read
+CONTEXT/BRANCH at runtime, only at build time" constraint `deploy-origin.js` already worked
+around). Four roles, each with an explicit rule — never an implicit "everything else is fine"
+fallthrough:
+- **Production** (`CONTEXT=="production"` AND `BRANCH==` the configured Production branch, `main`
+  — a `production` context on any OTHER branch is never trusted as Production either): the
+  resolved Admin project id MUST equal Production's, full stop.
+- **Pre-production** — `deploy-preview` OR **any** `branch-deploy` (not just the literal `staging`
+  branch — an earlier version of this policy only restricted `staging` specifically, leaving every
+  other Deploy Preview/branch deploy free to use Production credentials with no check at all): the
+  resolved project can NEVER equal Production's, AND a staging project must actually be configured
+  (`STAGING_FIREBASE_PROJECT_ID`) AND match exactly — no staging project configured means this
+  Function fails closed, it does **not** fall back to sharing Production's project.
+- **Dev** (Netlify Dev's own local context): requires `FIRESTORE_EMULATOR_HOST` (the real, standard
+  Firebase Emulator Suite variable) to be set — missing it fails closed.
+- **Unknown** (missing/malformed context, or no build ever ran): **always** fails closed,
+  unconditionally, regardless of what project id was resolved.
+
+`FIREBASE_PROJECT_ID`/`FIREBASE_SERVICE_ACCOUNT` keep their existing names; the real fix is
+configuring them with **different, context-scoped values in the Netlify UI** — Production context →
+Production Firebase values, EVERY pre-production context (staging branch AND Deploy Previews AND
+any other branch deploy) → the same staging Firebase values — see the readiness checklist below.
+Owner-token verification is inherently scoped the same way for free: `getAuth(ensureApp())`'s
+`verifyIdToken()` validates a token's `aud` claim against the initialized app's own project id, so
+a token minted by the browser's Staging Firebase project can never verify against a Production
+Admin app (or vice versa) — Firebase's own documented behavior, not custom code.
+
+**Service worker Firebase config (`service-worker.js`).** No longer hardcodes Production's config
+for its FCM background-message handler — `scripts/generate-build-info.js` now also writes
+`js/fcm-config.generated.js` (gitignored, public-config-only: the same Firebase Web config +
+public VAPID key `js/build-info.generated.js` already resolves for normal page code, in a form a
+service worker can `importScripts()` synchronously), using the SAME broadened pre-production
+classification as the policy above. A pre-production build with no staging config gets an inert,
+deliberately-invalid placeholder project — never Production's real config, and never a half-
+populated one — so background push (and, via `firebase-init.js`'s identical placeholder fallback,
+every other direct browser Firestore/Storage call) fails loudly instead of quietly touching real
+Production data. `service-worker.js`'s `CACHE` is bumped whenever this changes so an already-
+installed worker's stale embedded config is replaced, not left running.
+
+**Scheduled Function verification without cron.** Netlify Scheduled Functions only run
+automatically on a published/Production-context deploy, and are not reachable through their
+ordinary deployed URL by an arbitrary caller at all — Netlify invokes this code only via its own
+internal cron trigger (Production), the "Run now" control in the Netlify UI (available on preview/
+branch deploys too, including `staging`), or `netlify functions:invoke` locally.
+`netlify/functions/anime-airing-check.js` therefore has **no request-level authentication check of
+its own** — an earlier version tried treating the invocation body's `{"next_run": "..."}` field as
+a security signal ("looks like the real scheduler, skip auth") and separately exposed a manual
+Owner-bearer-token HTTP mode in the same file; both are gone. `next_run` is scheduling metadata
+only, logged for observability, never used in any conditional. What actually decides real-vs-dry-
+run is the SAME verified deploy-context policy described above, never anything in the request:
+Production may always send for real; pre-production (`staging` or any Deploy Preview) defaults to
+**enforced dry-run** unless `STAGING_ALLOW_REAL_SEND` is explicitly set AND `ensureFirebaseAdmin()`
+has already proven real, isolated staging credentials are configured; Dev/local invocation always
+stays dry-run, no opt-in exists for it. The actual scheduling/dedup/cleanup LOGIC lives in
+`netlify/functions/lib/airing-check-core.js`'s `runAiringCheck(deps, options)`, independently
+unit/integration-testable with an injected clock (see `netlify/functions/__tests__/
+airing-check-core.test.js`) — that's how it's verified in this environment, with zero network
+access, dry-run mode running every read for real while skipping every write/send. **The automatic
+cron schedule itself cannot be proven by a branch deploy** — confirming it actually fires on its
+20-minute interval is only possible after the eventual real Production deploy. Netlify Function
+compute is metered regardless of whether a deploy is a branch deploy or Production (branch-deploy
+publication itself just doesn't cost the 15 Production-deploy credits). A genuinely-needed manual
+Owner-authenticated HTTP trigger for this feature would have to be its own separate Function with
+its own tests — not bolted onto the scheduled one — and was not built in this pass since it wasn't
+required.
+
+**Staging Firebase readiness checklist** (exact order):
+1. Create/select a dedicated Firebase project for Staging.
+2. Register a Web app inside it.
+3. Enable Google as an Auth provider (matching Production's sign-in method).
+4. Sign in once with the intended Owner Google account so `users/{uid}` (and the `isOwner()`
+   role/email data the app's own login flow already writes) exists for that project.
+5. Firestore is created automatically the first time a document is written, or manually via the
+   Firebase Console.
+6. Deploy this repo's current `firestore.rules` (and `storage.rules`) to the staging project —
+   `npx firebase-tools deploy --only firestore:rules,storage --project <staging-project-id>`; no
+   composite indexes are required anywhere in this codebase (see CLAUDE.md's query-pattern
+   convention).
+7. Cloud Messaging → Web configuration → generate a Web Push certificate (VAPID key pair) for the
+   staging project.
+8. Set the six `STAGING_FIREBASE_*` build variables in Netlify (Site configuration → Environment
+   variables), scoped to **both** the `staging` branch context **and** Deploy Previews — the
+   deploy-context policy treats every pre-production context identically, so a PR's Deploy Preview
+   needs the same staging config the `staging` branch deploy does.
+9. Set `FIREBASE_PROJECT_ID`/`FIREBASE_SERVICE_ACCOUNT` (the staging project's own service-account
+   JSON) scoped to the SAME pre-production contexts (`staging` branch + Deploy Previews) in
+   Netlify — **separately** from Production's values in the Production context.
+10. Set `FIREBASE_VAPID_PUBLIC_KEY` (the public key from step 7) scoped the same way.
+11. Optionally set `STAGING_ALLOW_REAL_SEND=1`, scoped to the `staging` branch context ONLY (never
+    Deploy Previews), if you want a manual "Run now" of the scheduled airing-check Function to
+    send a real push while verifying staging — leave unset to keep every pre-production invocation
+    a safe dry-run.
+12. Enable Netlify branch deploys for `staging` specifically (Site configuration → Build & deploy
+    → Deploy contexts → Branch deploys).
+13. Add the resulting `staging--<site>.netlify.app` domain to Firebase Console → Authentication →
+    Settings → Authorized domains (for the staging project from step 1).
+14. Sign in as both the Owner and a non-owner account against the staging deploy; confirm Discover
+    is reachable/writable for the Owner and structurally unreachable for anyone else.
+15. Install the staging site as an iPhone Home Screen PWA and confirm notification permission is
+    only ever requested after an explicit bell tap, never on open.
+16. Never point any of the above at Production data — every step above provisions a project
+    that is deliberately separate from `lfj-profolio`.
+
 ## Atlas Assistant: `assistant.html` + `netlify/functions/assistant.js`
 
 An Owner-only, read-only AI assistant over the Owner's own Memories/Journal/Journey/Calendar,
@@ -214,9 +344,27 @@ Independent daily/burst quotas from the Atlas Assistant and from each other (20/
 `node netlify/functions/__tests__/discover-ai.test.js` for its deterministic, fully-mocked suite,
 and `node js/__tests__/discover-foryou.test.js` / `node js/__tests__/discover-translate.test.js`
 for the frontend behavior. **Not part of this feature** (see `CLAUDE.md`'s Discover AI history
-entry for the full scope): Web Push/scheduled episode-airing notifications, TV dramas, personal
-score/notes fields, and any streaming/external watch link beyond a single validated "View on
-AniList" link.
+entry for the full scope): TV dramas, personal score/notes fields, and any streaming/external
+watch link beyond a single validated "View on AniList" link.
+
+**Airing reminders (opt-in, per-anime push notifications)**: each `followed_anime` doc has its own
+`notifyOnAiring` toggle (a bell icon on My List cards, off by default — new follows never start
+subscribed). Tapping a bell for the first time on a device opens an explainer modal
+(`#notify-modal`) whose **Enable** button is the actual user gesture that calls
+`Notification.requestPermission()` — permission is never requested on page load or merely from
+opening My List. Uses Firebase Cloud Messaging (`js/push-notifications.js`); the Web Push VAPID
+public key is a public, build-time-injected value (`FIREBASE_VAPID_PUBLIC_KEY`, see
+`.env.example`) — until it's set, the notification UI stays in a disabled "not yet configured"
+state rather than fabricating one. A scheduled Netlify Function,
+`netlify/functions/anime-airing-check.js` (`netlify.toml`'s `[functions."anime-airing-check"]
+schedule`, every 20 minutes — requires Scheduled Functions to be available on the connected
+Netlify account), re-fetches each subscribed title's `nextAiringEpisode` from AniList, sends a
+push once an episode's `airingAt` has passed, and records a deterministic
+`anime_notification_log/{uid}_{anilistId}_{episode}` doc so the same episode is never notified
+twice. `service-worker.js` handles background delivery (`firebase.messaging()
+.onBackgroundMessage()`, classic/compat SDK — a service worker's requirement, not the modular SDK
+the rest of the app uses) and notification clicks (focuses/opens `discover.html`). All factual
+airing data comes from AniList only — Qwen is never involved in scheduling.
 
 ## Login gate: `auth-guard.js` + `login.html`
 

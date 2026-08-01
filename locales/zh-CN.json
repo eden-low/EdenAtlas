@@ -825,6 +825,22 @@
     "foryou_empty_history": "请先在「我的清单」中添加几部作品。",
     "foryou_empty_subtitle": "我们会根据你的清单推荐接下来适合看的作品。",
     "foryou_no_recommendations": "这次没有特别合适的推荐——稍后可以点击刷新再试。",
-    "why_this_fits": "推荐理由"
+    "why_this_fits": "推荐理由",
+    "staging_write_blocked": "当前为 Staging 测试环境，且尚未配置独立的 Firebase 项目——为保护生产数据，写入操作已被禁用。",
+    "notify_settings": "开播提醒",
+    "notify_explainer": "为你开启提醒的动漫在新集数播出时，会收到浏览器/设备通知。播出时间均来自 AniList 官方数据——绝不猜测或生成。",
+    "notify_on": "开播提醒：已开启",
+    "notify_off": "开播提醒：已关闭",
+    "notify_enable": "开启提醒",
+    "notify_enabled": "此设备已开启提醒。",
+    "notify_unsubscribe_device": "取消此设备的订阅",
+    "notify_disable_all": "关闭所有提醒",
+    "notify_unsupported": "你的浏览器不支持通知功能。",
+    "notify_not_configured": "本站尚未配置开播提醒功能。",
+    "notify_permission_denied": "你的浏览器已阻止本站发送通知。",
+    "notify_permission_dismissed": "未获得通知权限。",
+    "notify_subscribed": "此设备已订阅开播提醒。",
+    "notify_not_subscribed": "此设备尚未订阅。",
+    "airing_notification_generic": "有新一集刚刚播出。"
   }
 }

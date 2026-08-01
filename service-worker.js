@@ -1,6 +1,33 @@
 // Minimal network-first service worker for offline shell caching.
 // Deliberately bypasses Firebase/CDN/weather hosts so it never interferes with
 // the auth flow, live Firestore/Storage reads, or third-party API calls.
+// v38 (Staging/Production Firebase isolation follow-up, Gap 2 fix): the hardcoded PRODUCTION
+// Firebase Web config this file's v37 pass shipped (see that entry below, and its own "KNOWN
+// LIMITATION" note) is gone — replaced with an importScripts()-loaded js/fcm-config.generated.js,
+// a build-time-generated file that resolves to Staging's config on a Staging build and
+// Production's on a Production build, written by the SAME script/decision point
+// firebase-init.js's browser-side config already goes through (scripts/generate-build-info.js) so
+// the two can never disagree. Missing/partial config now disables background push entirely rather
+// than ever falling back to a hardcoded default. Bumped because service-worker.js's own text
+// changed and because an already-installed v37 worker (anywhere it was ever active) embedded the
+// old hardcoded config directly in its script text — only a real version bump forces the browser's
+// update-check to fetch and install this corrected version rather than keep running the stale one.
+// v37 (Discover — opt-in per-anime airing push reminders, Owner-only, Phase 4): this file gained
+// Firebase Cloud Messaging BACKGROUND handling (see the bottom of this file) — a real, working
+// `firebase.messaging().onBackgroundMessage()` handler plus `notificationclick` routing back into
+// discover.html's My List. Uses the classic/compat Firebase SDK via importScripts() (NOT the
+// modular SDK the rest of this app uses) because that's what a service worker's background push
+// handler requires per Firebase's own documented pattern for `firebase-messaging-sw.js` — a
+// module-scoped `import()` can't run reliably in a service worker context the browser just woke
+// up specifically to deliver one push event. The Firebase Web config below is hardcoded
+// (Production project only, for now — see the completion report's "known limitation" note on
+// this needing a build-time-templated worker before a dedicated Staging Firebase project can send
+// its own pushes) — these are the exact same PUBLIC config values already public in
+// firebase-init.js, not a new secret. js/environment.js, js/push-notifications.js, and
+// js/build-info.generated.js are added to PRECACHE below (three new same-origin browser modules);
+// discover.html/discover.js were already precached and don't need re-adding, just this version
+// bump so their changed content (the notify-settings modal, the per-card bell toggle) actually
+// reaches an already-installed worker.
 // v36 (Discover AI — Qwen Chinese translation + "For You" recommendations, Owner-only): discover.js
 // changed (Translate to Chinese/View Original controls, a new For You tab, a localStorage
 // translation cache) — discover.html/discover.js were already in PRECACHE from v33, so no new
@@ -126,7 +153,7 @@
 // change — index.html is now the public recruiter Portfolio, home.html is the private app
 // landing page), v21 (Trash privacy fix), v20 (Memory Trash + location-edit fix), v19 (canonical
 // location pipeline fix).
-const CACHE = "eden-shell-v36";
+const CACHE = "eden-shell-v38";
 
 const PRECACHE = [
   "index.html", "home.html", "resume.html", "gallery.html", "journal.html", "expenses.html",
@@ -140,6 +167,7 @@ const PRECACHE = [
   "js/i18n.js", "js/mobile-nav.js", "js/sidebar.js", "js/splash.js", "js/location-search.js",
   "js/location-fields.js", "js/memory-filters.js", "js/resume-data.js",
   "js/date-utils.js", "js/reflection.js", "js/weather-client.js",
+  "js/environment.js", "js/push-notifications.js", "js/build-info.generated.js",
   "locales/en.json", "locales/zh-CN.json",
   "manifest.json", "images/icon-192.png", "images/icon-512.png", "images/logo-mark.png",
 ];
@@ -211,5 +239,102 @@ self.addEventListener("fetch", (event) => {
         return response;
       })
       .catch(() => caches.match(event.request))
+  );
+});
+
+// ---- Phase 4: opt-in per-anime airing push reminders (Owner-only, background delivery) ----
+//
+// Gap 2 fix (was: a hardcoded Production Firebase config baked directly into this file, which
+// would have made a Staging deploy silently send/receive push against PRODUCTION's Firebase
+// project). The Firebase Web config is now read from js/fcm-config.generated.js — a build-time-
+// generated, gitignored, classic (importScripts-able) sibling of js/build-info.generated.js,
+// written by the SAME script (scripts/generate-build-info.js) that already decides "is this
+// build Staging or Production" for the rest of the app, so this worker's config can never
+// independently disagree with what firebase-init.js resolved for normal page code. Loaded via
+// importScripts() (synchronous, classic-script, same mechanism the two Firebase SDK imports
+// below already use) rather than fetch()/import() specifically because a service worker woken to
+// handle one `push` event must have Firebase already initialized at script-evaluation time — see
+// that generated file's own header comment for the exact contents allowlist (public Firebase Web
+// config + public VAPID key ONLY, never a secret).
+//
+// Missing/partial config (a fresh checkout with no build ever run, or a build somehow producing
+// an incomplete config) NEVER falls back to a hardcoded default of any kind — background push is
+// simply disabled for this worker instance, logged once, and every other part of this file
+// (install/activate/fetch/offline shell) is completely unaffected.
+let fcmConfig = null;
+try {
+  importScripts("js/fcm-config.generated.js");
+  fcmConfig = self.__EDEN_FCM_CONFIG__ || null;
+} catch (err) {
+  console.error("[service-worker] js/fcm-config.generated.js unavailable (no build run yet?):", err);
+}
+
+function hasUsableFirebaseConfig(cfg) {
+  return (
+    !!cfg &&
+    !!cfg.firebaseConfig &&
+    typeof cfg.firebaseConfig.apiKey === "string" && cfg.firebaseConfig.apiKey.length > 0 &&
+    typeof cfg.firebaseConfig.projectId === "string" && cfg.firebaseConfig.projectId.length > 0 &&
+    typeof cfg.firebaseConfig.messagingSenderId === "string" && cfg.firebaseConfig.messagingSenderId.length > 0 &&
+    typeof cfg.firebaseConfig.appId === "string" && cfg.firebaseConfig.appId.length > 0
+  );
+}
+
+if (hasUsableFirebaseConfig(fcmConfig)) {
+  // Uses the classic/compat SDK (firebase-messaging-compat.js), not the modular SDK the rest of
+  // this app uses — this is Firebase's own documented requirement for a service worker background
+  // handler, not a stylistic choice. Guarded by a try/catch: an offline install, a blocked CDN
+  // request, or a future SDK URL change must never crash `install`/`activate`/`fetch` for the rest
+  // of this worker — Discover's push feature degrading is far preferable to the whole offline shell
+  // breaking.
+  try {
+    importScripts(
+      "https://www.gstatic.com/firebasejs/12.15.0/firebase-app-compat.js",
+      "https://www.gstatic.com/firebasejs/12.15.0/firebase-messaging-compat.js"
+    );
+    firebase.initializeApp(fcmConfig.firebaseConfig);
+    const messaging = firebase.messaging();
+
+    // The server (netlify/functions/anime-airing-check.js) always sends a DATA-only payload
+    // (never a top-level `notification` field) specifically so FCM never auto-displays anything —
+    // this handler is the one place that decides what the notification looks like and where a
+    // click on it goes, matching Requirement 16's foreground/background/click-handling triad.
+    messaging.onBackgroundMessage((payload) => {
+      const data = (payload && payload.data) || {};
+      const title = data.title || "EdenAtlas";
+      const options = {
+        body: data.body || "",
+        icon: "images/icon-192.png",
+        badge: "images/icon-192.png",
+        tag: data.dedupeKey || undefined, // same episode -> same tag -> replaces, never stacks twice
+        data: { url: data.url || "discover.html" },
+      };
+      self.registration.showNotification(title, options);
+    });
+  } catch (err) {
+    // No console in every SW devtools view surfaces this reliably, but logging costs nothing and
+    // helps local debugging — never rethrown, never blocks install/activate/fetch above.
+    console.error("[service-worker] Firebase Messaging background handler failed to initialize:", err);
+  }
+} else {
+  console.warn("[service-worker] no usable Firebase config for this build — background push reminders disabled.");
+}
+
+// Requirement 16: "Notification click should open the relevant Discover detail or My List
+// entry." Focuses an already-open EdenAtlas tab (navigating it to the target URL) rather than
+// always opening a new one, falling back to opening a new tab only when none is open.
+self.addEventListener("notificationclick", (event) => {
+  event.notification.close();
+  const targetUrl = (event.notification.data && event.notification.data.url) || "discover.html";
+  event.waitUntil(
+    clients.matchAll({ type: "window", includeUncontrolled: true }).then((windowClients) => {
+      for (const client of windowClients) {
+        if ("focus" in client) {
+          client.navigate(targetUrl).catch(() => {});
+          return client.focus();
+        }
+      }
+      if (clients.openWindow) return clients.openWindow(targetUrl);
+    })
   );
 });

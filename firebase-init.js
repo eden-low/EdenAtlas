@@ -4,6 +4,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/12.15.0/fireba
 import { getAuth, GoogleAuthProvider, setPersistence, browserLocalPersistence } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-auth.js";
 import { getFirestore } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-firestore.js";
 import { getStorage } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-storage.js";
+import { getBuildInfo, isPreProduction } from "./js/environment.js";
 
 // authDomain controls where Firebase's OAuth handler page (/__/auth/handler) lives. The default,
 // {project}.firebaseapp.com, is a third-party origin relative to this site — on iOS, a
@@ -26,16 +27,71 @@ const authDomain =
     ? PRODUCTION_HOST
     : DEFAULT_AUTH_DOMAIN;
 
-const firebaseConfig = {
+const PRODUCTION_PROJECT_ID = "lfj-profolio";
+const productionFirebaseConfig = {
   apiKey: "AIzaSyBLJmKmn4Nwc2Ad3CG_KoPAn96HSfuvvU8",
   authDomain,
-  projectId: "lfj-profolio",
+  projectId: PRODUCTION_PROJECT_ID,
   storageBucket: "lfj-profolio.firebasestorage.app",
   messagingSenderId: "173360347563",
   appId: "1:173360347563:web:961b3118bce0a8232c3aee",
 };
 
+// Deploy-context policy follow-up: "Prefer a separate Firebase staging project," now applied to
+// every PRE-PRODUCTION deploy (js/environment.js's isPreProduction() — the literal `staging`
+// branch AND every other Deploy Preview/branch deploy, never guessed from hostname), not just the
+// literal `staging` branch as an earlier version of this file checked. Activates ONLY when
+// scripts/generate-build-info.js found all six STAGING_FIREBASE_* env vars set — see that
+// script's readStagingFirebaseConfig() for why a partial set never activates.
+//
+// "Never silently fall back from staging/preview to Production Firebase": when pre-production has
+// NO staging override configured, this now initializes against an INERT, deliberately-invalid
+// placeholder project — never Production's real config — so a misconfigured pre-production
+// deploy's Firebase calls fail loudly (wrong-project errors) instead of quietly reading/writing
+// real Production data merely because a Google sign-in happens to succeed against it. isOwner()/
+// firestore.rules would normally be the safety net for OTHER users, but the Owner's own account
+// is exactly the one identity that always passes those checks, so this app-level check is the
+// real boundary here.
+const PREPRODUCTION_PLACEHOLDER_CONFIG = {
+  apiKey: "unconfigured-preproduction-build",
+  authDomain: "eden-preproduction-not-configured.firebaseapp.com",
+  projectId: "eden-preproduction-not-configured",
+  storageBucket: "eden-preproduction-not-configured.firebasestorage.app",
+  messagingSenderId: "0",
+  appId: "1:0:web:unconfigured",
+};
+
+const buildInfo = getBuildInfo();
+const preProdOverride = isPreProduction() && buildInfo && buildInfo.stagingFirebaseConfig;
+const firebaseConfig = preProdOverride
+  ? preProdOverride
+  : isPreProduction()
+    ? PREPRODUCTION_PLACEHOLDER_CONFIG
+    : productionFirebaseConfig;
+
+// Exported so callers (Discover's follow/status/remove/notification writes; any future module
+// that wants the same guard) can decide whether it's safe to write, without each one having to
+// re-derive "is this pre-production without its own isolated project" itself.
+export const ACTIVE_PROJECT_ID = firebaseConfig.projectId;
+export function isUsingIsolatedStagingBackend() {
+  return isPreProduction() && !!preProdOverride;
+}
+// True whenever this is ANY pre-production deploy not confirmed to be using its own isolated
+// Firebase project — deliberately NOT a project-id string comparison (the old implementation
+// compared ACTIVE_PROJECT_ID against Production's id, which silently stopped catching the unsafe
+// case the moment the fallback stopped being literally Production's config, e.g. the placeholder
+// above) — this is why the check is a direct function of isUsingIsolatedStagingBackend() instead.
+export function isStagingWritesUnsafe() {
+  return isPreProduction() && !isUsingIsolatedStagingBackend();
+}
+
 const app = initializeApp(firebaseConfig);
+// Exported (Phase 4) so js/push-notifications.js can call getMessaging(app), and so it can hand
+// the SAME config this page is actually using (Production or a configured Staging project) to
+// service-worker.js via postMessage — the service worker has no module scope of its own and
+// can't import this file, so this is the only way it learns which Firebase project to initialize
+// for background push. Not a secret (see the comment on firebaseConfig.apiKey above).
+export { app, firebaseConfig };
 
 export const auth = getAuth(app);
 // Explicit rather than relying on the SDK default so the PWA (standalone launch,
