@@ -2745,6 +2745,73 @@ boundary, since Firebase Admin bypasses `firestore.rules` entirely. Three gaps c
    independently verified against a live deployment in this environment — documented as a
    best-effort, defense-in-depth signal, not the sole boundary.
 
+**"Deploy-context policy hardening + scheduled Function auth removal" (most recent, same
+`feat/discover-staging-push` branch, PR #10, unmerged)** — a review found the pass above's policy
+still too loose in two ways, plus corrected a false premise about branch divergence. Three fixes:
+1. **Every non-Production deploy is now pre-production, not just the literal `staging` branch.**
+   The prior pass's `assertProjectMatchesBuildContext()` only restricted the `staging` branch-
+   deploy specifically — a Deploy Preview or any OTHER branch deploy was **completely
+   unrestricted**, free to use Production Firebase credentials (both server-side Admin AND, via
+   `firebase-init.js`'s old `isStaging()`-only check, client-side too) with no check at all.
+   Replaced with an explicit four-role policy in
+   [netlify/functions/lib/firebase-admin.js](netlify/functions/lib/firebase-admin.js)'s
+   `resolveDeployRole()`/`enforceDeployContextPolicy()`: **Production** (`CONTEXT=="production"`
+   AND `BRANCH==` the configured Production branch, `main` — a `production` context on any OTHER
+   branch is never trusted as Production either) requires the resolved Admin project to exactly
+   equal Production's; **Pre-production** (`deploy-preview` OR **any** `branch-deploy`) can never
+   equal Production's project AND requires a configured, matching staging project
+   (`STAGING_FIREBASE_PROJECT_ID`) — **no staging project configured now fails closed**, it no
+   longer falls back to sharing Production's project the way the prior pass's design did;
+   **Dev** (Netlify Dev's own context) requires `FIRESTORE_EMULATOR_HOST` (the real, standard
+   Firebase Emulator Suite variable) to be set; **Unknown** (missing/malformed context, no build
+   ever ran) **always** fails closed unconditionally — the prior pass's version left an unknown
+   context completely unrestricted, which this task explicitly called out as unacceptable. The
+   check re-runs on every `initializeFirebaseAdmin()` call (before the warm-instance reuse
+   shortcut), so a warm container can't bypass it. Client-side, `js/environment.js` gained
+   `isPreProduction()` (Staging OR Deploy Preview) replacing the old `isStaging()`-only guard, and
+   `resolveEnvironment()` now applies the same Production-branch check. `firebase-init.js`'s
+   fallback for pre-production-without-staging-config changed from "silently use Production's real
+   config" to an inert, deliberately-invalid placeholder project — so a misconfigured pre-
+   production deploy's Firebase calls fail loudly instead of quietly touching real Production data
+   merely because the Owner's own Google sign-in still succeeds against it (the one identity that
+   always passes `firestore.rules`, making it exactly the wrong case to leave silently working).
+   `scripts/generate-build-info.js`'s `js/fcm-config.generated.js` resolution was broadened and
+   fixed the same way. 21 new assertions in `assistant.test.js`'s "Deploy-context policy" section
+   cover all 10 explicitly-required scenarios (Production+Production succeeds, Production+staging
+   fails, Deploy Preview+staging succeeds, Deploy Preview+Production fails closed, branch-deploy+
+   Production fails closed, staging+staging succeeds, unknown+anything fails closed, dev+emulator
+   succeeds, dev-without-emulator fails closed, warm-instance bypass proven impossible) plus the
+   pure `resolveDeployRole()` classifier and pre-production-with-no-staging-configured-at-all.
+2. **Scheduled Function: request-shape "authentication" removed entirely, no manual HTTP mode.**
+   The prior pass's `netlify/functions/anime-airing-check.js` used the invocation body's
+   `next_run` field's presence/shape as a signal to skip auth ("looks like Netlify's scheduler")
+   and, for anything else, exposed a manual Owner-bearer-token HTTP mode in the SAME function.
+   Both are gone: Netlify Scheduled Functions are not reachable through their ordinary deployed
+   URL by an arbitrary caller at all (only Netlify's own cron, the dashboard's "Run now," or
+   `netlify functions:invoke` reach this code) and `next_run` is scheduling metadata, never a
+   credential — this file now has no request-level auth check whatsoever. What decides real-vs-
+   dry-run is the SAME verified deploy-context policy from fix 1, never anything in the request:
+   Production may always send for real; pre-production defaults to **enforced dry-run** unless
+   `STAGING_ALLOW_REAL_SEND` is explicitly set AND isolated staging credentials are already
+   confirmed (the opt-in alone is never sufficient); Dev/anything else always stays dry-run, no
+   opt-in exists for it. `netlify/functions/lib/airing-check-core.js`'s `runAiringCheck()` (the
+   testable core extracted in the prior pass) is unchanged — dedup/dead-token-cleanup logic was
+   re-verified, not re-implemented. The wrapper test suite was rewritten around this design (env/
+   Admin-init checks, dry-run-default-by-role matrix, and an explicit regression test proving
+   `next_run`'s presence can never flip pre-production into a real send).
+3. **Branch-reconciliation premise corrected.** The task assumed `staging` (`4877342`) had
+   fallen behind the current Production baseline because a STALE LOCAL `main` branch ref
+   (`6ab036d`, never fast-forwarded in this environment) was reported as "current main." Re-
+   fetched `origin/main` directly: it is **also** `4877342`, identical to `staging` — `6ab036d` is
+   simply an ancestor of it, not a divergent, newer baseline. `git merge origin/main` into
+   `feat/discover-staging-push` confirmed "Already up to date" — zero new commits, zero conflicts,
+   nothing to reconcile. No files needed merging; this is a corrected-premise finding, not a
+   no-op treated as one.
+4. **Explicitly not part of this pass**: no `firestore.rules`/`storage.rules` change; no Firebase
+   staging project actually created, no VAPID key actually generated; no separate manual Owner-
+   authenticated HTTP trigger Function (would be a genuinely new, separately-tested Function, not
+   built since not required this pass); no `main`/`staging` merge, no Production deployment.
+
 ## Architecture
 
 ### Roles and the multi-tenant data model
