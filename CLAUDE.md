@@ -2536,6 +2536,131 @@ Netlify Function — never a modification of `assistant.js` (the personal-data-t
    deployed, or pushed by this pass — see the completion report handed to the user for the
    Deploy-Preview verification and remaining live-QA checklist.
 
+**"Development → Staging → Production workflow + Discover airing reminders" (most recent,
+unmerged — `feat/discover-staging-push` branch off a new `staging` branch)** — Audit first found
+the two branches described above as "unmerged" (`feat/discover-anime-mvp`/PR #8, `feat/discover-
+ai-v1`/PR #9) had actually already been merged into `origin/main` on GitHub (2026-07-20 and
+2026-07-22, confirmed via `gh pr list`/`git log` — `main` was 5 commits behind `origin/main`
+locally, and PR #9's merge commit has zero diff against its branch tip), meaning the Discover
+core/five-status/dedup/AniList proxy/Qwen translation+recommendations described in the two history
+entries above are already live Discover functionality, not a pending branch — this pass verified
+that by reading the actual shipped `discover.js`/`firestore.rules`, not by trusting the stale
+"unmerged" framing. This pass's own real scope, once that was corrected, was the two genuine gaps:
+a Development → Staging → Production environment model (none existed before) and opt-in per-anime
+airing push reminders (no push/FCM/VAPID infrastructure existed anywhere in this repo before).
+Branch strategy: a new `staging` branch was cut from `origin/main` (intended as the stable branch
+Netlify branch-deploys), with this pass's own work on a feature branch off it, per the task's
+explicit "no merge to main" instruction — `main`/Production untouched.
+1. **Environment model** — [js/environment.js](js/environment.js) (a **seventh** sanctioned
+   shared module) resolves Production/Staging/Deploy-Preview/Development from an explicit,
+   pure `resolveEnvironment({netlifyContext, branch, hostname})`, never a bare hostname guess.
+   The real inputs come from a build-time snapshot,
+   [scripts/generate-build-info.js](scripts/generate-build-info.js) → a gitignored
+   `js/build-info.generated.js` (loaded as the literal first line of every protected page's
+   `<head>`, a classic non-module script so `window.__EDEN_BUILD__` is synchronously available
+   before any later module runs, and gracefully absent — a harmless 404, falling back to
+   `ENV.DEVELOPMENT` — on a fresh checkout with no build run yet) — same "capture at build time,
+   since a static page has no `process.env`, gitignore the output" pattern
+   `generate-deploy-origin.js` already established. `mountNonProductionBanner()` (called from
+   `auth-guard.js` and from `login.html`'s own inline module, since login.html is the one page
+   that doesn't load `auth-guard.js`) shows a fixed "⚠ STAGING/PREVIEW/DEVELOPMENT" bar, appended
+   to `<html>` directly (same reasoning as `js/splash.js`'s overlay). `scripts/build-site.js`
+   writes a `site/_headers` file with `X-Robots-Tag: noindex, nofollow` for any non-Production
+   `CONTEXT` (fails closed: an unset/unknown context defaults to noindex, only an explicit
+   `CONTEXT=production` build ships without it).
+2. **Firebase config abstraction** — `firebase-init.js` now optionally swaps in a dedicated
+   Staging Firebase project (`STAGING_FIREBASE_API_KEY`/`_AUTH_DOMAIN`/`_PROJECT_ID`/
+   `_STORAGE_BUCKET`/`_MESSAGING_SENDER_ID`/`_APP_ID`, all six or none — a partial set never
+   activates) when `isStaging()` is true and every value is present, snapshotted the same way as
+   above. No such project exists yet in this environment (none was created — no cloud resources
+   were provisioned by this pass, per its own instructions), so this stays inert today and
+   Staging shares Production's Firebase project — which is exactly why
+   `isStagingWritesUnsafe()`/`isUsingIsolatedStagingBackend()` exist: `discover.js`'s
+   `guardStagingWrite()` blocks every Discover mutation (`addFollow`/`updateFollowStatus`/
+   `removeFollow`/`undoRemove`/`updateFollowNotify`) and `js/push-notifications.js`'s subscribe/
+   unsubscribe/disable-all calls whenever a Staging deploy would otherwise write into the SAME
+   Firestore project Production uses — reads are unaffected. `netlify.toml` gained a documented
+   "Staging" comment block (no functional change needed for CORS: `DEPLOY_PRIME_URL`-based
+   origin auto-allow, already used for Deploy Previews, already covers branch deploys too) and
+   an explicit list of the manual steps this repo cannot perform itself (Netlify UI: enable branch
+   deploys for `staging` specifically; Firebase Console: add the resulting domain to Authorized
+   domains; optionally provision the six `STAGING_FIREBASE_*` values).
+3. **Discover airing reminders** — `followed_anime` gained a required `notifyOnAiring: boolean`
+   (default `false` — a new follow is never silently subscribed), plus two Admin-only fields
+   written exclusively by the new scheduled Function (`nextEpisodeSnapshot`/`scheduleRefreshedAt`
+   — deliberately excluded from the client-facing `firestore.rules` `keys().hasOnly()` allowlist,
+   since Admin SDK writes bypass rules entirely, same as every other server-only field in this
+   app). Two new collections: `push_subscriptions/{uid}_{tokenHash}` (deterministic ID, same
+   "structural uniqueness" trick as `followed_anime`/`daily_reflections`/`usernames`, Owner-only
+   read/write/delete scoped to the caller's own uid) and `anime_notification_log/{uid}_
+   {anilistId}_{episode}` (Admin-write-only dedup log, Owner-only read, no client create/update/
+   delete rule at all — Firestore's default-deny already closes it, same as the `ai_usage*`
+   precedent). [js/push-notifications.js](js/push-notifications.js) (an **eighth** shared module,
+   though a plain importable helper rather than a self-injecting one) wraps Firebase Cloud
+   Messaging: `subscribeThisDevice()` is only ever called from a real click (the notify-settings
+   modal's Enable button, or indirectly a per-card bell tap on an already-subscribed device) and
+   requests `Notification.requestPermission()` as close to that click as the async chain allows —
+   never on page load, never merely from opening My List. discover.html gained a bell icon
+   (`#notify-settings-btn`) opening an accessible focus-trapped `#notify-modal` (Enable/
+   Unsubscribe-this-device/Disable-all, state-dependent — unsupported/not-configured/denied/
+   subscribed/not-subscribed) and each My List card's `renderCardActions()` gained a per-anime
+   bell toggle next to the status select and remove button. Turning a reminder OFF never needs
+   permission; turning one ON when this device isn't subscribed yet opens the explainer modal
+   first rather than requesting permission directly from the card tap. There is no "push private
+   key" anywhere in this design — FCM's public VAPID key (`FIREBASE_VAPID_PUBLIC_KEY`, build-time
+   snapshotted like everything else in this section) is the only new credential-shaped value, and
+   sending a push server-side reuses the EXISTING `FIREBASE_SERVICE_ACCOUNT` Admin credential
+   (`admin.messaging().send()`), never a raw VAPID private key. Until
+   `FIREBASE_VAPID_PUBLIC_KEY` is set, the whole feature stays in a documented "not yet
+   configured" disabled state — no placeholder value was invented.
+4. **[netlify/functions/anime-airing-check.js](netlify/functions/anime-airing-check.js)** (new) —
+   a Netlify Scheduled Function (`netlify.toml`'s `[functions."anime-airing-check"] schedule =
+   "*/20 * * * *"`, gated on the connected Netlify account actually supporting Scheduled
+   Functions — not confirmed in this environment, called out as a manual verification step, not
+   assumed). No CORS/bearer-token check (Netlify's scheduler invokes it directly, server-side —
+   every doc it touches already belongs to the Owner, since Discover has never had another
+   writer). Every run: reads every `notifyOnAiring: true` doc, batch-fetches fresh
+   `nextAiringEpisode` from AniList (reusing the unmodified `lib/anilist-operations.js`
+   allowlist/sanitizer — chunked at 25 ids, the same `MAX_BATCH_IDS` the browser-facing `batch`
+   operation already enforces, never one AniList call per title), refreshes each doc's
+   `nextEpisodeSnapshot`/`scheduleRefreshedAt` regardless of whether anything is due (Requirement
+   9's "refreshes due schedules"), and — only once `airingAt` has actually passed AND the
+   deterministic `anime_notification_log` doc for that exact episode doesn't already exist — sends
+   a DATA-only (never `notification`-shaped, so FCM never auto-displays anything) push to every
+   one of the Owner's subscribed devices via `admin.messaging().send()`, then records the dedup
+   log doc (even when zero devices are currently subscribed, so a device subscribing later never
+   gets a backlog of stale "just aired" pings). A token FCM reports as
+   not-registered/invalid/invalid-argument is deleted from `push_subscriptions` on the spot
+   (Requirement 11); any other send failure is logged and left for the next run. Missing/absent
+   `nextAiringEpisode` (FINISHED/CANCELLED/not-yet-scheduled) is stored as `null` and treated as
+   UNKNOWN, never as "not airing" or an implicit zero — matching Requirement 13 exactly.
+5. **`service-worker.js` → `eden-shell-v37`** — gained real Firebase Cloud Messaging BACKGROUND
+   handling: `importScripts()`-loaded classic/compat SDK (Firebase's own documented requirement
+   for a service worker background handler — the modular SDK the rest of this app uses can't run
+   reliably in a worker the browser just woke up specifically to deliver one push), a hardcoded
+   Production Firebase Web config (same public values already public in `firebase-init.js` — see
+   the file's own comment for the known limitation this creates: a future isolated Staging
+   Firebase project would need this file templated per environment before Staging pushes could
+   use their own project, not attempted this pass), `onBackgroundMessage()` building a real
+   `self.registration.showNotification()` call, and a `notificationclick` handler that
+   focuses/navigates an already-open EdenAtlas tab to `discover.html` (or opens one). Also added
+   `js/environment.js`/`js/push-notifications.js`/`js/build-info.generated.js` to `PRECACHE`.
+6. **i18n**: 16 new `discover.*` keys in both locales (`notify_settings`, `notify_explainer`,
+   `notify_on`/`notify_off`, `notify_enable`/`notify_enabled`, `notify_unsubscribe_device`,
+   `notify_disable_all`, `notify_unsupported`/`notify_not_configured`/
+   `notify_permission_denied`/`notify_permission_dismissed`, `notify_subscribed`/
+   `notify_not_subscribed`, `staging_write_blocked`, `airing_notification_generic`).
+7. **`.env.example`** gained `FIREBASE_VAPID_PUBLIC_KEY` and the six `STAGING_FIREBASE_*`
+   variables, both documented as public-safe (not secrets) and never invented with placeholder
+   working values.
+8. **Explicitly not part of this pass**: no manga reading, anime playback, streaming, or
+   scraping (none was requested, none was added); no `main`/Production deploy, no Firebase
+   staging project actually created, no VAPID key actually generated (all three require a manual
+   step in an external console this environment cannot perform — see the completion report); the
+   pre-existing Discover core/Qwen AI features (statuses, dedup, translation, For You) were
+   verified, not re-implemented. See the completion report for the exact test commands/counts,
+   the corrected historical-assumption findings, and the full manual-setup checklist.
+
 ## Architecture
 
 ### Roles and the multi-tenant data model

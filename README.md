@@ -150,6 +150,25 @@ configuration → Environment variables — see `.env.example` for the documente
 dependency a Function needs (`firebase-admin`) — the frontend itself installs nothing and stays
 exactly as buildless as described above.
 
+## Staging environment
+
+A `staging` Git branch, deployed as a Netlify **branch deploy** (a stable URL, not a per-PR Deploy
+Preview) — configured once in the Netlify UI (Site configuration → Build & deploy → Deploy
+contexts → Branch deploys → add `staging`), not in `netlify.toml`, since Netlify already injects
+`CONTEXT=branch-deploy`/`BRANCH=staging` into that build automatically. `js/environment.js`
+resolves this into `ENV.STAGING` at build time (via `scripts/generate-build-info.js` →
+`js/build-info.generated.js`, never a hostname guess) and: shows an "⚠ STAGING" banner on every
+page (`auth-guard.js`/`login.html`), sets `X-Robots-Tag: noindex, nofollow` on the whole deploy
+(`scripts/build-site.js`), and — the important part — **blocks Discover's Firestore writes**
+(`isStagingWritesUnsafe()`) whenever Staging has no dedicated Firebase project of its own,
+so a staging smoke test can never mutate Production data. CORS needs no extra config: the existing
+Deploy-Preview-origin mechanism (`netlify/functions/lib/deploy-origin.js`) already auto-allows
+whatever origin a branch deploy's own `DEPLOY_PRIME_URL` resolves to. See `netlify.toml`'s
+"Staging" comment block for the exact manual Netlify/Firebase Console steps this repo cannot
+perform on its own (enabling the branch deploy, adding the resulting domain to Firebase
+Authorized domains, and — optionally — provisioning a real separate staging Firebase project via
+the six `STAGING_FIREBASE_*` variables in `.env.example`).
+
 ## Atlas Assistant: `assistant.html` + `netlify/functions/assistant.js`
 
 An Owner-only, read-only AI assistant over the Owner's own Memories/Journal/Journey/Calendar,
@@ -214,9 +233,27 @@ Independent daily/burst quotas from the Atlas Assistant and from each other (20/
 `node netlify/functions/__tests__/discover-ai.test.js` for its deterministic, fully-mocked suite,
 and `node js/__tests__/discover-foryou.test.js` / `node js/__tests__/discover-translate.test.js`
 for the frontend behavior. **Not part of this feature** (see `CLAUDE.md`'s Discover AI history
-entry for the full scope): Web Push/scheduled episode-airing notifications, TV dramas, personal
-score/notes fields, and any streaming/external watch link beyond a single validated "View on
-AniList" link.
+entry for the full scope): TV dramas, personal score/notes fields, and any streaming/external
+watch link beyond a single validated "View on AniList" link.
+
+**Airing reminders (opt-in, per-anime push notifications)**: each `followed_anime` doc has its own
+`notifyOnAiring` toggle (a bell icon on My List cards, off by default — new follows never start
+subscribed). Tapping a bell for the first time on a device opens an explainer modal
+(`#notify-modal`) whose **Enable** button is the actual user gesture that calls
+`Notification.requestPermission()` — permission is never requested on page load or merely from
+opening My List. Uses Firebase Cloud Messaging (`js/push-notifications.js`); the Web Push VAPID
+public key is a public, build-time-injected value (`FIREBASE_VAPID_PUBLIC_KEY`, see
+`.env.example`) — until it's set, the notification UI stays in a disabled "not yet configured"
+state rather than fabricating one. A scheduled Netlify Function,
+`netlify/functions/anime-airing-check.js` (`netlify.toml`'s `[functions."anime-airing-check"]
+schedule`, every 20 minutes — requires Scheduled Functions to be available on the connected
+Netlify account), re-fetches each subscribed title's `nextAiringEpisode` from AniList, sends a
+push once an episode's `airingAt` has passed, and records a deterministic
+`anime_notification_log/{uid}_{anilistId}_{episode}` doc so the same episode is never notified
+twice. `service-worker.js` handles background delivery (`firebase.messaging()
+.onBackgroundMessage()`, classic/compat SDK — a service worker's requirement, not the modular SDK
+the rest of the app uses) and notification clicks (focuses/opens `discover.html`). All factual
+airing data comes from AniList only — Qwen is never involved in scheduling.
 
 ## Login gate: `auth-guard.js` + `login.html`
 
