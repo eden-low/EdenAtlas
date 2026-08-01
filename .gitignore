@@ -25,6 +25,18 @@ node_modules/
 # above.
 /js/build-info.generated.js
 
+# Generated public Firebase Web config + VAPID public key for service-worker.js's background FCM
+# handler (scripts/generate-build-info.js) — only ever public values (see that script's header
+# comment for the exact allowlist), never a secret. Same gitignored/graceful-fallback treatment.
+/js/fcm-config.generated.js
+
+# Generated server-side Netlify CONTEXT/BRANCH snapshot for Netlify Functions' environment
+# isolation (scripts/generate-function-context.js / netlify/functions/lib/build-context.js) — not
+# a secret, rebuilt by `npm run build` on every build, never hand-edited, never committed. Missing
+# entirely degrades to {context: null, branch: null, expectedStagingProjectId: null}, treated as
+# "not verifiably Staging" everywhere it's read.
+/netlify/functions/lib/build-context.generated.json
+
 # Environment / secrets (Netlify Functions prep) — never commit real values.
 # Production secrets belong in Netlify Project configuration -> Environment variables,
 # not in any file in this repo. See .env.example for the documented variable names.

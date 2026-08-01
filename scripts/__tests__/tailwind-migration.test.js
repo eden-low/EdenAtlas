@@ -230,15 +230,19 @@ async function run() {
     // locations, but stays between build:css and build-site.js for a stable, documented order).
     // The Development -> Staging -> Production pass added a second, similarly build-time-only
     // step, scripts/generate-build-info.js, which must run before build-site.js copies js/ into
-    // site/ (so the freshly-generated js/build-info.generated.js is actually included).
+    // site/ (so the freshly-generated js/build-info.generated.js is actually included). The
+    // Staging/Production isolation follow-up pass added a THIRD, scripts/generate-function-
+    // context.js (Gap 1's server-side CONTEXT/BRANCH snapshot for Netlify Functions), inserted
+    // between generate-deploy-origin.js and generate-build-info.js.
     const pkg = JSON.parse(read("package.json"));
     assert.strictEqual(
       pkg.scripts.build,
-      "npm run build:css && node scripts/generate-deploy-origin.js && node scripts/generate-build-info.js && node scripts/build-site.js"
+      "npm run build:css && node scripts/generate-deploy-origin.js && node scripts/generate-function-context.js && node scripts/generate-build-info.js && node scripts/build-site.js"
     );
     assert.strictEqual(pkg.scripts["build:css"], "tailwindcss -c tailwind.config.js -i ./tailwind-input.css -o ./tailwind.generated.css --minify");
     assert.strictEqual(pkg.scripts["watch:css"], "tailwindcss -c tailwind.config.js -i ./tailwind-input.css -o ./tailwind.generated.css --watch");
     assert.strictEqual(pkg.scripts["generate:deploy-origin"], "node scripts/generate-deploy-origin.js");
+    assert.strictEqual(pkg.scripts["generate:function-context"], "node scripts/generate-function-context.js");
     assert.strictEqual(pkg.scripts["generate:build-info"], "node scripts/generate-build-info.js");
   });
 
@@ -261,6 +265,7 @@ async function run() {
       "node netlify/functions/__tests__/weather.test.js",
       "node netlify/functions/__tests__/anilist.test.js",
       "node netlify/functions/__tests__/discover-ai.test.js",
+      "node netlify/functions/__tests__/anime-airing-check.test.js",
     ];
     let functionsCursor = 0;
     priorFunctionsCmds.forEach((cmd) => {
@@ -268,11 +273,19 @@ async function run() {
       assert.ok(idx !== -1 && idx >= functionsCursor, `test:functions dropped or reordered pre-existing command: ${cmd}`);
       functionsCursor = idx + 1;
     });
-    // The Development -> Staging -> Production + airing-reminders pass's own new suite is the
-    // newest addition on top.
+    // The Staging/Production Firebase Admin isolation follow-up (Gap 3: extracting the airing-
+    // check core into its own testable module) inserted a new suite BEFORE anime-airing-check.test.js
+    // (which now tests only the thin wrapper) and appended a new structural suite (Gap 1's
+    // buildContext wiring proof) after it — an insertion in the middle, not just an append, so
+    // this is checked by exact array equality rather than the ordered-subsequence check above.
     assert.deepStrictEqual(functionsCmds, [
-      ...priorFunctionsCmds,
+      "node netlify/functions/__tests__/assistant.test.js",
+      "node netlify/functions/__tests__/weather.test.js",
+      "node netlify/functions/__tests__/anilist.test.js",
+      "node netlify/functions/__tests__/discover-ai.test.js",
+      "node netlify/functions/__tests__/airing-check-core.test.js",
       "node netlify/functions/__tests__/anime-airing-check.test.js",
+      "node netlify/functions/__tests__/staging-isolation-wiring.test.js",
     ]);
 
     const frontendCmds = splitCmds(pkg.scripts["test:frontend"]);
@@ -303,7 +316,9 @@ async function run() {
     });
     // The Development -> Staging -> Production + airing-reminders pass's own two new suites
     // (js/environment.js's detection logic, js/push-notifications.js's lifecycle/guard-ordering
-    // proof) are the newest addition on top — never a silent removal disguised as a reorder.
+    // proof) are the newest addition on top — never a silent removal disguised as a reorder. The
+    // Staging/Production isolation follow-up pass added no NEW test:frontend entries (its new
+    // suites live under netlify/functions/__tests__/ and scripts/__tests__/ instead).
     assert.deepStrictEqual(frontendCmds, [
       ...priorFrontendCmds,
       "node js/__tests__/environment.test.js",
@@ -311,6 +326,11 @@ async function run() {
     ]);
 
     assert.strictEqual(pkg.scripts.test, "npm run test:functions && npm run test:frontend");
+    assert.strictEqual(pkg.scripts["test:generate-build-info"], "node scripts/__tests__/generate-build-info.test.js");
+    assert.strictEqual(
+      pkg.scripts["test:all"],
+      "npm run test && npm run test:firestore-rules && npm run test:tailwind-migration && npm run test:generate-build-info"
+    );
   });
 
   await test(".gitignore ignores tailwind.generated.css without disturbing existing entries", () => {
