@@ -1,13 +1,16 @@
-// Deterministic tests for the scheduled airing-reminder Function — fully mocked Firestore/
-// AniList/FCM deps, no network access, no real Firebase project. Run with:
-// node netlify/functions/__tests__/anime-airing-check.test.js (or `npm run test:functions`).
-// Mirrors weather.test.js/anilist.test.js's own createHandler(deps) testing style.
+// Deterministic tests for the anime-airing-check WRAPPER — env checks, Admin init, invocation-
+// source gating (Netlify's scheduler vs. a manual Owner-authenticated call), and dryRun-flag
+// parsing/passthrough. The actual scheduling/delivery LOGIC is tested independently in
+// netlify/functions/__tests__/airing-check-core.test.js against runAiringCheck() directly — see
+// this file's own header comment for why the two were split (Gap 3, Staging/Production isolation
+// follow-up). Run with: node netlify/functions/__tests__/anime-airing-check.test.js (or
+// `npm run test:functions`). Mirrors weather.test.js/anilist.test.js's own createHandler(deps)
+// testing style.
 
 const assert = require("node:assert");
 
 const { createHandler } = require("../anime-airing-check.js");
 const { FirebaseConfigError } = require("../lib/firebase-admin.js");
-const { AniListUpstreamError } = require("../lib/anilist-transport.js");
 
 let pass = 0;
 let fail = 0;
@@ -26,6 +29,11 @@ async function test(name, fn) {
   }
 }
 
+const OWNER_UID = "owner-uid-1";
+const OWNER_EMAIL = "jjun8647@gmail.com";
+const FRIEND_UID = "friend-uid-1";
+const FRIEND_EMAIL = "friend@example.com";
+
 function baseEnv(overrides = {}) {
   return {
     FIREBASE_PROJECT_ID: "lfj-profolio",
@@ -34,270 +42,154 @@ function baseEnv(overrides = {}) {
   };
 }
 
-// A minimal, fully in-memory fake of the three Firestore-shaped collections this Function
-// touches, driven purely by JS Maps — never a real Firestore/emulator connection.
-function makeFakeStore({ follows = [], subscriptions = [], notificationLog = [] } = {}) {
-  const followMap = new Map(follows.map((f) => [f.id, { ...f }]));
-  const subMap = new Map(subscriptions.map((s) => [s.id, { ...s }]));
-  const logSet = new Set(notificationLog);
-  const calls = { refreshSnapshot: [], deleteSubscription: [], sendPush: [], recordNotified: [] };
+const SCHEDULED_EVENT = { body: JSON.stringify({ next_run: "2026-08-01T13:00:00.000Z" }) };
 
+function ownerEvent({ body, query } = {}) {
+  return {
+    headers: { authorization: "Bearer valid-owner-token" },
+    body: body !== undefined ? body : null,
+    queryStringParameters: query || null,
+  };
+}
+
+// A recording stub for runAiringCheck-shaped calls — this file never exercises the real
+// scheduling logic, only what the wrapper passes to it.
+function makeDeps({ env, verifyIdToken, getUserDoc, runAiringCheckResult } = {}) {
+  const calls = { getDueFollows: 0, sendPush: 0 };
   return {
     calls,
-    followMap,
-    subMap,
-    logSet,
-    deps: {
-      getDueFollows: async () => [...followMap.values()].filter((f) => f.notifyOnAiring === true),
-      refreshSnapshot: async (id, fields) => {
-        calls.refreshSnapshot.push({ id, fields });
-        const doc = followMap.get(id);
-        if (doc) Object.assign(doc, fields);
-      },
-      wasAlreadyNotified: async (key) => logSet.has(key),
-      recordNotified: async (key, fields) => {
-        calls.recordNotified.push({ key, fields });
-        logSet.add(key);
-      },
-      getSubscriptionsForUid: async (uid) => [...subMap.values()].filter((s) => s.uid === uid),
-      deleteSubscription: async (id) => {
-        calls.deleteSubscription.push(id);
-        subMap.delete(id);
-      },
-      sendPush: async (token, data) => {
-        calls.sendPush.push({ token, data });
-        const sub = [...subMap.values()].find((s) => s.token === token);
-        if (sub && sub._failWith) {
-          const err = new Error(sub._failWith);
-          err.code = sub._failWith;
-          throw err;
-        }
-      },
-    },
-  };
-}
-
-function makeDeps({ env, store, fetchImpl, ensureFirebaseAdmin, now } = {}) {
-  const s = store || makeFakeStore();
-  return {
     env: env || baseEnv(),
-    now: now || (() => new Date("2026-08-01T12:00:00.000Z")),
-    ensureFirebaseAdmin: ensureFirebaseAdmin || (async () => {}),
-    fetchImpl,
-    ...s.deps,
-    __store: s,
+    now: () => new Date("2026-08-01T12:00:00.000Z"),
+    ensureFirebaseAdmin: async () => {},
+    verifyIdToken: verifyIdToken || (async () => ({ uid: OWNER_UID, email: OWNER_EMAIL })),
+    getUserDoc: getUserDoc || (async (uid) => (uid === OWNER_UID ? { role: "owner", email: OWNER_EMAIL } : { role: "friend", email: FRIEND_EMAIL })),
+    // Minimal core-shaped deps — sufficient for runAiringCheck() to complete with zero due
+    // follows (checked=0), so these tests stay focused on the WRAPPER's own gating, not the core
+    // logic (already covered by airing-check-core.test.js).
+    getDueFollows: async () => { calls.getDueFollows++; return []; },
+    refreshSnapshot: async () => {},
+    wasAlreadyNotified: async () => false,
+    recordNotified: async () => {},
+    getSubscriptionsForUid: async () => [],
+    deleteSubscription: async () => {},
+    sendPush: async () => { calls.sendPush++; },
+    fetchImpl: undefined,
   };
-}
-
-function makeAniListFetch(mediaById) {
-  return async () => ({
-    ok: true,
-    status: 200,
-    json: async () => ({
-      data: {
-        Page: {
-          media: Object.values(mediaById),
-        },
-      },
-    }),
-  });
 }
 
 (async () => {
   await test("missing required env fails closed with 500, never touches Firestore", async () => {
     const deps = makeDeps({ env: {} });
-    const res = await createHandler(deps)();
+    const res = await createHandler(deps)(SCHEDULED_EVENT);
     assert.strictEqual(res.statusCode, 500);
     assert.strictEqual(JSON.parse(res.body).error, "not_configured");
+    assert.strictEqual(deps.calls.getDueFollows, 0);
   });
 
   await test("Firebase Admin init failure (FirebaseConfigError) maps to 500 not_configured, never crashes", async () => {
-    const deps = makeDeps({
-      ensureFirebaseAdmin: async () => { throw new FirebaseConfigError("bad key", "admin_initialization", "config/invalid-private-key"); },
-    });
-    const res = await createHandler(deps)();
+    const deps = makeDeps();
+    deps.ensureFirebaseAdmin = async () => { throw new FirebaseConfigError("bad key", "admin_initialization", "config/invalid-private-key"); };
+    const res = await createHandler(deps)(SCHEDULED_EVENT);
     assert.strictEqual(res.statusCode, 500);
     assert.strictEqual(JSON.parse(res.body).error, "not_configured");
   });
 
-  await test("no notifyOnAiring follows: zero AniList calls, zero writes, ok:true", async () => {
-    let fetchCalled = false;
+  // ---- Invocation-source gating ----
+
+  await test("a request shaped like Netlify's scheduled invocation ({next_run}) runs without any Authorization header", async () => {
+    const deps = makeDeps();
+    const res = await createHandler(deps)(SCHEDULED_EVENT);
+    assert.strictEqual(res.statusCode, 200);
+    assert.strictEqual(deps.calls.getDueFollows, 1);
+  });
+
+  await test("a request with no recognizable scheduled shape AND no Authorization header is rejected 401, never runs the core logic", async () => {
+    const deps = makeDeps();
+    const res = await createHandler(deps)({ body: null, headers: {} });
+    assert.strictEqual(res.statusCode, 401);
+    assert.strictEqual(JSON.parse(res.body).error, "missing_bearer_token");
+    assert.strictEqual(deps.calls.getDueFollows, 0);
+  });
+
+  await test("a plain empty/malformed body with no Authorization header is also rejected — never treated as 'probably the scheduler'", async () => {
+    const deps = makeDeps();
+    const res1 = await createHandler(deps)({ body: "", headers: {} });
+    assert.strictEqual(res1.statusCode, 401);
+    const res2 = await createHandler(deps)({ body: "not json", headers: {} });
+    assert.strictEqual(res2.statusCode, 401);
+    const res3 = await createHandler(deps)({ body: JSON.stringify({ some: "other shape" }), headers: {} });
+    assert.strictEqual(res3.statusCode, 401);
+  });
+
+  await test("an authenticated Owner manual call runs the core logic", async () => {
+    const deps = makeDeps();
+    const res = await createHandler(deps)(ownerEvent());
+    assert.strictEqual(res.statusCode, 200);
+    assert.strictEqual(deps.calls.getDueFollows, 1);
+  });
+
+  await test("a Friend (or any non-Owner) authenticated call is rejected 403 owner_only, never runs the core logic", async () => {
     const deps = makeDeps({
-      store: makeFakeStore({ follows: [] }),
-      fetchImpl: async () => { fetchCalled = true; },
+      verifyIdToken: async () => ({ uid: FRIEND_UID, email: FRIEND_EMAIL }),
     });
-    const res = await createHandler(deps)();
+    const res = await createHandler(deps)(ownerEvent());
+    assert.strictEqual(res.statusCode, 403);
+    assert.strictEqual(JSON.parse(res.body).error, "owner_only");
+    assert.strictEqual(deps.calls.getDueFollows, 0);
+  });
+
+  await test("an invalid/expired token on the manual path is rejected 401, never runs the core logic", async () => {
+    const deps = makeDeps({ verifyIdToken: async () => { throw new Error("invalid token"); } });
+    const res = await createHandler(deps)(ownerEvent());
+    assert.strictEqual(res.statusCode, 401);
+    assert.strictEqual(deps.calls.getDueFollows, 0);
+  });
+
+  await test("a FirebaseConfigError thrown from verifyIdToken on the manual path is 500, never misreported as 401", async () => {
+    const deps = makeDeps({
+      verifyIdToken: async () => { throw new FirebaseConfigError("bad key", "admin_initialization", "config/invalid-private-key"); },
+    });
+    const res = await createHandler(deps)(ownerEvent());
+    assert.strictEqual(res.statusCode, 500);
+  });
+
+  await test("Owner email must match on BOTH the verified token AND the stored users/{uid} doc (AND, not OR) — same convention as every other Discover Function", async () => {
+    // Token claims Owner's uid+email, but the stored doc's role/email don't confirm it.
+    const deps1 = makeDeps({ getUserDoc: async () => ({ role: "friend", email: OWNER_EMAIL }) });
+    assert.strictEqual((await createHandler(deps1)(ownerEvent())).statusCode, 403);
+    const deps2 = makeDeps({ getUserDoc: async () => ({ role: "owner", email: "someone-else@example.com" }) });
+    assert.strictEqual((await createHandler(deps2)(ownerEvent())).statusCode, 403);
+  });
+
+  // ---- dryRun parsing (Gap 3) — only meaningful/honored on the authenticated manual path ----
+
+  await test("dryRun:true in a JSON body on the authenticated manual path is passed through to the core logic", async () => {
+    const deps = makeDeps();
+    const res = await createHandler(deps)(ownerEvent({ body: JSON.stringify({ dryRun: true }) }));
     const body = JSON.parse(res.body);
     assert.strictEqual(res.statusCode, 200);
-    assert.strictEqual(body.ok, true);
-    assert.strictEqual(body.checked, 0);
-    assert.strictEqual(fetchCalled, false);
+    assert.strictEqual(body.dryRun, true);
   });
 
-  await test("an episode that already aired, never notified before, sends push and records dedup log", async () => {
-    const store = makeFakeStore({
-      follows: [{ id: "u1_100", uid: "u1", anilistId: 100, title: "Test Anime", notifyOnAiring: true }],
-      subscriptions: [{ id: "u1_hashA", uid: "u1", token: "tokenA", platform: "web" }],
-    });
-    const media = { 100: { id: 100, title: { romaji: "Test Anime", english: null, native: null }, isAdult: false, genres: [], nextAiringEpisode: { airingAt: 1754000000, timeUntilAiring: -100, episode: 5 } } };
-    const deps = makeDeps({ store, fetchImpl: makeAniListFetch(media) });
-    const res = await createHandler(deps)();
-    const body = JSON.parse(res.body);
-    assert.strictEqual(res.statusCode, 200);
-    assert.strictEqual(body.notified, 1);
-    assert.strictEqual(store.calls.sendPush.length, 1);
-    assert.strictEqual(store.calls.sendPush[0].token, "tokenA");
-    assert.strictEqual(store.calls.sendPush[0].data.dedupeKey, "u1_100_5");
-    // Data-only payload, matching service-worker.js's own onBackgroundMessage contract.
-    assert.ok(!("notification" in store.calls.sendPush[0]));
-    assert.strictEqual(store.calls.recordNotified.length, 1);
-    assert.strictEqual(store.calls.recordNotified[0].key, "u1_100_5");
-    assert.strictEqual(store.calls.recordNotified[0].fields.subscriberCount, 1);
-    // Requirement 9: schedule refreshed every run, whether or not anything was due.
-    assert.strictEqual(store.calls.refreshSnapshot.length, 1);
-    assert.deepStrictEqual(store.calls.refreshSnapshot[0].fields.nextEpisodeSnapshot, { episode: 5, airingAt: 1754000000 });
+  await test("?dryRun=1 query string on the authenticated manual path is also honored", async () => {
+    const deps = makeDeps();
+    const res = await createHandler(deps)(ownerEvent({ query: { dryRun: "1" } }));
+    assert.strictEqual(JSON.parse(res.body).dryRun, true);
   });
 
-  await test("Requirement 10: the same episode is never notified twice — already-logged dedup key is skipped", async () => {
-    const store = makeFakeStore({
-      follows: [{ id: "u1_100", uid: "u1", anilistId: 100, title: "Test Anime", notifyOnAiring: true }],
-      subscriptions: [{ id: "u1_hashA", uid: "u1", token: "tokenA", platform: "web" }],
-      notificationLog: ["u1_100_5"],
-    });
-    const media = { 100: { id: 100, title: { romaji: "Test Anime" }, isAdult: false, genres: [], nextAiringEpisode: { airingAt: 1754000000, timeUntilAiring: -100, episode: 5 } } };
-    const deps = makeDeps({ store, fetchImpl: makeAniListFetch(media) });
-    const res = await createHandler(deps)();
-    const body = JSON.parse(res.body);
-    assert.strictEqual(body.skippedAlreadyNotified, 1);
-    assert.strictEqual(store.calls.sendPush.length, 0);
-    assert.strictEqual(store.calls.recordNotified.length, 0);
+  await test("no dryRun flag on the authenticated manual path defaults to a real (non-dry) run", async () => {
+    const deps = makeDeps();
+    const res = await createHandler(deps)(ownerEvent());
+    assert.strictEqual(JSON.parse(res.body).dryRun, false);
   });
 
-  await test("a future episode (airingAt in the future) is not due — no push, no dedup log, snapshot still refreshed", async () => {
-    const store = makeFakeStore({
-      follows: [{ id: "u1_100", uid: "u1", anilistId: 100, title: "Test Anime", notifyOnAiring: true }],
-    });
-    const media = { 100: { id: 100, title: { romaji: "Test Anime" }, isAdult: false, genres: [], nextAiringEpisode: { airingAt: 9999999999, timeUntilAiring: 999999, episode: 6 } } };
-    const deps = makeDeps({ store, fetchImpl: makeAniListFetch(media), now: () => new Date("2026-08-01T12:00:00.000Z") });
-    const res = await createHandler(deps)();
-    const body = JSON.parse(res.body);
-    assert.strictEqual(body.notified, 0);
-    assert.strictEqual(store.calls.sendPush.length, 0);
-    assert.strictEqual(store.calls.refreshSnapshot.length, 1);
-  });
-
-  await test("Requirement 13: missing/absent nextAiringEpisode is stored as null (unknown), never treated as due", async () => {
-    const store = makeFakeStore({
-      follows: [{ id: "u1_100", uid: "u1", anilistId: 100, title: "Finished Show", notifyOnAiring: true }],
-    });
-    const media = { 100: { id: 100, title: { romaji: "Finished Show" }, isAdult: false, genres: [], nextAiringEpisode: null } };
-    const deps = makeDeps({ store, fetchImpl: makeAniListFetch(media) });
-    const res = await createHandler(deps)();
-    const body = JSON.parse(res.body);
-    assert.strictEqual(body.notified, 0);
-    assert.strictEqual(store.calls.refreshSnapshot.length, 1);
-    assert.strictEqual(store.calls.refreshSnapshot[0].fields.nextEpisodeSnapshot, null);
-  });
-
-  await test("Requirement 11: a dead-token send() failure deletes that subscription, still records the episode as notified", async () => {
-    const store = makeFakeStore({
-      follows: [{ id: "u1_100", uid: "u1", anilistId: 100, title: "Test Anime", notifyOnAiring: true }],
-      subscriptions: [{ id: "u1_hashDead", uid: "u1", token: "deadToken", platform: "web", _failWith: "messaging/registration-token-not-registered" }],
-    });
-    const media = { 100: { id: 100, title: { romaji: "Test Anime" }, isAdult: false, genres: [], nextAiringEpisode: { airingAt: 1754000000, timeUntilAiring: -1, episode: 5 } } };
-    const deps = makeDeps({ store, fetchImpl: makeAniListFetch(media) });
-    const res = await createHandler(deps)();
-    const body = JSON.parse(res.body);
-    assert.strictEqual(body.tokensCleaned, 1);
-    assert.strictEqual(store.calls.deleteSubscription.length, 1);
-    assert.strictEqual(store.calls.deleteSubscription[0], "u1_hashDead");
-    assert.strictEqual(store.subMap.has("u1_hashDead"), false);
-    // The episode itself is still recorded as handled, with subscriberCount reflecting the
-    // failed send (0 successful deliveries) — a later-subscribing device won't get a backlog ping.
-    assert.strictEqual(store.calls.recordNotified.length, 1);
-    assert.strictEqual(store.calls.recordNotified[0].fields.subscriberCount, 0);
-  });
-
-  await test("a non-dead-token send() failure (transient) is logged, subscription NOT deleted, episode still recorded", async () => {
-    const store = makeFakeStore({
-      follows: [{ id: "u1_100", uid: "u1", anilistId: 100, title: "Test Anime", notifyOnAiring: true }],
-      subscriptions: [{ id: "u1_hashFlaky", uid: "u1", token: "flakyToken", platform: "web", _failWith: "messaging/internal-error" }],
-    });
-    const media = { 100: { id: 100, title: { romaji: "Test Anime" }, isAdult: false, genres: [], nextAiringEpisode: { airingAt: 1754000000, timeUntilAiring: -1, episode: 5 } } };
-    const deps = makeDeps({ store, fetchImpl: makeAniListFetch(media) });
-    const res = await createHandler(deps)();
-    const body = JSON.parse(res.body);
-    assert.strictEqual(body.tokensCleaned, 0);
-    assert.ok(body.errors >= 1);
-    assert.strictEqual(store.subMap.has("u1_hashFlaky"), true);
-  });
-
-  await test("zero subscribed devices: the episode is still recorded as handled (subscriberCount 0), no crash", async () => {
-    const store = makeFakeStore({
-      follows: [{ id: "u1_100", uid: "u1", anilistId: 100, title: "Test Anime", notifyOnAiring: true }],
-      subscriptions: [],
-    });
-    const media = { 100: { id: 100, title: { romaji: "Test Anime" }, isAdult: false, genres: [], nextAiringEpisode: { airingAt: 1754000000, timeUntilAiring: -1, episode: 5 } } };
-    const deps = makeDeps({ store, fetchImpl: makeAniListFetch(media) });
-    const res = await createHandler(deps)();
-    const body = JSON.parse(res.body);
-    assert.strictEqual(body.notified, 1);
-    assert.strictEqual(store.calls.sendPush.length, 0);
-    assert.strictEqual(store.calls.recordNotified[0].fields.subscriberCount, 0);
-  });
-
-  await test("multiple due follows are batched into a single AniList call (never one call per title) when <= 25", async () => {
-    let fetchCallCount = 0;
-    const store = makeFakeStore({
-      follows: [
-        { id: "u1_100", uid: "u1", anilistId: 100, title: "A", notifyOnAiring: true },
-        { id: "u1_101", uid: "u1", anilistId: 101, title: "B", notifyOnAiring: true },
-        { id: "u1_102", uid: "u1", anilistId: 102, title: "C", notifyOnAiring: false }, // toggle off — never fetched
-      ],
-    });
-    const media = {
-      100: { id: 100, title: { romaji: "A" }, isAdult: false, genres: [], nextAiringEpisode: null },
-      101: { id: 101, title: { romaji: "B" }, isAdult: false, genres: [], nextAiringEpisode: null },
-    };
-    const deps = makeDeps({
-      store,
-      fetchImpl: async (...args) => { fetchCallCount++; return makeAniListFetch(media)(...args); },
-    });
-    const res = await createHandler(deps)();
-    const body = JSON.parse(res.body);
-    assert.strictEqual(body.checked, 2); // the notifyOnAiring:false one is never included
-    assert.strictEqual(fetchCallCount, 1);
-    assert.strictEqual(store.calls.refreshSnapshot.length, 2);
-  });
-
-  await test("AniList upstream failure for a chunk: no crash, that run's titles simply aren't refreshed, errors counted", async () => {
-    const store = makeFakeStore({
-      follows: [{ id: "u1_100", uid: "u1", anilistId: 100, title: "A", notifyOnAiring: true }],
-    });
-    const deps = makeDeps({
-      store,
-      fetchImpl: async () => { throw new AniListUpstreamError("timeout"); },
-    });
-    const res = await createHandler(deps)();
-    const body = JSON.parse(res.body);
-    assert.strictEqual(res.statusCode, 200); // the whole run doesn't fail, it degrades per-chunk
-    assert.ok(body.errors >= 1);
-    assert.strictEqual(store.calls.refreshSnapshot.length, 0); // no data for this id, nothing to refresh
-    assert.strictEqual(store.calls.sendPush.length, 0);
-  });
-
-  await test("a dedup-check (wasAlreadyNotified) failure fails closed on that title THIS run — no send, no double-notify risk", async () => {
-    const store = makeFakeStore({
-      follows: [{ id: "u1_100", uid: "u1", anilistId: 100, title: "A", notifyOnAiring: true }],
-      subscriptions: [{ id: "u1_hashA", uid: "u1", token: "tokenA", platform: "web" }],
-    });
-    const media = { 100: { id: 100, title: { romaji: "A" }, isAdult: false, genres: [], nextAiringEpisode: { airingAt: 1754000000, timeUntilAiring: -1, episode: 5 } } };
-    const deps = makeDeps({ store, fetchImpl: makeAniListFetch(media) });
-    deps.wasAlreadyNotified = async () => { throw new Error("firestore unavailable"); };
-    const res = await createHandler(deps)();
-    const body = JSON.parse(res.body);
-    assert.ok(body.errors >= 1);
-    assert.strictEqual(store.calls.sendPush.length, 0);
+  await test("the scheduled-invocation path can never be dry-run, even if its body somehow also contained a dryRun-shaped field", async () => {
+    // Netlify's own scheduler controls this request's body entirely — even in a hypothetical
+    // future where its shape grew a same-named field, the scheduled path must never honor it,
+    // since dryRun is scoped to the authenticated manual path's parsing logic only.
+    const deps = makeDeps();
+    const res = await createHandler(deps)({ body: JSON.stringify({ next_run: "2026-08-01T13:00:00.000Z", dryRun: true }) });
+    assert.strictEqual(JSON.parse(res.body).dryRun, false);
   });
 
   console.log(`\n${pass} passed, ${fail} failed`);

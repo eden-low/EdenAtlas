@@ -1,65 +1,103 @@
 // EdenAtlas Discover — scheduled airing-reminder delivery (Phase 4, Owner-only).
 //
-// Triggered by Netlify Scheduled Functions (see netlify.toml's `[functions."anime-airing-check"]
-// schedule = "..."` block) — NOT by any browser request, so this file has no CORS/Origin check
-// and no bearer-token verification the way anilist.js/discover-ai.js/assistant.js do: Netlify's
-// scheduler invokes it directly, server-side, on its own cron. Authorization here means something
-// different — this Function only ever reads/writes Firestore via the Admin SDK for docs whose
-// `uid` already belongs to the app Owner (Discover's `followed_anime` has never had a non-Owner
-// writer — see CLAUDE.md's "Discover is now strictly Owner-only" note), so there is no cross-user
-// data risk to guard against at this layer.
+// This file is now a deliberately THIN wrapper (Gap 3 fix) — the actual scheduling/delivery
+// logic lives in netlify/functions/lib/airing-check-core.js's runAiringCheck(deps, options),
+// which is independently unit/integration-testable with an injected clock and fully mocked
+// Firestore/AniList/FCM deps (see netlify/functions/__tests__/airing-check-core.test.js). This
+// split exists specifically because Netlify Scheduled Functions only run automatically on a
+// PUBLISHED/production-context deploy — a Deploy Preview or the `staging` branch deploy
+// structurally cannot prove "the cron fires" the way this repo's other automated tests prove
+// everything else. What CAN be proven on Staging (and in this environment, with zero network
+// access) is that the underlying logic — schedule calculation, dedup, subscription cleanup,
+// project isolation — is correct; the cron wiring itself can only be confirmed after the
+// eventual real Production deploy (see the completion report).
 //
-// Responsibilities (Requirement list, Phase 4):
-//   7. Obtain future airing time from AniList — never invented, never guessed, never from Qwen.
-//   8. Store only the minimum schedule snapshot needed (nextEpisodeSnapshot: {episode, airingAt}).
-//   9. This IS the "server-side scheduled process [that] refreshes due schedules and sends
-//      reminders."
-//  10. Store a deterministic delivery key (anime_notification_log/{uid}_{anilistId}_{episode}) so
-//      the same episode is never notified twice, even across overlapping/retried runs.
-//  11. Handle expired/invalid subscriptions safely — a token rejected by FCM as
-//      not-registered/invalid is deleted from push_subscriptions, never retried forever.
-//
-// Missing schedule fields (nextAiringEpisode null/absent — a FINISHED, CANCELLED, or not-yet-
-// scheduled series) are treated as UNKNOWN, never as "not airing" or an implicit zero: no
-// notification fires, and nextEpisodeSnapshot is stored as null (explicitly "nothing scheduled
-// right now"), distinct from never having been checked at all (scheduleRefreshedAt is the
-// freshness signal for that).
+// Two ways this Function is invoked:
+//   1. Netlify's own scheduler (netlify.toml's `[functions."anime-airing-check"] schedule`) —
+//      recognized via looksLikeScheduledInvocation() below (Netlify's documented scheduled-
+//      invocation body shape, `{"next_run": "<ISO8601>"}`). Always runs the real logic, never
+//      dry-run. NOTE: this repo's own understanding is that Netlify does not expose a scheduled
+//      Function's ordinary endpoint to arbitrary public HTTP callers once `schedule` is
+//      configured — this check is a defense-in-depth SECOND layer, not assumed to be the only
+//      thing standing between this Function and the public internet, and its exact request shape
+//      has not been independently verified against a live Netlify deployment in this environment
+//      (called out explicitly, not silently assumed correct).
+//   2. A manual invocation (staging verification, local `netlify functions:invoke`, or Netlify's
+//      dashboard "Trigger function" button if it doesn't match #1's shape) — requires the EXACT
+//      same Owner-only Firebase ID-token authorization every other Discover Function already uses
+//      (see anilist.js's identical comment). Only this authenticated path may set `dryRun: true`
+//      (JSON body `{"dryRun":true}` or `?dryRun=1`) — see lib/airing-check-core.js for what
+//      dry-run actually skips. No unauthenticated public HTTP path exists for this Function at
+//      all; a request matching neither #1 nor #2 is rejected.
 
-const { OPERATIONS } = require("./lib/anilist-operations");
-const { callAniList, AniListUpstreamError, safeAniListFailureMetadata } = require("./lib/anilist-transport");
+const { runAiringCheck } = require("./lib/airing-check-core");
 const { FirebaseConfigError } = require("./lib/firebase-admin");
 
+const OWNER_EMAIL = "jjun8647@gmail.com"; // duplicated per this repo's established convention — see anilist.js's identical comment
+
 const REQUIRED_ENV = ["FIREBASE_PROJECT_ID", "FIREBASE_SERVICE_ACCOUNT"];
-const BATCH_CHUNK_SIZE = 25; // matches lib/anilist-operations.js's own MAX_BATCH_IDS
 
-// Tokens FCM will never accept again — safe to delete the subscription outright. Any other
-// send() failure (a transient network blip, a rate limit) is logged and skipped THIS run; the
-// subscription stays and is retried on the next scheduled invocation.
-const DEAD_TOKEN_CODES = new Set([
-  "messaging/registration-token-not-registered",
-  "messaging/invalid-registration-token",
-  "messaging/invalid-argument",
-]);
-
-function chunk(arr, size) {
-  const out = [];
-  for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size));
-  return out;
+function jsonResponse(statusCode, body) {
+  return {
+    statusCode,
+    headers: { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" },
+    body: JSON.stringify(body),
+  };
 }
 
-function nowEpochSeconds(now) {
-  return Math.floor(now.getTime() / 1000);
+function getHeader(event, name) {
+  const headers = (event && event.headers) || {};
+  const lower = name.toLowerCase();
+  for (const key of Object.keys(headers)) {
+    if (key.toLowerCase() === lower) return headers[key];
+  }
+  return undefined;
 }
 
-// `deps` is fully injectable — see netlify/functions/__tests__/anime-airing-check.test.js.
-// Production wiring is at the bottom of this file.
+// See this file's header comment — best-effort, documented as unverified against a live
+// deployment. `next_run` is the one field Netlify's own docs describe the scheduled invocation
+// body as carrying; any other shape (including no body at all) falls through to requiring Owner
+// authentication instead.
+function looksLikeScheduledInvocation(event) {
+  if (!event || typeof event.body !== "string" || !event.body) return false;
+  try {
+    const parsed = JSON.parse(event.body);
+    return !!parsed && typeof parsed === "object" && !Array.isArray(parsed) && typeof parsed.next_run === "string";
+  } catch {
+    return false;
+  }
+}
+
+function parseDryRunFlag(event) {
+  const qp = event && event.queryStringParameters;
+  if (qp && (qp.dryRun === "1" || qp.dryRun === "true")) return true;
+  if (event && typeof event.body === "string" && event.body) {
+    try {
+      const parsed = JSON.parse(event.body);
+      if (parsed && parsed.dryRun === true) return true;
+    } catch {
+      // Malformed body on the manual path just means dryRun stays false — never a hard error,
+      // since the body might legitimately be empty for a plain manual trigger.
+    }
+  }
+  return false;
+}
+
+function logAuthStageFailure(stage, err) {
+  console.error(`[anime-airing-check] auth stage failed: stage=${stage} code=${(err && err.code) || "no_code"}`);
+}
+
+// `deps` is fully injectable — see netlify/functions/__tests__/anime-airing-check.test.js (this
+// wrapper's own concerns: env, invocation-source gating, dryRun parsing) and
+// netlify/functions/__tests__/airing-check-core.test.js (the actual scheduling logic, tested
+// directly against runAiringCheck(), independent of this file entirely).
 function createHandler(deps) {
-  return async function handler() {
+  return async function handler(event) {
     const env = deps.env || process.env;
     const missing = REQUIRED_ENV.filter((k) => !env[k]);
     if (missing.length) {
       console.error("[anime-airing-check] missing required environment variables:", missing.join(","));
-      return { statusCode: 500, body: JSON.stringify({ ok: false, error: "not_configured" }) };
+      return jsonResponse(500, { ok: false, error: "not_configured" });
     }
 
     try {
@@ -67,143 +105,53 @@ function createHandler(deps) {
     } catch (err) {
       const stage = err instanceof FirebaseConfigError ? err.stage : "admin_initialization";
       console.error(`[anime-airing-check] Firebase Admin init failed: stage=${stage} code=${(err && err.code) || "no_code"}`);
-      return { statusCode: 500, body: JSON.stringify({ ok: false, error: "not_configured" }) };
+      return jsonResponse(500, { ok: false, error: "not_configured" });
     }
 
-    const now = deps.now ? deps.now() : new Date();
-    const summary = { checked: 0, refreshed: 0, notified: 0, skippedAlreadyNotified: 0, tokensCleaned: 0, errors: 0 };
+    let dryRun = false;
 
-    let due;
-    try {
-      due = await deps.getDueFollows(); // [{id, uid, anilistId, title, notifyOnAiring: true, ...}]
-    } catch (err) {
-      console.error("[anime-airing-check] failed to read followed_anime:", err && err.message);
-      return { statusCode: 500, body: JSON.stringify({ ok: false, error: "firestore_read_failed" }) };
-    }
-    summary.checked = due.length;
-    if (due.length === 0) {
-      return { statusCode: 200, body: JSON.stringify({ ok: true, ...summary }) };
-    }
-
-    // ---- Fetch fresh AniList schedule data for every due title, batched (never one call per
-    // title — see the product direction against N+1 AniList calls, same as discover-ai.js). ----
-    const ids = [...new Set(due.map((f) => f.anilistId))];
-    const mediaById = new Map();
-    const fetchedIds = new Set(); // ids from a chunk that actually completed this run — see below
-    for (const idsChunk of chunk(ids, BATCH_CHUNK_SIZE)) {
+    if (!looksLikeScheduledInvocation(event)) {
+      // Manual path — require the exact same Owner-only authorization every other Discover
+      // Function uses (two independent signals, AND not OR — see anilist.js's identical comment).
+      const authHeader = getHeader(event, "authorization") || "";
+      const match = /^Bearer\s+(.+)$/i.exec(authHeader.trim());
+      if (!match) {
+        return jsonResponse(401, { ok: false, error: "missing_bearer_token" });
+      }
+      let decoded;
       try {
-        const variables = OPERATIONS.batch.validate({ ids: idsChunk });
-        const { query, variables: gqlVars } = OPERATIONS.batch.buildRequest(variables);
-        const raw = await callAniList({ fetchImpl: deps.fetchImpl, query, variables: gqlVars });
-        const { results } = OPERATIONS.batch.sanitize(raw);
-        results.forEach((m) => mediaById.set(m.id, m));
-        idsChunk.forEach((id) => fetchedIds.add(id));
+        decoded = await deps.verifyIdToken(match[1]);
       } catch (err) {
-        summary.errors++;
-        if (err instanceof AniListUpstreamError) {
-          const meta = safeAniListFailureMetadata(err);
-          console.error(`[anime-airing-check] AniList batch failed: stage=${meta.stage} code=${meta.code}`);
-        } else {
-          console.error("[anime-airing-check] AniList batch failed (unexpected):", err && err.message);
+        if (err instanceof FirebaseConfigError) {
+          logAuthStageFailure(err.stage, err);
+          return jsonResponse(500, { ok: false, error: "not_configured" });
         }
-        // This chunk's titles simply don't get a schedule refresh or a possible notification
-        // this run — the next scheduled invocation tries again. Never invent/guess a schedule.
+        logAuthStageFailure("token_verification", err);
+        return jsonResponse(401, { ok: false, error: "invalid_or_expired_token" });
       }
+      if (!decoded || !decoded.uid) {
+        logAuthStageFailure("token_verification", null);
+        return jsonResponse(401, { ok: false, error: "invalid_or_expired_token" });
+      }
+
+      let userDoc;
+      try {
+        userDoc = await deps.getUserDoc(decoded.uid);
+      } catch (err) {
+        console.error("[anime-airing-check] users/{uid} read failed:", err && err.code);
+        return jsonResponse(500, { ok: false, error: "profile_lookup_failed" });
+      }
+      const isOwnerCaller = !!userDoc && userDoc.role === "owner" && decoded.email === OWNER_EMAIL && userDoc.email === OWNER_EMAIL;
+      if (!isOwnerCaller) {
+        return jsonResponse(403, { ok: false, error: "owner_only" });
+      }
+
+      dryRun = parseDryRunFlag(event);
     }
+    // else: recognized as Netlify's own scheduled invocation — runs the real logic, dryRun stays false.
 
-    const nowSecs = nowEpochSeconds(now);
-
-    for (const follow of due) {
-      // The AniList chunk containing this title failed outright this run (network/timeout/
-      // upstream error) — skip BOTH the snapshot refresh and any notification check for it
-      // entirely, rather than writing a null snapshot over a possibly still-accurate previous
-      // one. The next scheduled invocation tries again; nothing here is ever invented or guessed.
-      if (!fetchedIds.has(follow.anilistId)) continue;
-
-      const media = mediaById.get(follow.anilistId) || null;
-      const nextEp = media && media.nextAiringEpisode && Number.isFinite(media.nextAiringEpisode.airingAt)
-        ? media.nextAiringEpisode
-        : null;
-
-      // Requirement 8/9: store the minimum snapshot, and refresh it every run regardless of
-      // whether anything is actually due to send — this IS the "refreshes due schedules" step.
-      try {
-        await deps.refreshSnapshot(follow.id, {
-          nextEpisodeSnapshot: nextEp ? { episode: nextEp.episode, airingAt: nextEp.airingAt } : null,
-        });
-        summary.refreshed++;
-      } catch (err) {
-        summary.errors++;
-        console.error(`[anime-airing-check] failed to refresh snapshot for ${follow.id}:`, err && err.message);
-      }
-
-      if (!nextEp || !Number.isFinite(nextEp.episode) || nextEp.airingAt > nowSecs) continue; // not due yet, or unknown
-
-      const dedupeKey = `${follow.uid}_${follow.anilistId}_${nextEp.episode}`;
-      let alreadyNotified;
-      try {
-        alreadyNotified = await deps.wasAlreadyNotified(dedupeKey);
-      } catch (err) {
-        summary.errors++;
-        console.error(`[anime-airing-check] dedup check failed for ${dedupeKey}:`, err && err.message);
-        continue; // fail closed on this title THIS run rather than risk a duplicate send
-      }
-      if (alreadyNotified) {
-        summary.skippedAlreadyNotified++;
-        continue;
-      }
-
-      let subscriptions;
-      try {
-        subscriptions = await deps.getSubscriptionsForUid(follow.uid);
-      } catch (err) {
-        summary.errors++;
-        console.error(`[anime-airing-check] failed to read subscriptions for ${follow.uid}:`, err && err.message);
-        continue;
-      }
-
-      const title = follow.title || (media && (media.title.english || media.title.romaji)) || "your anime";
-      const notificationData = {
-        title: "New episode available",
-        body: `Episode ${nextEp.episode} of ${title} just aired.`,
-        url: "discover.html",
-        dedupeKey,
-      };
-
-      let sentCount = 0;
-      for (const sub of subscriptions) {
-        try {
-          await deps.sendPush(sub.token, notificationData);
-          sentCount++;
-        } catch (err) {
-          const code = (err && err.code) || "unknown";
-          if (DEAD_TOKEN_CODES.has(code)) {
-            try {
-              await deps.deleteSubscription(sub.id);
-              summary.tokensCleaned++;
-            } catch (delErr) {
-              console.error(`[anime-airing-check] failed to delete dead subscription ${sub.id}:`, delErr && delErr.message);
-            }
-          } else {
-            summary.errors++;
-            console.error(`[anime-airing-check] push send failed for subscription ${sub.id}: code=${code}`);
-          }
-        }
-      }
-
-      // Recorded even when sentCount is 0 (no subscribed device right now) — the episode itself
-      // has been handled; a device subscribing LATER should not get a backlog of stale "just
-      // aired" pings for an episode that aired days ago.
-      try {
-        await deps.recordNotified(dedupeKey, { uid: follow.uid, anilistId: follow.anilistId, episode: nextEp.episode, subscriberCount: sentCount });
-        summary.notified++;
-      } catch (err) {
-        summary.errors++;
-        console.error(`[anime-airing-check] failed to record dedup log for ${dedupeKey}:`, err && err.message);
-      }
-    }
-
-    return { statusCode: 200, body: JSON.stringify({ ok: true, ...summary }) };
+    const result = await runAiringCheck(deps, { dryRun });
+    return jsonResponse(result.ok ? 200 : 500, result);
   };
 }
 
@@ -211,17 +159,24 @@ function createHandler(deps) {
 
 function buildProductionDeps() {
   const { initializeApp, cert, getApps, getApp } = require("firebase-admin/app");
+  const { getAuth } = require("firebase-admin/auth");
   const { getFirestore, FieldValue } = require("firebase-admin/firestore");
   const { getMessaging } = require("firebase-admin/messaging");
   const { initializeFirebaseAdmin } = require("./lib/firebase-admin");
+  const { readGeneratedBuildContext } = require("./lib/build-context");
   let app = null;
 
   function ensureApp() {
     if (app) return app;
+    // buildContext: Gap 1 (Staging/Production Firebase Admin isolation) — see
+    // lib/firebase-admin.js's assertProjectMatchesBuildContext(). This Function is the one place
+    // in the app where that guard matters MOST: a scheduled process runs unattended, with no
+    // browser-side isStagingWritesUnsafe() check anywhere in its path at all.
     app = initializeFirebaseAdmin({
       getApps, getApp, initializeApp, cert,
       projectId: process.env.FIREBASE_PROJECT_ID,
       serviceAccountRaw: process.env.FIREBASE_SERVICE_ACCOUNT,
+      buildContext: readGeneratedBuildContext(),
     });
     return app;
   }
@@ -230,6 +185,11 @@ function buildProductionDeps() {
     env: process.env,
     now: () => new Date(),
     ensureFirebaseAdmin: async () => { ensureApp(); },
+    verifyIdToken: (token) => getAuth(ensureApp()).verifyIdToken(token, true),
+    getUserDoc: async (uid) => {
+      const snap = await getFirestore(ensureApp()).collection("users").doc(uid).get();
+      return snap.exists ? snap.data() : null;
+    },
 
     getDueFollows: async () => {
       const snap = await getFirestore(ensureApp()).collection("followed_anime").where("notifyOnAiring", "==", true).get();
