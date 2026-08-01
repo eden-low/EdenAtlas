@@ -1,6 +1,17 @@
 // Minimal network-first service worker for offline shell caching.
 // Deliberately bypasses Firebase/CDN/weather hosts so it never interferes with
 // the auth flow, live Firestore/Storage reads, or third-party API calls.
+// v38 (Staging/Production Firebase isolation follow-up, Gap 2 fix): the hardcoded PRODUCTION
+// Firebase Web config this file's v37 pass shipped (see that entry below, and its own "KNOWN
+// LIMITATION" note) is gone — replaced with an importScripts()-loaded js/fcm-config.generated.js,
+// a build-time-generated file that resolves to Staging's config on a Staging build and
+// Production's on a Production build, written by the SAME script/decision point
+// firebase-init.js's browser-side config already goes through (scripts/generate-build-info.js) so
+// the two can never disagree. Missing/partial config now disables background push entirely rather
+// than ever falling back to a hardcoded default. Bumped because service-worker.js's own text
+// changed and because an already-installed v37 worker (anywhere it was ever active) embedded the
+// old hardcoded config directly in its script text — only a real version bump forces the browser's
+// update-check to fetch and install this corrected version rather than keep running the stale one.
 // v37 (Discover — opt-in per-anime airing push reminders, Owner-only, Phase 4): this file gained
 // Firebase Cloud Messaging BACKGROUND handling (see the bottom of this file) — a real, working
 // `firebase.messaging().onBackgroundMessage()` handler plus `notificationclick` routing back into
@@ -142,7 +153,7 @@
 // change — index.html is now the public recruiter Portfolio, home.html is the private app
 // landing page), v21 (Trash privacy fix), v20 (Memory Trash + location-edit fix), v19 (canonical
 // location pipeline fix).
-const CACHE = "eden-shell-v37";
+const CACHE = "eden-shell-v38";
 
 const PRECACHE = [
   "index.html", "home.html", "resume.html", "gallery.html", "journal.html", "expenses.html",
@@ -233,62 +244,80 @@ self.addEventListener("fetch", (event) => {
 
 // ---- Phase 4: opt-in per-anime airing push reminders (Owner-only, background delivery) ----
 //
-// Firebase Web config — same PUBLIC values already public in firebase-init.js (see that file's
-// own comment on why apiKey etc. are safe to ship to a browser; the real security boundary is
-// firestore.rules, never secrecy of this config). Hardcoded here, not read from
-// js/build-info.generated.js, because a service worker woken specifically to handle one `push`
-// event must have Firebase already initialized synchronously at script-evaluation time — there is
-// no reliable window to `fetch()`/`import()` a config file first. KNOWN LIMITATION: if/when a
-// dedicated Staging Firebase project is configured (see firebase-init.js's
-// isUsingIsolatedStagingBackend()), this worker would still initialize messaging against the
-// PRODUCTION project's sender ID on a Staging deploy, since this file is not currently templated
-// per environment at build time — push notifications on an isolated Staging backend are correctly
-// blocked from over in js/push-notifications.js today (VAPID key mismatch would make getToken()
-// fail before a push subscription is ever created), and templating this file is called out as a
-// follow-up in the completion report rather than silently left unmentioned.
-const FCM_WEB_CONFIG = {
-  apiKey: "AIzaSyBLJmKmn4Nwc2Ad3CG_KoPAn96HSfuvvU8",
-  authDomain: "lfj-profolio.firebaseapp.com",
-  projectId: "lfj-profolio",
-  storageBucket: "lfj-profolio.firebasestorage.app",
-  messagingSenderId: "173360347563",
-  appId: "1:173360347563:web:961b3118bce0a8232c3aee",
-};
-
-// Uses the classic/compat SDK (firebase-messaging-compat.js), not the modular SDK the rest of
-// this app uses — this is Firebase's own documented requirement for a service worker background
-// handler, not a stylistic choice. Guarded by a try/catch: an offline install, a blocked CDN
-// request, or a future SDK URL change must never crash `install`/`activate`/`fetch` for the rest
-// of this worker — Discover's push feature degrading is far preferable to the whole offline shell
-// breaking.
+// Gap 2 fix (was: a hardcoded Production Firebase config baked directly into this file, which
+// would have made a Staging deploy silently send/receive push against PRODUCTION's Firebase
+// project). The Firebase Web config is now read from js/fcm-config.generated.js — a build-time-
+// generated, gitignored, classic (importScripts-able) sibling of js/build-info.generated.js,
+// written by the SAME script (scripts/generate-build-info.js) that already decides "is this
+// build Staging or Production" for the rest of the app, so this worker's config can never
+// independently disagree with what firebase-init.js resolved for normal page code. Loaded via
+// importScripts() (synchronous, classic-script, same mechanism the two Firebase SDK imports
+// below already use) rather than fetch()/import() specifically because a service worker woken to
+// handle one `push` event must have Firebase already initialized at script-evaluation time — see
+// that generated file's own header comment for the exact contents allowlist (public Firebase Web
+// config + public VAPID key ONLY, never a secret).
+//
+// Missing/partial config (a fresh checkout with no build ever run, or a build somehow producing
+// an incomplete config) NEVER falls back to a hardcoded default of any kind — background push is
+// simply disabled for this worker instance, logged once, and every other part of this file
+// (install/activate/fetch/offline shell) is completely unaffected.
+let fcmConfig = null;
 try {
-  importScripts(
-    "https://www.gstatic.com/firebasejs/12.15.0/firebase-app-compat.js",
-    "https://www.gstatic.com/firebasejs/12.15.0/firebase-messaging-compat.js"
-  );
-  firebase.initializeApp(FCM_WEB_CONFIG);
-  const messaging = firebase.messaging();
-
-  // The server (netlify/functions/anime-airing-check.js) always sends a DATA-only payload
-  // (never a top-level `notification` field) specifically so FCM never auto-displays anything —
-  // this handler is the one place that decides what the notification looks like and where a
-  // click on it goes, matching Requirement 16's foreground/background/click-handling triad.
-  messaging.onBackgroundMessage((payload) => {
-    const data = (payload && payload.data) || {};
-    const title = data.title || "EdenAtlas";
-    const options = {
-      body: data.body || "",
-      icon: "images/icon-192.png",
-      badge: "images/icon-192.png",
-      tag: data.dedupeKey || undefined, // same episode -> same tag -> replaces, never stacks twice
-      data: { url: data.url || "discover.html" },
-    };
-    self.registration.showNotification(title, options);
-  });
+  importScripts("js/fcm-config.generated.js");
+  fcmConfig = self.__EDEN_FCM_CONFIG__ || null;
 } catch (err) {
-  // No console in every SW devtools view surfaces this reliably, but logging costs nothing and
-  // helps local debugging — never rethrown, never blocks install/activate/fetch above.
-  console.error("[service-worker] Firebase Messaging background handler failed to initialize:", err);
+  console.error("[service-worker] js/fcm-config.generated.js unavailable (no build run yet?):", err);
+}
+
+function hasUsableFirebaseConfig(cfg) {
+  return (
+    !!cfg &&
+    !!cfg.firebaseConfig &&
+    typeof cfg.firebaseConfig.apiKey === "string" && cfg.firebaseConfig.apiKey.length > 0 &&
+    typeof cfg.firebaseConfig.projectId === "string" && cfg.firebaseConfig.projectId.length > 0 &&
+    typeof cfg.firebaseConfig.messagingSenderId === "string" && cfg.firebaseConfig.messagingSenderId.length > 0 &&
+    typeof cfg.firebaseConfig.appId === "string" && cfg.firebaseConfig.appId.length > 0
+  );
+}
+
+if (hasUsableFirebaseConfig(fcmConfig)) {
+  // Uses the classic/compat SDK (firebase-messaging-compat.js), not the modular SDK the rest of
+  // this app uses — this is Firebase's own documented requirement for a service worker background
+  // handler, not a stylistic choice. Guarded by a try/catch: an offline install, a blocked CDN
+  // request, or a future SDK URL change must never crash `install`/`activate`/`fetch` for the rest
+  // of this worker — Discover's push feature degrading is far preferable to the whole offline shell
+  // breaking.
+  try {
+    importScripts(
+      "https://www.gstatic.com/firebasejs/12.15.0/firebase-app-compat.js",
+      "https://www.gstatic.com/firebasejs/12.15.0/firebase-messaging-compat.js"
+    );
+    firebase.initializeApp(fcmConfig.firebaseConfig);
+    const messaging = firebase.messaging();
+
+    // The server (netlify/functions/anime-airing-check.js) always sends a DATA-only payload
+    // (never a top-level `notification` field) specifically so FCM never auto-displays anything —
+    // this handler is the one place that decides what the notification looks like and where a
+    // click on it goes, matching Requirement 16's foreground/background/click-handling triad.
+    messaging.onBackgroundMessage((payload) => {
+      const data = (payload && payload.data) || {};
+      const title = data.title || "EdenAtlas";
+      const options = {
+        body: data.body || "",
+        icon: "images/icon-192.png",
+        badge: "images/icon-192.png",
+        tag: data.dedupeKey || undefined, // same episode -> same tag -> replaces, never stacks twice
+        data: { url: data.url || "discover.html" },
+      };
+      self.registration.showNotification(title, options);
+    });
+  } catch (err) {
+    // No console in every SW devtools view surfaces this reliably, but logging costs nothing and
+    // helps local debugging — never rethrown, never blocks install/activate/fetch above.
+    console.error("[service-worker] Firebase Messaging background handler failed to initialize:", err);
+  }
+} else {
+  console.warn("[service-worker] no usable Firebase config for this build — background push reminders disabled.");
 }
 
 // Requirement 16: "Notification click should open the relevant Discover detail or My List

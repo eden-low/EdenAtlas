@@ -1388,6 +1388,88 @@ async function run() {
     assert.ok(Number(match[1]) >= 36, `expected CACHE version >= 36, got v${match[1]}`);
   });
 
+  // ---- Gap 2 fix: service worker no longer hardcodes a Production Firebase config ----
+
+  await test("service-worker.js: no hardcoded Production Firebase Web config (apiKey/projectId literals) remains in the source", async () => {
+    const root = path.resolve(__dirname, "..", "..", "..");
+    const src = fs.readFileSync(path.join(root, "service-worker.js"), "utf8");
+    // The exact literal values that used to be hardcoded here (see firebase-init.js's own
+    // Production apiKey/projectId) — a regression would silently reintroduce the Gap 2 bug this
+    // pass fixed.
+    assert.ok(!src.includes("AIzaSyBLJmKmn4Nwc2Ad3CG_KoPAn96HSfuvvU8"), "the Production apiKey literal must not be hardcoded in service-worker.js anymore");
+    assert.ok(!/const\s+FCM_WEB_CONFIG\s*=/.test(src), "the old hardcoded FCM_WEB_CONFIG object must be gone");
+    assert.ok(src.includes('importScripts("js/fcm-config.generated.js")'), "service-worker.js must load its Firebase config from the generated, environment-aware file");
+  });
+
+  await test("service-worker.js: with a valid (fake, non-Production) self.__EDEN_FCM_CONFIG__, firebase.initializeApp() is called with THAT config, never a hardcoded one", async () => {
+    const root = path.resolve(__dirname, "..", "..", "..");
+    const src = fs.readFileSync(path.join(root, "service-worker.js"), "utf8");
+    const FAKE_STAGING_CONFIG = {
+      firebaseConfig: { apiKey: "fake-staging-key", authDomain: "x", projectId: "edenatlas-staging", storageBucket: "x", messagingSenderId: "1", appId: "1:1:web:x" },
+      vapidPublicKey: "fake-vapid-key",
+    };
+    const initializeAppCalls = [];
+    const listeners = {};
+    const sandbox = {
+      addEventListener: () => {}, // self.addEventListener("install"/"activate"/"fetch", ...) at top level
+      skipWaiting: () => {},
+      clients: { claim: async () => {} },
+      caches: { open: async () => ({ addAll: async () => {} }) },
+      fetch: async () => ({}),
+      location: { origin: PROD_ORIGIN },
+      URL,
+      console,
+      importScripts: (...urls) => {
+        // Simulates a successful load: the local generated config file sets __EDEN_FCM_CONFIG__
+        // on `self` (here: the sandbox's own global, since self === globalThis in a worker);
+        // the two Firebase SDK URLs are simulated by defining the `firebase` global directly.
+        if (urls.some((u) => u.includes("fcm-config.generated.js"))) {
+          sandbox.self.__EDEN_FCM_CONFIG__ = FAKE_STAGING_CONFIG;
+        }
+        if (urls.some((u) => u.includes("firebase-messaging-compat"))) {
+          sandbox.firebase = {
+            initializeApp: (cfg) => { initializeAppCalls.push(cfg); },
+            messaging: () => ({ onBackgroundMessage: () => {} }),
+          };
+        }
+      },
+    };
+    sandbox.self = sandbox; // self === globalThis inside a worker
+    vm.createContext(sandbox);
+    vm.runInContext(src, sandbox, { filename: "service-worker.js" });
+    assert.strictEqual(initializeAppCalls.length, 1, "firebase.initializeApp() must be called exactly once when a valid config is present");
+    assert.deepStrictEqual(initializeAppCalls[0], FAKE_STAGING_CONFIG.firebaseConfig, "must initialize with the FAKE staging config, never a hardcoded Production one");
+  });
+
+  await test("service-worker.js: with NO usable self.__EDEN_FCM_CONFIG__ (missing/partial), firebase.initializeApp() is never called — background push disables safely, never falls back to any default", async () => {
+    const root = path.resolve(__dirname, "..", "..", "..");
+    const src = fs.readFileSync(path.join(root, "service-worker.js"), "utf8");
+    let initializeAppCallCount = 0;
+    const sandbox = {
+      addEventListener: () => {}, // self.addEventListener("install"/"activate"/"fetch", ...) at top level
+      skipWaiting: () => {},
+      clients: { claim: async () => {} },
+      caches: { open: async () => ({ addAll: async () => {} }) },
+      fetch: async () => ({}),
+      location: { origin: PROD_ORIGIN },
+      URL,
+      console,
+      importScripts: (...urls) => {
+        // The config file "loads" but leaves __EDEN_FCM_CONFIG__ undefined (simulating a build
+        // that never ran scripts/generate-build-info.js) — the two Firebase SDK URLs must NEVER
+        // even be requested in this scenario (checked below), so `firebase` is deliberately never
+        // defined on this sandbox at all — any attempt to call it would throw ReferenceError,
+        // which this test also implicitly guards against (a throw would fail the test).
+        void urls;
+      },
+    };
+    sandbox.self = sandbox;
+    vm.createContext(sandbox);
+    vm.runInContext(src, sandbox, { filename: "service-worker.js" });
+    assert.strictEqual(initializeAppCallCount, 0);
+    assert.strictEqual(sandbox.firebase, undefined, "the Firebase compat SDK must never even be imported when there is no usable config");
+  });
+
   // ---- Summary ----
   console.log(`\n${pass} passed, ${fail} failed`);
   if (fail > 0) {
