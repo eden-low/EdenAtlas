@@ -222,17 +222,24 @@ async function run() {
     assert.ok(!/tailwindcss/.test(toml), "netlify.toml must not duplicate the Tailwind CLI invocation");
   });
 
-  await test("package.json build script runs build:css, then generate-deploy-origin, then build-site.js", () => {
+  await test("package.json build script runs build:css, then generate-deploy-origin, then generate-build-info, then build-site.js", () => {
     // Updated by the Atlas Assistant Deploy Preview CORS fix — pkg.scripts.build legitimately
     // grew a new step (scripts/generate-deploy-origin.js, which must run before Netlify bundles
     // Functions with esbuild, i.e. before this whole command finishes; its exact position
     // relative to build-site.js doesn't matter functionally, since the two write to unrelated
     // locations, but stays between build:css and build-site.js for a stable, documented order).
+    // The Development -> Staging -> Production pass added a second, similarly build-time-only
+    // step, scripts/generate-build-info.js, which must run before build-site.js copies js/ into
+    // site/ (so the freshly-generated js/build-info.generated.js is actually included).
     const pkg = JSON.parse(read("package.json"));
-    assert.strictEqual(pkg.scripts.build, "npm run build:css && node scripts/generate-deploy-origin.js && node scripts/build-site.js");
+    assert.strictEqual(
+      pkg.scripts.build,
+      "npm run build:css && node scripts/generate-deploy-origin.js && node scripts/generate-build-info.js && node scripts/build-site.js"
+    );
     assert.strictEqual(pkg.scripts["build:css"], "tailwindcss -c tailwind.config.js -i ./tailwind-input.css -o ./tailwind.generated.css --minify");
     assert.strictEqual(pkg.scripts["watch:css"], "tailwindcss -c tailwind.config.js -i ./tailwind-input.css -o ./tailwind.generated.css --watch");
     assert.strictEqual(pkg.scripts["generate:deploy-origin"], "node scripts/generate-deploy-origin.js");
+    assert.strictEqual(pkg.scripts["generate:build-info"], "node scripts/generate-build-info.js");
   });
 
   await test("existing test scripts (test:functions, test:frontend, test) still run every prior suite", () => {
@@ -253,6 +260,7 @@ async function run() {
       "node netlify/functions/__tests__/assistant.test.js",
       "node netlify/functions/__tests__/weather.test.js",
       "node netlify/functions/__tests__/anilist.test.js",
+      "node netlify/functions/__tests__/discover-ai.test.js",
     ];
     let functionsCursor = 0;
     priorFunctionsCmds.forEach((cmd) => {
@@ -260,9 +268,11 @@ async function run() {
       assert.ok(idx !== -1 && idx >= functionsCursor, `test:functions dropped or reordered pre-existing command: ${cmd}`);
       functionsCursor = idx + 1;
     });
+    // The Development -> Staging -> Production + airing-reminders pass's own new suite is the
+    // newest addition on top.
     assert.deepStrictEqual(functionsCmds, [
       ...priorFunctionsCmds,
-      "node netlify/functions/__tests__/discover-ai.test.js",
+      "node netlify/functions/__tests__/anime-airing-check.test.js",
     ]);
 
     const frontendCmds = splitCmds(pkg.scripts["test:frontend"]);
@@ -280,6 +290,8 @@ async function run() {
       "node js/__tests__/discover-security.test.js",
       "node js/__tests__/discover-tabs.test.js",
       "node js/__tests__/discover-description.test.js",
+      "node js/__tests__/discover-foryou.test.js",
+      "node js/__tests__/discover-translate.test.js",
     ];
     // Every pre-existing command is still present, in its original relative order (a genuine
     // ordered-subsequence check, not just an unordered "includes all of" set check).
@@ -289,13 +301,13 @@ async function run() {
       assert.ok(idx !== -1 && idx >= cursor, `test:frontend dropped or reordered pre-existing command: ${cmd}`);
       cursor = idx + 1;
     });
-    // And exactly two new commands were added on top — Discover AI's "For You" tab-lifecycle
-    // suite and its Translate to Chinese / View Original + localStorage-cache suite — never a
-    // silent removal disguised as a reorder.
+    // The Development -> Staging -> Production + airing-reminders pass's own two new suites
+    // (js/environment.js's detection logic, js/push-notifications.js's lifecycle/guard-ordering
+    // proof) are the newest addition on top — never a silent removal disguised as a reorder.
     assert.deepStrictEqual(frontendCmds, [
       ...priorFrontendCmds,
-      "node js/__tests__/discover-foryou.test.js",
-      "node js/__tests__/discover-translate.test.js",
+      "node js/__tests__/environment.test.js",
+      "node js/__tests__/push-notifications.test.js",
     ]);
 
     assert.strictEqual(pkg.scripts.test, "npm run test:functions && npm run test:frontend");

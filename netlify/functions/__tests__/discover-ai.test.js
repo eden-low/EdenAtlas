@@ -1376,12 +1376,16 @@ async function run() {
     assert.strictEqual(cachePutCalls.length, 0);
   });
 
-  await test("service-worker.js: CACHE version is exactly v36 (bumped once from v35, never regressed)", async () => {
+  await test("service-worker.js: CACHE version is at least v36 (bumped once from v35, never regressed)", async () => {
+    // A floor check, not an exact pin (same convention home-recent-memories.test.js's own
+    // eden-shell-v31 assertion switched to) — this suite predates later, legitimate cache bumps
+    // from unrelated passes (see service-worker.js's own version history comment for the current
+    // number).
     const root = path.resolve(__dirname, "..", "..", "..");
     const src = fs.readFileSync(path.join(root, "service-worker.js"), "utf8");
     const match = /const CACHE = "eden-shell-v(\d+)"/.exec(src);
     assert.ok(match, "CACHE constant not found");
-    assert.strictEqual(Number(match[1]), 36);
+    assert.ok(Number(match[1]) >= 36, `expected CACHE version >= 36, got v${match[1]}`);
   });
 
   // ---- Summary ----

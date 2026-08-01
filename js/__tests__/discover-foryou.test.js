@@ -127,6 +127,7 @@ const RENDER_CARD_ACTIONS_SRC = extractFunctionSource(DISCOVER_SRC, "renderCardA
 const MEDIA_CARD_SRC = extractFunctionSource(DISCOVER_SRC, "mediaCard");
 
 const FOLLOW_DOC_ID_SRC = extractFunctionSource(DISCOVER_SRC, "followDocId");
+const GUARD_STAGING_WRITE_SRC = extractFunctionSource(DISCOVER_SRC, "guardStagingWrite");
 const ADD_FOLLOW_SRC = extractFunctionSource(DISCOVER_SRC, "addFollow");
 
 const FOR_YOU_CARD_SRC = extractFunctionSource(DISCOVER_SRC, "forYouCard");
@@ -169,6 +170,11 @@ function buildHarness() {
   ctx.auth = { currentUser: { uid: "owner-uid-1" } };
   ctx.db = {};
   ctx.isOwner = () => true;
+  // Phase 4's guardStagingWrite() calls isStagingWritesUnsafe() (imported from firebase-init.js
+  // at module scope) — stubbed false here (not Staging) since these tests exercise addFollow()'s
+  // For-You-list-removal behavior, not the staging write guard itself (see
+  // js/__tests__/environment.test.js for that).
+  ctx.isStagingWritesUnsafe = () => false;
   // Firestore SDK stubs — addFollow()/fetchFollowed() reference these bare identifiers exactly as
   // the real gstatic import would provide them.
   ctx.doc = (...args) => ({ __path: args });
@@ -212,6 +218,7 @@ function buildHarness() {
     ${RENDER_CARD_ACTIONS_SRC}
     ${MEDIA_CARD_SRC}
     ${FOLLOW_DOC_ID_SRC}
+    ${GUARD_STAGING_WRITE_SRC}
     async function fetchFollowed() { /* stub: no persistent My List state needed for these tests */ }
     function showToast() {}
     function refreshOpenModalActions() {}
