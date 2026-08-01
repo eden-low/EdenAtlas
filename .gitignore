@@ -17,6 +17,14 @@ node_modules/
 # never hand-edited, never committed.
 /netlify/functions/lib/deploy-origin.generated.json
 
+# Generated build-time environment snapshot for js/environment.js (scripts/generate-build-info.js)
+# — not a secret, rebuilt by `npm run build` on every build, never hand-edited, never committed.
+# Missing entirely (a fresh checkout with no build run yet) degrades gracefully: the <script> tag
+# 404s harmlessly and js/environment.js's getEnvironment() falls back to ENV.DEVELOPMENT, same
+# "gitignored generated file, graceful fallback if absent" pattern as deploy-origin.generated.json
+# above.
+/js/build-info.generated.js
+
 # Environment / secrets (Netlify Functions prep) — never commit real values.
 # Production secrets belong in Netlify Project configuration -> Environment variables,
 # not in any file in this repo. See .env.example for the documented variable names.
