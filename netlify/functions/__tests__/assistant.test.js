@@ -17,7 +17,10 @@ const { createHandler } = require("../assistant.js");
 const { TOOLS, toolDefsForScopes, ToolValidationError } = require("../lib/tools.js");
 const { runAgentLoop, callQwenChatCompletions, QwenError } = require("../lib/qwen.js");
 const { checkBurst, checkAndIncrementDailyUsage, _resetBurstStateForTests } = require("../lib/rate-limit.js");
-const { FirebaseConfigError, parseServiceAccount, initializeFirebaseAdmin } = require("../lib/firebase-admin.js");
+const {
+  FirebaseConfigError, parseServiceAccount, initializeFirebaseAdmin,
+  assertProjectMatchesBuildContext, PRODUCTION_PROJECT_ID,
+} = require("../lib/firebase-admin.js");
 const dateUtils = require("../lib/date-utils.js");
 
 let pass = 0;
@@ -448,6 +451,119 @@ async function run() {
     // getApps().length is already 1, so initializeFirebaseAdmin must short-circuit to getApp().
     const second = initializeFirebaseAdmin({ ...fake, projectId: "lfj-profolio", serviceAccountRaw: "{not json at all" });
     assert.strictEqual(first, second);
+  });
+
+  console.log("\nStaging/Production Firebase Admin isolation (Gap 1 fix, assertProjectMatchesBuildContext)");
+
+  // Every scenario the follow-up task explicitly asked for, tested directly against the pure
+  // classifier first (fast, no PEM/crypto involved), then end-to-end through
+  // initializeFirebaseAdmin() with the real fake modular Admin SDK — proving the check actually
+  // runs, in the right order, for a real init call.
+
+  const STAGING_CTX = { context: "branch-deploy", branch: "staging", expectedStagingProjectId: "edenatlas-staging" };
+  const PRODUCTION_CTX = { context: "production", branch: "main", expectedStagingProjectId: null };
+  const PREVIEW_CTX = { context: "deploy-preview", branch: "pr-42", expectedStagingProjectId: null };
+
+  await test("assertProjectMatchesBuildContext: staging client + staging Admin project succeeds (no throw)", () => {
+    assertProjectMatchesBuildContext("edenatlas-staging", STAGING_CTX);
+  });
+
+  await test("assertProjectMatchesBuildContext: staging context + PRODUCTION project id throws config/production-credentials-in-staging", () => {
+    assert.throws(
+      () => assertProjectMatchesBuildContext(PRODUCTION_PROJECT_ID, STAGING_CTX),
+      (err) => err instanceof FirebaseConfigError && err.stage === "credential_validation" && err.code === "config/production-credentials-in-staging"
+    );
+  });
+
+  await test("assertProjectMatchesBuildContext: staging context + a project id that matches neither Production nor the expected staging project throws config/staging-project-mismatch", () => {
+    assert.throws(
+      () => assertProjectMatchesBuildContext("some-other-unrelated-project", STAGING_CTX),
+      (err) => err instanceof FirebaseConfigError && err.code === "config/staging-project-mismatch"
+    );
+  });
+
+  await test("assertProjectMatchesBuildContext: staging context with no expectedStagingProjectId configured STILL rejects the Production project id (the primary guard doesn't depend on it)", () => {
+    const stagingNoExpected = { context: "branch-deploy", branch: "staging", expectedStagingProjectId: null };
+    assert.throws(
+      () => assertProjectMatchesBuildContext(PRODUCTION_PROJECT_ID, stagingNoExpected),
+      (err) => err.code === "config/production-credentials-in-staging"
+    );
+  });
+
+  await test("assertProjectMatchesBuildContext: Production behavior is completely unchanged — the Production project id in a Production context never throws", () => {
+    assertProjectMatchesBuildContext(PRODUCTION_PROJECT_ID, PRODUCTION_CTX);
+  });
+
+  await test("assertProjectMatchesBuildContext: a non-staging, non-production context (Deploy Preview) is unrestricted — never blocks Production's own project id either", () => {
+    assertProjectMatchesBuildContext(PRODUCTION_PROJECT_ID, PREVIEW_CTX);
+    assertProjectMatchesBuildContext("edenatlas-staging", PREVIEW_CTX);
+  });
+
+  await test("assertProjectMatchesBuildContext: a missing/null buildContext (generated file absent — no build ever ran) is unrestricted, same as an unknown context", () => {
+    assertProjectMatchesBuildContext(PRODUCTION_PROJECT_ID, null);
+    assertProjectMatchesBuildContext(PRODUCTION_PROJECT_ID, { context: null, branch: null, expectedStagingProjectId: null });
+  });
+
+  await test("initializeFirebaseAdmin: staging client + staging Admin project succeeds end-to-end", async () => {
+    const fake = makeFakeModularAdmin();
+    const app = initializeFirebaseAdmin({
+      ...fake, projectId: "edenatlas-staging",
+      serviceAccountRaw: JSON.stringify({ ...VALID_SA, project_id: "edenatlas-staging" }),
+      buildContext: STAGING_CTX,
+    });
+    assert.ok(app.__app);
+  });
+
+  await test("initializeFirebaseAdmin: staging context + Production Admin project FAILS CLOSED before cert()/initializeApp() are ever called", async () => {
+    const fake = makeFakeModularAdmin();
+    let certCalled = false;
+    const cert = (sa) => { certCalled = true; return { __cert: true, sa }; };
+    assert.throws(
+      () => initializeFirebaseAdmin({
+        ...fake, cert, projectId: PRODUCTION_PROJECT_ID,
+        serviceAccountRaw: JSON.stringify(VALID_SA), // VALID_SA.project_id is already "lfj-profolio"
+        buildContext: STAGING_CTX,
+      }),
+      (err) => err instanceof FirebaseConfigError && err.code === "config/production-credentials-in-staging"
+    );
+    assert.strictEqual(certCalled, false, "must fail before the private key is ever touched");
+    assert.strictEqual(fake.getApps().length, 0, "no app must be registered");
+  });
+
+  await test("initializeFirebaseAdmin: missing Admin credentials in a staging context still fails closed the ordinary way (empty FIREBASE_SERVICE_ACCOUNT)", async () => {
+    const fake = makeFakeModularAdmin();
+    assert.throws(
+      () => initializeFirebaseAdmin({ ...fake, projectId: "edenatlas-staging", serviceAccountRaw: "", buildContext: STAGING_CTX }),
+      (err) => err instanceof FirebaseConfigError && err.code === "config/empty"
+    );
+  });
+
+  await test("initializeFirebaseAdmin: Production's own behavior is byte-for-byte unchanged by passing a buildContext at all", async () => {
+    const fake = makeFakeModularAdmin();
+    const app = initializeFirebaseAdmin({
+      ...fake, projectId: "lfj-profolio", serviceAccountRaw: JSON.stringify(VALID_SA), buildContext: PRODUCTION_CTX,
+    });
+    assert.ok(app.__app);
+  });
+
+  await test("initializeFirebaseAdmin: omitting buildContext entirely (every pre-existing call site/test) defaults to null and is fully unrestricted, exactly as before this fix", async () => {
+    const fake = makeFakeModularAdmin();
+    const app = initializeFirebaseAdmin({ ...fake, projectId: "lfj-profolio", serviceAccountRaw: JSON.stringify(VALID_SA) });
+    assert.ok(app.__app);
+  });
+
+  await test("initializeFirebaseAdmin: the isolation check re-runs on EVERY call, including a warm-instance reuse attempt — a Staging cold start that lands on a container previously warmed for a different config can't slip past it", async () => {
+    const fake = makeFakeModularAdmin();
+    // First call: legitimately Production.
+    initializeFirebaseAdmin({ ...fake, projectId: "lfj-profolio", serviceAccountRaw: JSON.stringify(VALID_SA), buildContext: PRODUCTION_CTX });
+    assert.strictEqual(fake.getApps().length, 1);
+    // A hypothetical second call on the same warm `fake` state, now claiming to be Staging with
+    // Production's project id, must still be rejected — proving the check runs BEFORE the
+    // getApps().length short-circuit, not only on a cold/first call.
+    assert.throws(
+      () => initializeFirebaseAdmin({ ...fake, projectId: "lfj-profolio", serviceAccountRaw: JSON.stringify(VALID_SA), buildContext: STAGING_CTX }),
+      (err) => err.code === "config/production-credentials-in-staging"
+    );
   });
 
   console.log("\nReal firebase-admin v14 package (production-wiring smoke test)");

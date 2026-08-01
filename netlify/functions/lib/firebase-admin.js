@@ -36,8 +36,15 @@
 // module has already succeeded.
 
 const crypto = require("node:crypto");
+const { isStagingBuildContext } = require("./build-context");
 
 const STAGES = ["json_parse", "credential_validation", "admin_initialization"];
+
+// Duplicated from firebase-init.js on purpose — same convention as OWNER_EMAIL's own duplication
+// across every Netlify Function (this module can't import a browser ES module; re-deriving "which
+// project is Production" from an independent hardcoded source is deliberate defense-in-depth, not
+// an oversight). Used ONLY by assertProjectMatchesBuildContext() below, never for any other check.
+const PRODUCTION_PROJECT_ID = "lfj-profolio";
 
 class FirebaseConfigError extends Error {
   constructor(message, stage, code) {
@@ -128,14 +135,56 @@ function assertPrivateKeyIsUsable(privateKey) {
   }
 }
 
+// Gap 1 fix (Staging/Production Firebase Admin isolation): a browser-side guard
+// (js/environment.js's isStagingWritesUnsafe(), which discover.js's writes already check) is a
+// UX safeguard, not a security boundary — Firebase Admin bypasses firestore.rules entirely, so
+// nothing about the browser's own environment detection can stop a misconfigured Staging Function
+// from reading/writing PRODUCTION Firestore via Admin. This is the actual, server-side boundary:
+// called as the FIRST thing initializeFirebaseAdmin() does, on every call (including a warm
+// invocation that's about to take the getApps().length reuse shortcut below) — a Staging build
+// whose resolved Admin credentials turn out to be Production's project, or don't match the
+// explicitly-configured expected Staging project, is refused before any Firestore/Auth/Messaging
+// call is ever possible. `buildContext` is deliberately unrelated to `projectId`/
+// `serviceAccountRaw` (it comes from a SEPARATE build-time snapshot, scripts/generate-function-
+// context.js — see lib/build-context.js) specifically so a misconfiguration that sets
+// FIREBASE_PROJECT_ID/FIREBASE_SERVICE_ACCOUNT to Production's values in the Staging Netlify
+// context can't just "agree with itself" the way it would if this check only cross-referenced
+// those same two env vars. A context that isn't verifiably Staging (buildContext missing/null,
+// Production, a Deploy Preview, local dev) is UNRESTRICTED by this check — Production must never
+// be blocked by a Staging-only rule, and an unknown context fails open here on purpose (the
+// missing-credentials / malformed-JSON / bad-private-key checks below already fail closed for
+// every context regardless).
+function assertProjectMatchesBuildContext(resolvedProjectId, buildContext) {
+  if (!isStagingBuildContext(buildContext)) return;
+  if (resolvedProjectId === PRODUCTION_PROJECT_ID) {
+    throw new FirebaseConfigError(
+      "Staging build resolved Firebase Admin credentials to the PRODUCTION project — refusing to initialize",
+      "credential_validation",
+      "config/production-credentials-in-staging"
+    );
+  }
+  if (buildContext.expectedStagingProjectId && resolvedProjectId !== buildContext.expectedStagingProjectId) {
+    throw new FirebaseConfigError(
+      "Staging build's Firebase Admin project id does not match the configured staging project (STAGING_FIREBASE_PROJECT_ID)",
+      "credential_validation",
+      "config/staging-project-mismatch"
+    );
+  }
+}
+
 // Initializes (or reuses) the Admin app for this warm Function instance, using firebase-admin
 // v14's MODULAR API only. `getApps`/`getApp`/`initializeApp`/`cert` are passed in as explicit
 // function arguments — normally the real ones from `require("firebase-admin/app")` (see
 // assistant.js's production wiring) — rather than a legacy `admin` namespace object, both
 // because that namespace no longer has the shape this code needs in v14 (see the header
 // comment) and so this module stays independently testable with injectable fakes, without the
-// real firebase-admin package installed.
-function initializeFirebaseAdmin({ getApps, getApp, initializeApp, cert, projectId, serviceAccountRaw }) {
+// real firebase-admin package installed. `buildContext` defaults to null (Gap 1's isolation
+// check above is then a no-op) so every pre-existing call site/test that doesn't pass it keeps
+// working unchanged — production wiring in each Function's buildProductionDeps() always passes
+// the real snapshot (see anilist.js/discover-ai.js/assistant.js/weather.js/
+// anime-airing-check.js).
+function initializeFirebaseAdmin({ getApps, getApp, initializeApp, cert, projectId, serviceAccountRaw, buildContext = null }) {
+  assertProjectMatchesBuildContext(projectId, buildContext);
   if (getApps().length) return getApp();
 
   const serviceAccount = parseServiceAccount(serviceAccountRaw, projectId);
@@ -156,4 +205,7 @@ function initializeFirebaseAdmin({ getApps, getApp, initializeApp, cert, project
   }
 }
 
-module.exports = { FirebaseConfigError, parseServiceAccount, initializeFirebaseAdmin, STAGES };
+module.exports = {
+  FirebaseConfigError, parseServiceAccount, initializeFirebaseAdmin, STAGES,
+  assertProjectMatchesBuildContext, PRODUCTION_PROJECT_ID,
+};
