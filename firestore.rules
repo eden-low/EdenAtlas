@@ -102,11 +102,21 @@ service cloud.firestore {
     match /followed_anime/{id} {
       allow read, delete: if isOwner() && resource.data.uid == request.auth.uid;
 
+      // notifyOnAiring (opt-in per-anime airing push reminder toggle) is REQUIRED on create so
+      // every doc has a defined value from day one — the client always writes it explicitly
+      // (defaulting to false), never omits it. nextEpisodeSnapshot/scheduleRefreshedAt are
+      // deliberately NOT in this client-facing keys().hasOnly() allowlist: they're written only
+      // by the scheduled Netlify Function (netlify/functions/anime-airing-check.js) via Firebase
+      // Admin, which bypasses these rules entirely (same as every other Admin-only field in this
+      // app — see CLAUDE.md's repeated "Firebase Admin bypasses firestore.rules entirely" note).
+      // A client updateDoc() is a partial write, so an update that only touches status/
+      // notifyOnAiring never clobbers those server-only fields even though this allowlist
+      // doesn't mention them.
       allow create: if isOwner()
         && request.resource.data.uid == request.auth.uid
         && id == request.auth.uid + '_' + string(request.resource.data.anilistId)
         && request.resource.data.keys().hasOnly(
-             ['uid', 'anilistId', 'mediaType', 'title', 'coverImage', 'format', 'status', 'isAdult', 'followedAt', 'updatedAt']
+             ['uid', 'anilistId', 'mediaType', 'title', 'coverImage', 'format', 'status', 'isAdult', 'notifyOnAiring', 'followedAt', 'updatedAt']
            )
         && request.resource.data.anilistId is int && request.resource.data.anilistId > 0
         && request.resource.data.mediaType == 'ANIME'
@@ -115,27 +125,77 @@ service cloud.firestore {
         && (request.resource.data.format == null || request.resource.data.format is string)
         && request.resource.data.status in ['planning', 'watching', 'completed', 'paused', 'dropped']
         && request.resource.data.isAdult == false
+        && request.resource.data.notifyOnAiring is bool
         && request.resource.data.followedAt == request.time
         && request.resource.data.updatedAt == request.time;
 
-      // uid/anilistId/mediaType/followedAt are immutable — only title/coverImage/format/status
-      // may change (a display-metadata refresh or a status change), and updatedAt must always be
-      // freshly stamped on every update.
+      // uid/anilistId/mediaType/followedAt are immutable — only title/coverImage/format/status/
+      // notifyOnAiring may change from the CLIENT (a display-metadata refresh, a status change,
+      // or the per-anime notification toggle), and updatedAt must always be freshly stamped on
+      // every client update. This same rule also governs the scheduled Function's writes, but
+      // Admin SDK calls bypass rules entirely (see the create-rule comment above) — this
+      // constraint is enforced against the browser client only.
       allow update: if isOwner()
         && resource.data.uid == request.auth.uid
         && request.resource.data.uid == resource.data.uid
         && request.resource.data.anilistId == resource.data.anilistId
         && request.resource.data.mediaType == resource.data.mediaType
         && request.resource.data.keys().hasOnly(
-             ['uid', 'anilistId', 'mediaType', 'title', 'coverImage', 'format', 'status', 'isAdult', 'followedAt', 'updatedAt']
+             ['uid', 'anilistId', 'mediaType', 'title', 'coverImage', 'format', 'status', 'isAdult', 'notifyOnAiring', 'followedAt', 'updatedAt']
            )
         && request.resource.data.title is string
         && (request.resource.data.coverImage == null || request.resource.data.coverImage is string)
         && (request.resource.data.format == null || request.resource.data.format is string)
         && request.resource.data.status in ['planning', 'watching', 'completed', 'paused', 'dropped']
         && request.resource.data.isAdult == false
+        && request.resource.data.notifyOnAiring is bool
         && request.resource.data.followedAt == resource.data.followedAt
         && request.resource.data.updatedAt == request.time;
+    }
+
+    // Phase 4 — opt-in per-anime airing push reminders. One doc per subscribed browser/device
+    // (id = uid + tokenHash, the same deterministic-ID "structural uniqueness" trick as
+    // followed_anime/usernames/daily_reflections — see CLAUDE.md), never the raw FCM token as
+    // the doc ID (tokens can contain characters Firestore doc IDs don't love, and hashing keeps
+    // the ID shape uniform). Strictly Owner-only, same as every other Discover collection — see
+    // CLAUDE.md's "Discover is now strictly Owner-only" note.
+    match /push_subscriptions/{id} {
+      allow read, delete: if isOwner() && resource.data.uid == request.auth.uid;
+
+      allow create: if isOwner()
+        && request.resource.data.uid == request.auth.uid
+        && id == request.auth.uid + '_' + request.resource.data.tokenHash
+        && request.resource.data.keys().hasOnly(['uid', 'tokenHash', 'token', 'platform', 'createdAt', 'updatedAt'])
+        && request.resource.data.tokenHash is string && request.resource.data.tokenHash.size() > 0
+        && request.resource.data.token is string && request.resource.data.token.size() > 0
+        && request.resource.data.platform == 'web'
+        && request.resource.data.createdAt == request.time
+        && request.resource.data.updatedAt == request.time;
+
+      // Only a token "last seen" refresh is allowed from the client (uid/tokenHash/token/platform
+      // immutable) — a genuinely new token is always a new document (a new deterministic ID), never
+      // an update of an existing one.
+      allow update: if isOwner()
+        && resource.data.uid == request.auth.uid
+        && request.resource.data.uid == resource.data.uid
+        && request.resource.data.tokenHash == resource.data.tokenHash
+        && request.resource.data.token == resource.data.token
+        && request.resource.data.platform == resource.data.platform
+        && request.resource.data.createdAt == resource.data.createdAt
+        && request.resource.data.keys().hasOnly(['uid', 'tokenHash', 'token', 'platform', 'createdAt', 'updatedAt'])
+        && request.resource.data.updatedAt == request.time;
+    }
+
+    // Delivery-dedup log for the scheduled airing-check Function (Requirement: "Store a
+    // deterministic delivery key so the same anime episode is not notified twice"). Written
+    // exclusively by that Function via Firebase Admin (bypasses these rules entirely, same as
+    // every other server-only collection — see the ai_usage* precedent in CLAUDE.md). No client
+    // create/update/delete rule is defined at all, so Firestore's own default-deny already closes
+    // client writes with no rule needed; read is opened for the Owner only as a debugging/
+    // transparency aid (Me/Discover could surface "last reminder sent" from this in a future
+    // pass — not built yet).
+    match /anime_notification_log/{id} {
+      allow read: if isOwner() && resource.data.uid == request.auth.uid;
     }
 
     // Collections (v2.7): life-chapter containers that group existing records via
