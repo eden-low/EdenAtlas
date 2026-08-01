@@ -102,6 +102,18 @@
 # itself, spend anything or enable a paid feature; it only takes effect if the Netlify account
 # already supports Scheduled Functions. See the completion report for the exact manual
 # verification step.
+#
+# Invocation model: a Scheduled Function is NOT reachable through its ordinary deployed URL by an
+# arbitrary caller — Netlify only invokes it via its own internal cron trigger (Production only),
+# the "Run now" control in the Netlify UI (available on preview/branch deploys too, including
+# `staging`), or `netlify functions:invoke` locally. netlify/functions/anime-airing-check.js
+# therefore has NO request-level authentication check of its own (an earlier version tried using
+# the invocation body's `next_run` field as a security signal — removed; `next_run` is scheduling
+# metadata, not a credential, and is never used for any conditional in that file). What actually
+# gates real sends vs. dry-run is the VERIFIED deploy context (see
+# netlify/functions/lib/firebase-admin.js's resolveDeployRole()) — Production may always send for
+# real; `staging`/any Deploy Preview defaults to enforced dry-run unless STAGING_ALLOW_REAL_SEND is
+# explicitly set AND real, isolated staging Firebase credentials are already confirmed configured.
 [functions."anime-airing-check"]
   schedule = "*/20 * * * *"
 
