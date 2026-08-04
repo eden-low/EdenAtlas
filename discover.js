@@ -799,7 +799,11 @@ function renderCardActions(container, media, followedDoc) {
   container.replaceChildren();
   if (followedDoc) {
     const select = document.createElement("select");
-    select.className = "status-select flex-1 bg-darkBg/60 border border-borderNeon rounded-lg px-2 py-1.5 text-[11px] font-code text-white";
+    // min-w-0 overrides the <select>'s automatic (content-based) minimum width — a native
+    // <select> won't shrink below the width its longest <option> text needs unless told to;
+    // with it, the browser truncates the visible label instead of forcing this flex row (and
+    // the notify/delete buttons riding along with it) past the card's padded edge.
+    select.className = "status-select flex-1 min-w-0 bg-darkBg/60 border border-borderNeon rounded-lg px-2 py-1.5 text-[11px] font-code text-white";
     select.setAttribute("aria-label", i18nT("discover.change_status"));
     STATUS_ORDER.forEach((s) => {
       const opt = document.createElement("option");
@@ -856,7 +860,11 @@ function renderCardActions(container, media, followedDoc) {
 
 function mediaCard(media, followedDoc) {
   const card = document.createElement("div");
-  card.className = "card-lift is-visible bg-cardBg/90 neon-border-purple rounded-xl overflow-hidden flex flex-col cursor-pointer";
+  // min-w-0: without it, a grid item's automatic minimum width defaults to its content's
+  // min-content size — the status <select> below (driven by the longest translated status
+  // label, e.g. "Plan to Watch") would otherwise force this card wider than its grid track,
+  // pushing the delete button outside the card/grid on narrow viewports.
+  card.className = "card-lift is-visible bg-cardBg/90 neon-border-purple rounded-xl overflow-hidden flex flex-col cursor-pointer min-w-0";
   const title = preferredTitle(media);
   const cover = (media.coverImage && (media.coverImage.large || media.coverImage.medium)) || "";
   const airing = AIRING_STATUS_META[media.status] || null;
@@ -870,7 +878,7 @@ function mediaCard(media, followedDoc) {
       ${followedDoc ? `<span class="absolute top-2 left-2 px-2 py-0.5 rounded-full bg-darkBg/80 backdrop-blur-sm text-[10px] font-code text-white flex items-center gap-1"><i class="fa-solid ${STATUS_META[followedDoc.status] ? STATUS_META[followedDoc.status].icon : "fa-bookmark"}"></i>${esc(STATUS_META[followedDoc.status] ? i18nT(STATUS_META[followedDoc.status].i18n) : followedDoc.status)}</span>` : ""}
       ${airing ? `<span class="absolute top-2 right-2 px-2 py-0.5 rounded-full text-[10px] font-code ${airing.cls}">${esc(i18nT(airing.label))}</span>` : ""}
     </div>
-    <div class="p-3 flex-1 flex flex-col gap-2">
+    <div class="p-3 flex-1 flex flex-col gap-2 min-w-0">
       <p class="text-sm font-semibold text-white leading-snug line-clamp-2">${esc(title)}</p>
       <div class="flex items-center flex-wrap gap-x-2 gap-y-1 text-[10px] font-code text-textGray">
         ${media.format ? `<span>${esc(media.format)}</span>` : ""}
@@ -878,7 +886,7 @@ function mediaCard(media, followedDoc) {
         ${eps != null ? `<span>${eps} ep${eps === 1 ? "" : "s"}</span>` : ""}
       </div>
       ${nextAiring ? `<p class="text-[10px] font-code text-neonPurple">${esc(nextAiring)}</p>` : ""}
-      <div class="mt-auto pt-2 flex items-center gap-1.5" data-card-actions></div>
+      <div class="mt-auto pt-2 flex flex-wrap items-center gap-1.5 min-w-0" data-card-actions></div>
     </div>`;
 
   if (cover) {

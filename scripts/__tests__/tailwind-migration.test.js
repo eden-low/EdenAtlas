@@ -289,11 +289,12 @@ async function run() {
     ]);
 
     const frontendCmds = splitCmds(pkg.scripts["test:frontend"]);
-    // "Prior" here means "predates the Discover AI (Qwen translation + For You) pass's own new
-    // suites," reconciled by folding every previously-new addition (xss-security.test.js,
+    // "Prior" here means "predates the Discover 'My List' card-actions responsive-overflow fix's
+    // own new suite," reconciled by folding every previously-new addition (xss-security.test.js,
     // auth-pulse-scope.test.js, discover-security.test.js, discover-tabs.test.js,
-    // discover-description.test.js) into this baseline list — the same "new addition becomes next
-    // pass's baseline" convention this assertion has followed every time it was updated before.
+    // discover-description.test.js, environment.test.js, push-notifications.test.js) into this
+    // baseline list — the same "new addition becomes next pass's baseline" convention this
+    // assertion has followed every time it was updated before.
     const priorFrontendCmds = [
       "node js/__tests__/date-utils.test.js",
       "node js/__tests__/reflection.test.js",
@@ -305,6 +306,8 @@ async function run() {
       "node js/__tests__/discover-description.test.js",
       "node js/__tests__/discover-foryou.test.js",
       "node js/__tests__/discover-translate.test.js",
+      "node js/__tests__/environment.test.js",
+      "node js/__tests__/push-notifications.test.js",
     ];
     // Every pre-existing command is still present, in its original relative order (a genuine
     // ordered-subsequence check, not just an unordered "includes all of" set check).
@@ -314,15 +317,13 @@ async function run() {
       assert.ok(idx !== -1 && idx >= cursor, `test:frontend dropped or reordered pre-existing command: ${cmd}`);
       cursor = idx + 1;
     });
-    // The Development -> Staging -> Production + airing-reminders pass's own two new suites
-    // (js/environment.js's detection logic, js/push-notifications.js's lifecycle/guard-ordering
-    // proof) are the newest addition on top — never a silent removal disguised as a reorder. The
-    // Staging/Production isolation follow-up pass added no NEW test:frontend entries (its new
-    // suites live under netlify/functions/__tests__/ and scripts/__tests__/ instead).
+    // The "My List" anime-card delete-button responsive-overflow fix's own new suite
+    // (discover-card-actions-layout.test.js — proves the min-w-0/flex-wrap layout fix and that
+    // status/notify/remove functionality is unchanged) is the newest addition on top — never a
+    // silent removal disguised as a reorder.
     assert.deepStrictEqual(frontendCmds, [
       ...priorFrontendCmds,
-      "node js/__tests__/environment.test.js",
-      "node js/__tests__/push-notifications.test.js",
+      "node js/__tests__/discover-card-actions-layout.test.js",
     ]);
 
     assert.strictEqual(pkg.scripts.test, "npm run test:functions && npm run test:frontend");
