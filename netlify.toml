@@ -89,23 +89,27 @@
 
 [functions]
   node_bundler = "esbuild"
-  # Root cause of the "config/staging-not-configured" production incident: the esbuild bundler
-  # only follows this codebase's require()/import graph — it does NOT perform the runtime
-  # fs.readFileSync() static-analysis Netlify's default (non-esbuild) bundler does, so a file
-  # that's only ever read at runtime via fs (never require()'d as a module) is not guaranteed to
-  # be copied into a deployed Function's bundle just because it exists on disk when the build
-  # finishes. netlify/functions/lib/build-context.js and lib/deploy-origin.js both read exactly
-  # such a file (build-context.generated.json / deploy-origin.generated.json — see
-  # scripts/generate-function-context.js / scripts/generate-deploy-origin.js) — without this
-  # declaration, a Function could cold-start with that file simply absent, in which case
-  # readGeneratedBuildContext() catches the read failure and returns an all-null context, which
-  # then fails the deploy-context policy (by design — see lib/firebase-admin.js's
-  # enforceDeployContextPolicy(), which never treats "unknown" as safe). This explicit
-  # `included_files` entry — Netlify's own documented fix for esbuild + runtime file reads —
-  # removes the dependency on any bundler auto-detection heuristic entirely. Scoped to the
-  # `lib/` subdirectory specifically (not all of netlify/functions/) so no Function source file
-  # is ever redundantly duplicated into its own bundle.
-  included_files = ["netlify/functions/lib/*.generated.json"]
+  # No `included_files` here on purpose — an earlier fix attempt added one for
+  # netlify/functions/lib/*.generated.json (build-context.generated.json / deploy-origin.
+  # generated.json, written by scripts/generate-function-context.js / generate-deploy-origin.js)
+  # and it did NOT resolve the "config/unknown-deploy-context" production incident on the staging
+  # branch deploy. Verified against the real Netlify Function packaging mechanism
+  # (@netlify/zip-it-and-ship-it + esbuild), not assumed: included_files DOES correctly copy a
+  # file into the deployed archive, but it preserves that file's ORIGINAL relative path
+  # (netlify/functions/lib/...). esbuild bundles an entry point like netlify/functions/anilist.js
+  # into a single output file that keeps the ENTRY file's own path inside the archive
+  # (netlify/functions/anilist.js) — but every module it required gets INLINED into that same
+  # physical file, so `__dirname` inside the bundle reflects the bundle's own location
+  # (netlify/functions/), one directory ABOVE where the included JSON actually landed
+  # (netlify/functions/lib/). A `path.join(__dirname, "...")`-based fs read was therefore always
+  # looking one directory too high, regardless of included_files. The real fix (see
+  # netlify/functions/lib/build-context.js's and lib/deploy-origin.js's header comments) is a
+  # literal, statically-analyzable `require("./x.generated.json")` in each of those two files —
+  # esbuild inlines the parsed JSON directly into the bundle at build time, so there is no runtime
+  # file path left to get wrong, and no included_files entry is needed for it at all (confirmed by
+  # re-packaging with zip-it-and-ship-it and no included_files config: the resulting zip contains
+  # no .generated.json files whatsoever, and the packaged handler correctly resolves the staging
+  # project id purely from the inlined bundle data).
 
 # --- Phase 4: scheduled airing-reminder delivery ---
 # Netlify Scheduled Functions (https://docs.netlify.com/functions/scheduled-functions/) —

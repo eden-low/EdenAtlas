@@ -329,8 +329,14 @@ async function run() {
     assert.strictEqual(pkg.scripts["test:generate-build-info"], "node scripts/__tests__/generate-build-info.test.js");
     assert.strictEqual(
       pkg.scripts["test:all"],
-      "npm run test && npm run test:firestore-rules && npm run test:tailwind-migration && npm run test:generate-build-info"
+      "npm run test && npm run test:firestore-rules && npm run test:tailwind-migration && npm run test:generate-build-info && npm run test:staging-packaging"
     );
+    // test:staging-packaging is a real, heavy Netlify Function-packaging test (real esbuild via
+    // @netlify/zip-it-and-ship-it) — deliberately kept OUT of `test`/`test:functions`, the same
+    // way test:firestore-rules (a real Firestore Emulator, needing a JDK) is kept out, so the
+    // fast/dependency-free `npm test` invariant this file's own history repeatedly documents stays
+    // true for anyone/any CI without that heavier tooling installed.
+    assert.strictEqual(pkg.scripts["test:staging-packaging"], "node netlify/functions/__tests__/staging-packaging.test.js");
   });
 
   await test(".gitignore ignores tailwind.generated.css without disturbing existing entries", () => {
