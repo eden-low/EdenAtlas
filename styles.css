@@ -637,14 +637,50 @@ body.login-bg {
 /* Career's "Print / Save PDF" (resume.html) prints the page itself as a professional A4 resume:
    every piece of app chrome and owner-only control is hidden, the dark glass cards flatten to
    plain white/black typography with ruled section headings, and individual entries never split
-   across a page break. The generic hide-list also covers every other page's stray print. */
+   across a page break. The generic hide-list also covers every other page's stray print.
+   ---------------------------------------------------------------------------------------------
+   Print-QA follow-up (recruiter PDF hardening): manual QA against a real Chrome print-to-PDF
+   export found 7 real defects, root-caused and fixed as noted at each rule below:
+     1. 4 pages of excessive blank space  -> body's `min-h-screen` (min-height:100vh) Tailwind
+        utility was never neutralized for print; Chrome resolves vh against a tall reference
+        surface during PDF generation and pads the page out with blank space/an extra page. Fixed
+        by forcing height:auto/min-height:0 on html+body below.
+     2. The candidate name is clipped/covered at the top of page 1, and
+     3. the non-Production environment banner (js/environment.js's #eden-env-banner) prints
+        -> that banner is `position:fixed;top:0` set via inline style.cssText (not a class), so it
+        was never caught by the existing `.fixed{display:none}` rule and Chrome repeats a
+        position:fixed element on every printed page, sitting on top of the page-1 letterhead.
+        Fixed by hiding it by ID below.
+     4. Netlify's Deploy-Preview toolbar/drawer appearing in the PDF -> best-effort selectors
+        added below, but documented as unreliable: that UI is injected by Netlify's own
+        edge/build layer, not by any file in this repository, so this page's CSS cannot
+        guarantee control over markup this app never authored. Generate the verification PDF
+        from a non-Deploy-Preview URL (Production or a local build) instead.
+     5. Browser-injected headers/footers (URL, date, page numbers) in the PDF -> not fixable via
+        CSS at all; this is a Chrome print-dialog setting. Disable "Headers and footers" in
+        Chrome's print dialog and use Chrome's own "Save as PDF" destination, not the Windows
+        "Microsoft Print to PDF" driver (see point 7).
+     6. Empty Certificates/Awards sections wasting space -> hidden outright via :has() below,
+        keyed off the exact empty-state <p> career.js already toggles hidden/visible — no JS
+        change needed. Experience/Projects get the same treatment for robustness even though
+        they always have fallback content today (js/resume-data.js), since a future
+        CMS-populated-then-emptied edge case should degrade the same way.
+     7. The exported PDF had no extractable text (ATS-unsafe) -> `.neon-border-purple` sets BOTH
+        `backdrop-filter` and the separate `-webkit-backdrop-filter` property; the prior print
+        rule only neutralized the unprefixed one, so Chrome could still rasterize that
+        blur-composited layer (and any text stacked on it) into a flattened image during PDF
+        export — a known Chromium print/PDF behavior for filtered/composited layers. Fixed by
+        also neutralizing -webkit-backdrop-filter (plus filter/transform defensively) across
+        every #career-main descendant, not just <section> elements, below. */
 @media print {
   @page {
     size: A4;
     margin: 12mm;
   }
 
-  /* App chrome, owner controls, buttons, modals — nothing interactive belongs on paper */
+  /* App chrome, owner controls, buttons, modals — nothing interactive belongs on paper.
+     #eden-env-banner (js/environment.js's non-Production banner) is styled via inline
+     style.cssText, not a class, so it needs its own selector — see fix note 2/3 above. */
   #eden-sidebar,
   #mobile-topbar,
   #mobile-bottomnav,
@@ -653,6 +689,7 @@ body.login-bg {
   #quickadd-sheet-overlay,
   #global-search-overlay,
   #eden-splash,
+  #eden-env-banner,
   #resume-public-topbar,
   #career-visibility-card,
   #auth-control,
@@ -666,10 +703,30 @@ body.login-bg {
     display: none !important;
   }
 
+  /* Best-effort only — see fix note 4 above. Netlify's Deploy-Preview toolbar is injected
+     outside this repository's own build output; these selectors catch common patterns in case
+     they happen to apply, but generating the verification PDF from a non-Deploy-Preview URL is
+     the reliable fix, not this rule. */
+  netlify-toolbar,
+  #netlify-toolbar,
+  [id*="netlify-toolbar" i],
+  [class*="netlify-toolbar" i],
+  [data-netlify-toolbar] {
+    display: none !important;
+  }
+
   /* White page — kill the html::before logo watermark and the .grid-bg ambient glow */
   html::before {
     display: none !important;
     animation: none !important;
+  }
+  /* Fix note 1 above: body's min-h-screen (min-height:100vh) must never survive into print —
+     height:auto/min-height:0 lets the page box size itself to the actual content instead of a
+     tall on-screen viewport reference, which was the root cause of the extra blank page(s). */
+  html,
+  body {
+    height: auto !important;
+    min-height: 0 !important;
   }
   body {
     padding: 0 !important;
@@ -690,22 +747,40 @@ body.login-bg {
     transition: none !important;
   }
 
+  /* Fix note 7 above: neutralize every rasterization-prone effect on every résumé descendant,
+     not just the outer <section> — -webkit-backdrop-filter is a separate property from
+     backdrop-filter and was the actual leftover cause of Chrome flattening text to an
+     unselectable image. filter/transform are reset too as defense-in-depth (nothing in the
+     résumé's own rest-state markup currently sets either, but :hover/:active utilities exist
+     sitewide and must never leak into a static PDF export). */
+  #career-main,
+  #career-main * {
+    filter: none !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+    transform: none !important;
+  }
+
+  /* Loading placeholders must never reach paper if a print is triggered mid-fetch */
+  #career-main .skeleton {
+    display: none !important;
+  }
+
   /* Sections flatten from glass cards to plain resume blocks with a ruled heading… */
   #career-main section {
     background: transparent !important;
     border: none !important;
     box-shadow: none !important;
-    backdrop-filter: none !important;
     border-radius: 0 !important;
     padding: 0 !important;
-    margin: 0 0 14pt !important;
+    margin: 0 0 8pt !important;
   }
   #career-main section h1 {
     color: #000 !important;
     font-size: 13pt !important;
     border-bottom: 1.5px solid #999;
-    padding-bottom: 3pt;
-    margin-bottom: 6pt;
+    padding-bottom: 2pt;
+    margin-bottom: 5pt;
     break-after: avoid;
     page-break-after: avoid;
   }
@@ -716,6 +791,53 @@ body.login-bg {
     padding-bottom: 0;
   }
 
+  /* Fix note 6 above: a genuinely empty Certificates/Awards/Experience/Projects section (its
+     own -empty <p> visible, i.e. NOT carrying .hidden) is dropped outright rather than printing
+     an empty heading + placeholder sentence. Keyed off the exact toggle career.js already
+     performs (emptyEl.classList.toggle("hidden", list.length > 0)) — no JS change needed. */
+  #experience:has(#experience-empty:not(.hidden)),
+  #projects:has(#projects-empty:not(.hidden)),
+  #certificates:has(#certificates-empty:not(.hidden)),
+  #inventory:has(#awards-empty:not(.hidden)) {
+    display: none !important;
+  }
+
+  /* Fix note 1 above (continued): collapse the screen-only mt-*/space-y-* rhythm — generous on
+     a dark glass card, excessive once every section's own padding is already stripped to 0 —
+     down to a tight, still-legible print gap. Scoped to #career-main only; screen layout and
+     every other page's own print rendering are unaffected. */
+  #career-main .mt-8 {
+    margin-top: 6pt !important;
+  }
+  #career-main .mt-6,
+  #career-main .mt-5 {
+    margin-top: 4pt !important;
+  }
+  #career-main .mt-4,
+  #career-main .mt-3 {
+    margin-top: 3pt !important;
+  }
+  /* Tailwind's space-y-* utility sets margin-top via this exact child-combinator shape on each
+     non-first child — redeclared here (same selector shape Tailwind itself emits) scoped to the
+     named list containers so it wins on specificity+!important regardless of the space-y-N value
+     used, without having to touch every individual child element. */
+  #education-list > :not([hidden]) ~ :not([hidden]),
+  #experience-list > :not([hidden]) ~ :not([hidden]),
+  #leadership-list > :not([hidden]) ~ :not([hidden]),
+  #skills-list > :not([hidden]) ~ :not([hidden]) {
+    margin-top: 4pt !important;
+  }
+  /* Each skills group row (label + pills) is `flex-col sm:flex-row` on screen — whether the
+     sm: breakpoint activates during print depends on the printed page's content width versus
+     Tailwind's breakpoint, which is fragile to rely on. Force the compact row layout explicitly
+     for print regardless of that, with a tighter gap than the screen's gap-2 sm:gap-4. */
+  #skills-list > div {
+    display: flex !important;
+    flex-direction: row !important;
+    align-items: baseline !important;
+    gap: 6pt !important;
+  }
+
   /* Inner entry cards lose the dark chip fill, keep a light separator */
   #career-main .bg-darkBg\/60 {
     background: transparent !important;
@@ -723,7 +845,7 @@ body.login-bg {
     border-bottom: 1px solid #ddd !important;
     border-radius: 0 !important;
     box-shadow: none !important;
-    padding: 6pt 0 !important;
+    padding: 4pt 0 !important;
   }
 
   /* Dark-theme text utilities -> print-legible ink; links stay visible as underlined text */
@@ -752,7 +874,10 @@ body.login-bg {
     color: #333 !important;
   }
 
-  /* Keep each entry intact across page breaks (sections themselves may still flow) */
+  /* Keep each entry intact across a page break (sections themselves may still flow — deliberately
+     NOT applied at the section level, which would risk forcing a whole large section onto a new
+     page and reintroducing the blank-space problem this pass fixed). avoid-page is the modern,
+     print-specific value; page-break-inside stays as the legacy fallback for older engines. */
   #education .bg-darkBg\/60,
   #events .bg-darkBg\/60,
   #events .divide-y > div,
@@ -761,7 +886,7 @@ body.login-bg {
   #certificates-list > div,
   #awards-list > div,
   #skills .flex {
-    break-inside: avoid;
+    break-inside: avoid-page;
     page-break-inside: avoid;
   }
 
@@ -776,7 +901,14 @@ body.login-bg {
   #awards-list > div {
     margin-bottom: 6pt;
   }
+  /* Drop cover images (career.js's projectCard() real-image path), the avatar placeholder, AND
+     the no-cover-image PLACEHOLDER (an icon-only <div class="w-full h-36 ..."> — not an <img>,
+     so it was never caught by an img-only selector) — a fixed h-36 (144px) empty box per card is
+     exactly the "fixed height wasting print space" this pass was told to remove. Matched by an
+     attribute-substring selector on the literal h-36 utility class, the same technique
+     html[data-theme="light"]'s own overrides already use elsewhere in this file. */
   #projects-list img,
+  #projects-list [class*="h-36"],
   #profile .w-32 {
     display: none !important;
   }
