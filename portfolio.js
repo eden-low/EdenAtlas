@@ -89,11 +89,11 @@ const SNAPSHOT = {
 const SKILLS = [
   { title: { en: "Web Development", zh: "Web 开发" }, items: ["HTML", "CSS", "JavaScript", "Firebase (Auth / Firestore / Storage)", "Responsive UI"] },
   { title: { en: "Data & Analysis", zh: "数据与分析" }, items: ["SQL", "PostgreSQL", "Data validation", "CSV / data workflows"] },
-  { title: { en: "Systems & Operations", zh: "系统与运维" }, items: ["Git / version control", "System analysis", "Workflow design", "Debugging"] },
+  { title: { en: "Systems & Operations", zh: "系统与运维" }, items: ["Git / version control", "System analysis", "Workflow design", "Debugging", "API testing", "Database migration"] },
   { title: { en: "Product & Business", zh: "产品与业务" }, items: ["Business Information Systems", "Requirements analysis", "Documentation"] },
   { title: { en: "Collaboration", zh: "协作" }, items: ["Leadership", "Cross-team coordination", "Communication"] },
 ];
-const FAMILIAR = ["TypeScript", "Vue 3", "Django REST Framework", "Redis", "Celery", "MinIO"];
+const FAMILIAR = ["TypeScript", "Vue 3", "Django REST Framework", "Redis", "Celery", "MinIO", "Playwright", "Docker"];
 
 const ABOUT = [
   {
@@ -237,7 +237,10 @@ function renderWork() {
 function experienceCard(exp) {
   const art = h("article", { class: "bg-cardBg/90 backdrop-blur-sm p-6 rounded-2xl neon-border-purple" });
   art.appendChild(h("h3", { class: "font-cyber font-bold text-base text-white", text: pick(exp.role) }));
-  const metaBits = [pick(exp.company), exp.dates, pick(exp.location)].filter(Boolean).join(" · ");
+  // exp.dates is a { en, zh } object on the shared fallback source, but a plain preformatted
+  // string on a CMS-normalized doc (see normalizeExperience) — support both.
+  const dates = typeof exp.dates === "string" ? exp.dates : pick(exp.dates);
+  const metaBits = [pick(exp.company), dates, pick(exp.location)].filter(Boolean).join(" · ");
   if (metaBits) art.appendChild(h("p", { class: "text-xs text-neonPurple font-code mt-1", text: metaBits }));
   if (exp.bullets && exp.bullets.length) {
     const ul = h("ul", { class: "mt-3 space-y-2 text-sm text-textGray leading-relaxed list-disc list-inside" });
