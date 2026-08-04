@@ -116,6 +116,115 @@ async function test(name, fn) {
     assert.ok(gitignore.includes("/js/fcm-config.generated.js"));
   });
 
+  // ---- Root-cause regression coverage: the "config/staging-not-configured" production
+  // incident on staging--edenatlas.netlify.app. Diagnosis (see netlify.toml's `[functions]
+  // included_files` comment for the full writeup): the esbuild Function bundler only follows
+  // this codebase's require()/import graph — unlike Netlify's default (non-esbuild) bundler, it
+  // does NOT statically detect a runtime `fs.readFileSync()` call and auto-include the file it
+  // reads, so build-context.generated.json (read by lib/build-context.js, never require()'d as a
+  // module) was not guaranteed to ship inside a deployed Function's bundle even though the build
+  // step correctly wrote it to disk with the right content. The generator script itself and the
+  // read-path module were both already correct — proven below by exercising them directly rather
+  // than assuming — so a missing/absent file at Function runtime is a bundling gap, not a logic
+  // bug in either of those two files. This section proves the REAL build wiring end to end (the
+  // actual generate-function-context.js generate(), the actual bytes on disk, and the actual
+  // readGeneratedBuildContext() import path every Function calls) — complementing, not
+  // replacing, assistant.test.js's "Deploy-context policy" section, which unit-tests
+  // enforceDeployContextPolicy()/resolveDeployRole() against hand-built fixtures rather than a
+  // real generator round-trip. What this suite still cannot do, absent a real Netlify bundler in
+  // this environment: prove the file ships inside an actual deployed Function .zip — the
+  // included_files structural test at the end of this section is the closest available proxy.
+  console.log("\nBuild-time staging project id — real generator + real import-path integration coverage");
+
+  const { generate: generateFunctionContext, OUT_PATH: FUNCTION_CONTEXT_OUT_PATH } =
+    require("../../../scripts/generate-function-context.js");
+  const { readGeneratedBuildContext } = require("../lib/build-context.js");
+  const { enforceDeployContextPolicy, FirebaseConfigError } = require("../lib/firebase-admin.js");
+
+  const GENERATOR_ENV_KEYS = ["CONTEXT", "BRANCH", "STAGING_FIREBASE_PROJECT_ID"];
+  function withGeneratorEnv(overrides, fn) {
+    const saved = {};
+    GENERATOR_ENV_KEYS.forEach((k) => { saved[k] = process.env[k]; delete process.env[k]; });
+    Object.assign(process.env, overrides);
+    try {
+      return fn();
+    } finally {
+      GENERATOR_ENV_KEYS.forEach((k) => {
+        if (saved[k] === undefined) delete process.env[k];
+        else process.env[k] = saved[k];
+      });
+    }
+  }
+
+  // Preserve whatever build-context.generated.json already exists on disk (e.g. left over from a
+  // real `npm run build` in this checkout) so this suite never leaves a surprising staging-shaped
+  // file behind for a later local build/deploy to accidentally pick up stale — same hygiene
+  // scripts/__tests__/generate-build-info.test.js's withEnv() already applies to env vars, applied
+  // here to a file instead.
+  const hadExistingGeneratedFile = fs.existsSync(FUNCTION_CONTEXT_OUT_PATH);
+  const existingGeneratedFileContents = hadExistingGeneratedFile
+    ? fs.readFileSync(FUNCTION_CONTEXT_OUT_PATH, "utf8")
+    : null;
+
+  try {
+    const STAGING_ENV = { CONTEXT: "branch-deploy", BRANCH: "staging", STAGING_FIREBASE_PROJECT_ID: "edenatlas-staging" };
+
+    await test("real generate-function-context.js, given the exact Netlify staging branch-deploy env (CONTEXT=branch-deploy BRANCH=staging STAGING_FIREBASE_PROJECT_ID=edenatlas-staging), writes expectedStagingProjectId to disk", () => {
+      const written = withGeneratorEnv(STAGING_ENV, () => generateFunctionContext());
+      assert.strictEqual(written.context, "branch-deploy");
+      assert.strictEqual(written.branch, "staging");
+      assert.strictEqual(written.expectedStagingProjectId, "edenatlas-staging");
+      const onDisk = JSON.parse(fs.readFileSync(FUNCTION_CONTEXT_OUT_PATH, "utf8"));
+      assert.deepStrictEqual(onDisk, { context: "branch-deploy", branch: "staging", expectedStagingProjectId: "edenatlas-staging" });
+    });
+
+    await test("the real import path (readGeneratedBuildContext — the exact function every Firebase-Admin Function calls) exposes the just-generated staging project id", () => {
+      // No require.cache invalidation needed: readGeneratedBuildContext() re-reads the file from
+      // disk on every call (see lib/build-context.js) rather than caching parsed content at
+      // require() time — this call is proof of that, not an assumption.
+      const info = readGeneratedBuildContext();
+      assert.deepStrictEqual(info, { context: "branch-deploy", branch: "staging", expectedStagingProjectId: "edenatlas-staging" });
+    });
+
+    await test("end to end: enforceDeployContextPolicy accepts the edenatlas-staging project once the real generator + real import path both round-trip it", () => {
+      const buildContext = readGeneratedBuildContext();
+      assert.doesNotThrow(() =>
+        enforceDeployContextPolicy({ resolvedProjectId: "edenatlas-staging", buildContext, env: {} })
+      );
+    });
+
+    await test("fail-closed is retained through the real generator: a staging branch-deploy with STAGING_FIREBASE_PROJECT_ID unset still writes expectedStagingProjectId:null, and enforceDeployContextPolicy still rejects it (config/staging-not-configured)", () => {
+      const written = withGeneratorEnv({ CONTEXT: "branch-deploy", BRANCH: "staging" }, () => generateFunctionContext());
+      assert.strictEqual(written.expectedStagingProjectId, null);
+      const buildContext = readGeneratedBuildContext();
+      assert.strictEqual(buildContext.expectedStagingProjectId, null);
+      assert.throws(
+        () => enforceDeployContextPolicy({ resolvedProjectId: "edenatlas-staging", buildContext, env: {} }),
+        (err) => err instanceof FirebaseConfigError && err.code === "config/staging-not-configured"
+      );
+    });
+  } finally {
+    if (hadExistingGeneratedFile) {
+      fs.writeFileSync(FUNCTION_CONTEXT_OUT_PATH, existingGeneratedFileContents, "utf8");
+    } else if (fs.existsSync(FUNCTION_CONTEXT_OUT_PATH)) {
+      fs.unlinkSync(FUNCTION_CONTEXT_OUT_PATH);
+    }
+  }
+
+  await test("netlify.toml: [functions] declares included_files covering netlify/functions/lib/*.generated.json — the actual bundling fix, so build-context.generated.json/deploy-origin.generated.json are guaranteed to ship inside every deployed Function's esbuild bundle instead of depending on bundler auto-detection", () => {
+    const toml = fs.readFileSync(path.join(ROOT, "netlify.toml"), "utf8");
+    const functionsBlockMatch = /\[functions\]([\s\S]*?)(?=\n\[|$)/.exec(toml);
+    assert.ok(functionsBlockMatch, "netlify.toml has no [functions] block");
+    const block = functionsBlockMatch[1];
+    assert.ok(/node_bundler\s*=\s*"esbuild"/.test(block), 'expected node_bundler = "esbuild" inside [functions]');
+    const includedFilesMatch = /included_files\s*=\s*\[([^\]]*)\]/.exec(block);
+    assert.ok(includedFilesMatch, "[functions] does not declare included_files at all");
+    assert.ok(
+      /netlify\/functions\/lib\/\*\.generated\.json/.test(includedFilesMatch[1]),
+      `included_files does not cover netlify/functions/lib/*.generated.json — found: ${includedFilesMatch[1]}`
+    );
+  });
+
   console.log(`\n${pass} passed, ${fail} failed`);
   if (fail > 0) {
     failures.forEach(({ name, err }) => console.error(`\n[FAILED] ${name}\n${err.stack || err}`));

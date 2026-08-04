@@ -33,14 +33,17 @@
 
 # `npm run build` runs `build:css` (compiles the pinned local Tailwind v3.4.19 build from
 # tailwind.config.js/tailwind-input.css into tailwind.generated.css), then
-# scripts/generate-deploy-origin.js (snapshots DEPLOY_PRIME_URL/DEPLOY_URL — build-step-only
-# variables, unavailable to a Function at runtime — into a small generated file
-# netlify/functions/anilist.js reads at cold start, so a Deploy Preview's exact origin can be
-# allowed through that Function's CORS check; see that script's header comment), then
-# scripts/build-site.js — see package.json's "build" script. Netlify invokes that one repository
-# script rather than duplicating the Tailwind CLI invocation here. This ordering matters: Netlify
-# bundles Functions with esbuild only AFTER this whole build command finishes, so the generated
-# file already exists on disk by the time netlify/functions/anilist.js is bundled.
+# scripts/generate-deploy-origin.js and scripts/generate-function-context.js (each snapshot
+# build-step-only Netlify variables — DEPLOY_PRIME_URL/DEPLOY_URL, and CONTEXT/BRANCH/
+# STAGING_FIREBASE_PROJECT_ID respectively — into small generated JSON files under
+# netlify/functions/lib/ that the Functions read at cold start, since none of these variables are
+# available inside a deployed Function's own process.env; see each script's header comment), then
+# scripts/generate-build-info.js (the browser-side twin snapshot) and scripts/build-site.js — see
+# package.json's "build" script. Netlify invokes that one repository script rather than
+# duplicating the Tailwind CLI invocation here. This ordering matters: Netlify bundles Functions
+# with esbuild only AFTER this whole build command finishes, so both generated files already
+# exist on disk by the time any Function is bundled — see `included_files` below for why they
+# also need to be explicitly declared, not just present on disk in time.
 [build]
   command = "npm run build"
   publish = "site"
@@ -86,6 +89,23 @@
 
 [functions]
   node_bundler = "esbuild"
+  # Root cause of the "config/staging-not-configured" production incident: the esbuild bundler
+  # only follows this codebase's require()/import graph — it does NOT perform the runtime
+  # fs.readFileSync() static-analysis Netlify's default (non-esbuild) bundler does, so a file
+  # that's only ever read at runtime via fs (never require()'d as a module) is not guaranteed to
+  # be copied into a deployed Function's bundle just because it exists on disk when the build
+  # finishes. netlify/functions/lib/build-context.js and lib/deploy-origin.js both read exactly
+  # such a file (build-context.generated.json / deploy-origin.generated.json — see
+  # scripts/generate-function-context.js / scripts/generate-deploy-origin.js) — without this
+  # declaration, a Function could cold-start with that file simply absent, in which case
+  # readGeneratedBuildContext() catches the read failure and returns an all-null context, which
+  # then fails the deploy-context policy (by design — see lib/firebase-admin.js's
+  # enforceDeployContextPolicy(), which never treats "unknown" as safe). This explicit
+  # `included_files` entry — Netlify's own documented fix for esbuild + runtime file reads —
+  # removes the dependency on any bundler auto-detection heuristic entirely. Scoped to the
+  # `lib/` subdirectory specifically (not all of netlify/functions/) so no Function source file
+  # is ever redundantly duplicated into its own bundle.
+  included_files = ["netlify/functions/lib/*.generated.json"]
 
 # --- Phase 4: scheduled airing-reminder delivery ---
 # Netlify Scheduled Functions (https://docs.netlify.com/functions/scheduled-functions/) —
