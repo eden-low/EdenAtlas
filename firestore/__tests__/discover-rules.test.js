@@ -595,6 +595,22 @@ async function run() {
       await assertSucceeds(deleteDoc(doc(db, "push_subscriptions", id)));
     });
 
+    // REGRESSION (root cause of the reported "开启提醒 fails with permission-denied" bug):
+    // js/push-notifications.js's subscribeThisDevice() calls getDoc(ref) on the device's
+    // deterministic push_subscriptions doc BEFORE deciding whether to setDoc (new device) or
+    // updateDoc (already-registered device) — this is the very first Firestore call a first-time
+    // subscribe makes. For a brand-new device, that doc does not exist yet, so `resource` is null
+    // when the `read`/`get` rule evaluates `resource.data.uid` — dereferencing a property of a
+    // null resource is a rules evaluation error, which Firestore reports to the client identically
+    // to a real permission denial (PERMISSION_DENIED), never NOT_FOUND. This never showed up in
+    // "Owner can read ... own push_subscriptions doc" above because that test seeds the doc first.
+    await test("Owner reading their OWN not-yet-existing push_subscriptions doc must not fail closed (first-time subscribe)", async () => {
+      const id = subId(OWNER_UID, "hash-brand-new-device");
+      const db = ownerCtx().firestore();
+      const snap = await getDoc(doc(db, "push_subscriptions", id));
+      assert.strictEqual(snap.exists(), false, "expected a clean non-existent read, not a thrown/denied error");
+    });
+
     // ---- Phase 4: anime_notification_log (server-Admin-write-only dedup log) ----
 
     await test("anime_notification_log: no client (Owner included) can ever create/update/delete — default-deny, no rule grants it", async () => {

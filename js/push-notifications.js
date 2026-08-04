@@ -77,6 +77,18 @@ function subscriptionDocId(uid, tokenHash) {
   return `${uid}_${tokenHash}`;
 }
 
+// Safe, stage-labeled failure logging — never the raw token, VAPID key, or any Firestore
+// document payload, only a short fixed stage label (which write/read step failed) plus the
+// error's own `code`/`message` (Firestore/FCM SDK error codes like "permission-denied" or
+// "messaging/token-subscribe-failed" are diagnostic strings, never credentials). Mirrors the
+// `stage=... code=...` convention netlify/functions/assistant.js's logAuthStageFailure() already
+// established for the same "identify which step failed without leaking secrets" requirement.
+function logStageFailure(action, stage, err) {
+  const code = (err && (err.code || err.message)) || "unknown";
+  console.error(`[push-notifications] ${action} failed: stage=${stage} code=${code}`);
+  return { stage, code };
+}
+
 // Every followed_anime uid belongs to the single app Owner (Discover is Owner-only end to end —
 // see CLAUDE.md), so "my subscriptions" is always exactly this signed-in user's own docs, scoped
 // the same isOwner()-gated way followed_anime itself is.
@@ -105,17 +117,36 @@ export async function subscribeThisDevice() {
   if (permission === "denied") return { ok: false, reason: SUBSCRIBE_REASON.PERMISSION_DENIED };
   if (permission !== "granted") return { ok: false, reason: SUBSCRIBE_REASON.PERMISSION_DISMISSED };
 
+  let token;
   try {
     const { getMessaging, getToken } = await loadMessagingModule();
     const registration = await navigator.serviceWorker.ready;
     const messaging = getMessaging(app);
     const vapidKey = getBuildInfo().vapidPublicKey;
-    const token = await getToken(messaging, { vapidKey, serviceWorkerRegistration: registration });
-    if (!token) return { ok: false, reason: SUBSCRIBE_REASON.TOKEN_FAILED };
+    token = await getToken(messaging, { vapidKey, serviceWorkerRegistration: registration });
+  } catch (err) {
+    const { stage, code } = logStageFailure("subscribe", "fcm_get_token", err);
+    return { ok: false, reason: SUBSCRIBE_REASON.ERROR, stage, code };
+  }
+  if (!token) return { ok: false, reason: SUBSCRIBE_REASON.TOKEN_FAILED, stage: "fcm_get_token" };
 
-    const tokenHash = await sha256Hex(token);
-    const ref = doc(db, "push_subscriptions", subscriptionDocId(user.uid, tokenHash));
-    const existing = await getDoc(ref);
+  const tokenHash = await sha256Hex(token);
+  const ref = doc(db, "push_subscriptions", subscriptionDocId(user.uid, tokenHash));
+
+  // This existence check is itself a Firestore read: on the very first subscribe for a device,
+  // the doc doesn't exist yet. firestore.rules' push_subscriptions read rule must tolerate a
+  // not-yet-existing doc for the Owner's own would-be doc ID (see the rule's own comment) — this
+  // stage is kept isolated from create/update so a regression there is immediately identifiable
+  // from the logged stage, rather than reading as an opaque "subscribe failed."
+  let existing;
+  try {
+    existing = await getDoc(ref);
+  } catch (err) {
+    const { stage, code } = logStageFailure("subscribe", "check_existing_subscription", err);
+    return { ok: false, reason: SUBSCRIBE_REASON.ERROR, stage, code };
+  }
+
+  try {
     if (existing.exists()) {
       // Same device/token already registered — only the "last seen" timestamp needs refreshing;
       // uid/tokenHash/token/platform/createdAt are all immutable per firestore.rules, so this is
@@ -131,11 +162,12 @@ export async function subscribeThisDevice() {
         updatedAt: serverTimestamp(),
       });
     }
-    return { ok: true, reason: SUBSCRIBE_REASON.OK, tokenHash };
   } catch (err) {
-    console.error("[push-notifications] subscribe failed:", err && (err.code || err.message) || err);
-    return { ok: false, reason: SUBSCRIBE_REASON.ERROR };
+    const stageName = existing.exists() ? "refresh_existing_subscription" : "create_subscription";
+    const { stage, code } = logStageFailure("subscribe", stageName, err);
+    return { ok: false, reason: SUBSCRIBE_REASON.ERROR, stage, code };
   }
+  return { ok: true, reason: SUBSCRIBE_REASON.OK, tokenHash };
 }
 
 // Unsubscribe THIS device/browser only — deletes its local FCM token registration and its own
@@ -160,13 +192,13 @@ export async function unsubscribeThisDevice() {
         }
         await deleteToken(messaging);
       } catch (innerErr) {
-        console.error("[push-notifications] local token cleanup failed (continuing):", innerErr);
+        logStageFailure("unsubscribe", "local_token_cleanup (continuing)", innerErr);
       }
     }
     return { ok: true, reason: SUBSCRIBE_REASON.OK };
   } catch (err) {
-    console.error("[push-notifications] unsubscribe failed:", err && (err.code || err.message) || err);
-    return { ok: false, reason: SUBSCRIBE_REASON.ERROR };
+    const { stage, code } = logStageFailure("unsubscribe", "unsubscribe_unexpected", err);
+    return { ok: false, reason: SUBSCRIBE_REASON.ERROR, stage, code };
   }
 }
 

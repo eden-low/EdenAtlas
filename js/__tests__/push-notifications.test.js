@@ -202,6 +202,184 @@ function runInBrowserLikeSandbox(src, browserGlobals = {}) {
     assert.ok(used.length >= 5, "expected subscribeThisDevice to reference multiple distinct reasons");
   });
 
+  // ---- End-to-end: the REAL subscribeThisDevice() against a fake in-memory Firestore ----
+  //
+  // Regression coverage for the reported "开启提醒 (Enable reminders) fails with permission-denied"
+  // bug: subscribeThisDevice() calls getDoc(ref) to decide create-vs-update BEFORE ever writing —
+  // on a brand-new device that doc doesn't exist yet, and firestore.rules' push_subscriptions read
+  // rule used to dereference resource.data.uid on a null resource (a rules evaluation error the
+  // client sees as PERMISSION_DENIED, not NOT_FOUND). firestore/__tests__/discover-rules.test.js
+  // proves the fixed RULE tolerates this against the real Rules engine; these tests instead run
+  // the REAL, SHIPPED subscribeThisDevice() function (extracted from this file's own source, not a
+  // hand-duplicated reimplementation) against a fake Firestore, to prove the CLIENT's actual
+  // create/update payloads are shaped exactly the way firestore.rules' push_subscriptions
+  // create/update rules require — the "same payload builder used by production code" the fix
+  // brief asked for, since there is no separate payload-building helper to import: the object
+  // literals inside subscribeThisDevice() ARE the payload builder.
+
+  function extractEnumSource(name) {
+    const re = new RegExp(`export const ${name} = Object\\.freeze\\(\\{[\\s\\S]*?\\}\\);`);
+    const m = re.exec(SOURCE);
+    assert.ok(m, `could not find ${name} in push-notifications.js`);
+    return m[0].replace(/^export /, "");
+  }
+
+  // A minimal fake Firestore: enough to exercise getDoc/setDoc/updateDoc call sequencing and
+  // capture the exact payload object each call receives, without depending on a real SDK or
+  // network. Not a rules engine — the real Rules engine coverage lives in
+  // firestore/__tests__/discover-rules.test.js; this proves what the CLIENT sends, not what the
+  // server would accept.
+  function makeFakeFirestore(seed = {}) {
+    const store = new Map(Object.entries(seed));
+    const calls = [];
+    return {
+      store,
+      calls,
+      doc: (_db, collectionName, id) => ({ path: `${collectionName}/${id}` }),
+      getDoc: async (ref) => {
+        calls.push({ type: "get", path: ref.path });
+        const data = store.get(ref.path);
+        return { exists: () => data !== undefined, data: () => data };
+      },
+      setDoc: async (ref, data) => {
+        calls.push({ type: "set", path: ref.path, data });
+        store.set(ref.path, { ...data });
+      },
+      updateDoc: async (ref, data) => {
+        calls.push({ type: "update", path: ref.path, data });
+        if (!store.has(ref.path)) throw Object.assign(new Error("no such document"), { code: "not-found" });
+        store.set(ref.path, { ...store.get(ref.path), ...data });
+      },
+      serverTimestamp: () => "__SERVER_TIMESTAMP__",
+    };
+  }
+
+  const FAKE_TOKEN = "fake-fcm-token-never-a-real-credential";
+  const FAKE_UID = "owner-uid-real-fn-test";
+
+  function buildSubscribeSandbox({ store = {}, getDocOverride, setDocOverride, updateDocOverride } = {}) {
+    const enumSrc = extractEnumSource("SUBSCRIBE_REASON");
+    const combinedSrc = [
+      enumSrc,
+      extractFunctionSource("sha256Hex"),
+      extractFunctionSource("subscriptionDocId"),
+      extractFunctionSource("logStageFailure"),
+      extractFunctionSource("subscribeThisDevice"),
+    ].join("\n\n");
+
+    const fakeDb = makeFakeFirestore(store);
+    const consoleErrors = [];
+    const globals = {
+      auth: { currentUser: { uid: FAKE_UID, email: "jjun8647@gmail.com" } },
+      isOwner: (user) => !!user && user.email === "jjun8647@gmail.com",
+      isStagingWritesUnsafe: () => false,
+      isPushApiSupported: () => true,
+      isPushConfigured: () => true,
+      getBuildInfo: () => ({ vapidPublicKey: "fake-vapid-public-key" }),
+      Notification: { requestPermission: async () => "granted" },
+      navigator: { serviceWorker: { ready: Promise.resolve({}) } },
+      app: {},
+      db: {},
+      loadMessagingModule: async () => ({
+        getMessaging: () => ({}),
+        getToken: async () => FAKE_TOKEN,
+      }),
+      doc: fakeDb.doc,
+      getDoc: getDocOverride || fakeDb.getDoc,
+      setDoc: setDocOverride || fakeDb.setDoc,
+      updateDoc: updateDocOverride || fakeDb.updateDoc,
+      serverTimestamp: fakeDb.serverTimestamp,
+      console: { ...console, error: (...args) => { consoleErrors.push(args.join(" ")); } },
+    };
+    const sandbox = runInSandbox(`${combinedSrc}\nglobalThis.__run__ = subscribeThisDevice;`, globals);
+    return { sandbox, fakeDb, consoleErrors };
+  }
+
+  await test("subscribeThisDevice() first-time subscribe: getDoc-then-setDoc, and the setDoc payload matches firestore.rules' create allowlist exactly", async () => {
+    const { sandbox, fakeDb } = buildSubscribeSandbox();
+    const result = await sandbox.__run__();
+
+    assert.deepStrictEqual(fakeDb.calls.map((c) => c.type), ["get", "set"], "expected exactly one getDoc then one setDoc");
+    const setCall = fakeDb.calls[1];
+    const ALLOWED_CREATE_KEYS = ["uid", "tokenHash", "token", "platform", "createdAt", "updatedAt"];
+    assert.deepStrictEqual(
+      Object.keys(setCall.data).sort(),
+      [...ALLOWED_CREATE_KEYS].sort(),
+      "setDoc payload must be exactly firestore.rules' push_subscriptions create keys().hasOnly(...) allowlist"
+    );
+    assert.strictEqual(setCall.data.uid, FAKE_UID);
+    assert.strictEqual(setCall.data.platform, "web");
+    assert.strictEqual(typeof setCall.data.tokenHash, "string");
+    assert.ok(setCall.data.tokenHash.length > 0);
+    assert.strictEqual(setCall.data.token, FAKE_TOKEN);
+    assert.strictEqual(setCall.data.createdAt, "__SERVER_TIMESTAMP__");
+    assert.strictEqual(setCall.data.updatedAt, "__SERVER_TIMESTAMP__");
+    assert.strictEqual(setCall.path, `push_subscriptions/${FAKE_UID}_${setCall.data.tokenHash}`, "doc ID must be uid_tokenHash, matching the rule's id == request.auth.uid + '_' + tokenHash check");
+    assert.strictEqual(result.ok, true);
+    assert.strictEqual(result.reason, "ok");
+  });
+
+  await test("subscribeThisDevice() on an already-registered device: getDoc-then-updateDoc, and the update payload touches ONLY updatedAt (every other field is immutable per firestore.rules)", async () => {
+    // Pre-derive the same deterministic id the real sha256Hex(FAKE_TOKEN) would produce, by
+    // running the create path once, then re-running subscribeThisDevice() against that seeded
+    // store — this exercises the exact same id-construction code the app uses, not a hand-picked
+    // hash.
+    const first = buildSubscribeSandbox();
+    await first.sandbox.__run__();
+    const existingPath = first.fakeDb.calls[1].path;
+    const existingData = first.fakeDb.store.get(existingPath);
+
+    const { sandbox, fakeDb } = buildSubscribeSandbox({ store: { [existingPath]: existingData } });
+    const result = await sandbox.__run__();
+
+    assert.deepStrictEqual(fakeDb.calls.map((c) => c.type), ["get", "update"], "expected exactly one getDoc then one updateDoc, never a second setDoc");
+    const updateCall = fakeDb.calls[1];
+    assert.deepStrictEqual(Object.keys(updateCall.data), ["updatedAt"], "a refresh of an already-registered device must touch ONLY updatedAt");
+    assert.strictEqual(updateCall.data.updatedAt, "__SERVER_TIMESTAMP__");
+    assert.strictEqual(result.ok, true);
+  });
+
+  await test("subscribeThisDevice(): a getDoc failure on the (possibly not-yet-existing) subscription doc is reported as stage=check_existing_subscription, never a bare opaque error", async () => {
+    const deniedErr = Object.assign(new Error("Missing or insufficient permissions."), { code: "permission-denied" });
+    const { sandbox, consoleErrors } = buildSubscribeSandbox({
+      getDocOverride: async () => { throw deniedErr; },
+    });
+    const result = await sandbox.__run__();
+    assert.strictEqual(result.ok, false);
+    assert.strictEqual(result.reason, "error");
+    assert.strictEqual(result.stage, "check_existing_subscription");
+    assert.strictEqual(result.code, "permission-denied");
+    assert.ok(consoleErrors.some((line) => line.includes("stage=check_existing_subscription") && line.includes("code=permission-denied")));
+    // The whole point of stage-labeled logging is to diagnose without leaking secrets — the raw
+    // FCM token must never appear in anything logged, on this or any other failure path below.
+    consoleErrors.forEach((line) => assert.ok(!line.includes(FAKE_TOKEN), `log line leaked the raw token: ${line}`));
+  });
+
+  await test("subscribeThisDevice(): a setDoc (create) failure is reported as stage=create_subscription; an updateDoc (refresh) failure is reported as stage=refresh_existing_subscription", async () => {
+    const err = Object.assign(new Error("Missing or insufficient permissions."), { code: "permission-denied" });
+
+    const createFailure = buildSubscribeSandbox({ setDocOverride: async () => { throw err; } });
+    const createResult = await createFailure.sandbox.__run__();
+    assert.strictEqual(createResult.stage, "create_subscription");
+    assert.strictEqual(createResult.code, "permission-denied");
+
+    const seeded = buildSubscribeSandbox();
+    await seeded.sandbox.__run__();
+    const existingPath = seeded.fakeDb.calls[1].path;
+    const existingData = seeded.fakeDb.store.get(existingPath);
+    const updateFailure = buildSubscribeSandbox({
+      store: { [existingPath]: existingData },
+      updateDocOverride: async () => { throw err; },
+    });
+    const updateResult = await updateFailure.sandbox.__run__();
+    assert.strictEqual(updateResult.stage, "refresh_existing_subscription");
+    assert.strictEqual(updateResult.code, "permission-denied");
+
+    [...createFailure.consoleErrors, ...updateFailure.consoleErrors].forEach((line) =>
+      assert.ok(!line.includes(FAKE_TOKEN), `log line leaked the raw token: ${line}`)
+    );
+  });
+
   console.log(`\n${pass} passed, ${fail} failed`);
   if (fail > 0) {
     failures.forEach(({ name, err }) => console.error(`\n[FAILED] ${name}\n${err.stack || err}`));

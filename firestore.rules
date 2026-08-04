@@ -160,7 +160,17 @@ service cloud.firestore {
     // the ID shape uniform). Strictly Owner-only, same as every other Discover collection — see
     // CLAUDE.md's "Discover is now strictly Owner-only" note.
     match /push_subscriptions/{id} {
-      allow read, delete: if isOwner() && resource.data.uid == request.auth.uid;
+      // subscribeThisDevice() (js/push-notifications.js) does a getDoc() existence check before
+      // deciding create-vs-update-only, so this rule must tolerate a not-yet-existing doc: for a
+      // brand-new device, `resource` is null, and dereferencing `resource.data` on null is a
+      // rules EVALUATION ERROR (not a clean `false`) — Firestore reports that to the client as
+      // PERMISSION_DENIED, identical to a real denial, on the very first subscribe attempt.
+      // `resource == null` short-circuits before the dereference, for both get and delete
+      // (delete of an already-gone doc must also stay a harmless no-op, not an error) — isOwner()
+      // is unchanged and still the sole gate, so this never grants access to anyone but the Owner,
+      // it only lets the Owner's own existence check on their OWN not-yet-existing doc resolve
+      // cleanly instead of erroring closed.
+      allow read, delete: if isOwner() && (resource == null || resource.data.uid == request.auth.uid);
 
       allow create: if isOwner()
         && request.resource.data.uid == request.auth.uid
