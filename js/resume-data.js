@@ -81,24 +81,28 @@ export const EXPERIENCE = [
   {
     role: { en: "Technical & Operations Intern", zh: "技术与运维实习生" },
     company: { en: "AI technology company", zh: "AI 科技公司" },
-    dates: "Jun 2026 – Present",
+    dates: { en: "Jun 2026 – Present", zh: "2026年6月 – 至今" },
     location: { en: "Malaysia", zh: "马来西亚" },
     bullets: [
       {
-        en: "Delivered workflow and interface improvements for internal AI verification and administration systems, including a dedicated review-discussion workflow and clearer worker identification.",
-        zh: "为内部 AI 核验与管理系统交付流程与界面改进，包括专门的审核讨论流程与更清晰的操作员标识。",
+        en: "Delivered production enhancements for an eKYC review platform, including a dedicated review workflow, configurable fraud analytics and improved data exports.",
+        zh: "为一个 eKYC 审核平台交付多项生产环境改进，包括专门的审核讨论流程、可配置的欺诈分析与更完善的数据导出功能。",
       },
       {
-        en: "Improved analytics reliability by replacing hard-coded category logic with configurable rules and validating consistency between APIs, dashboard totals and detailed classifications.",
-        zh: "以可配置规则替换硬编码分类逻辑，并校验 API、看板汇总与明细分类之间的一致性，提升分析可靠性。",
+        en: "Improved data reliability through classification normalization, database migration, historical-record remediation and API-to-dashboard validation.",
+        zh: "通过分类规则标准化、数据库迁移、历史记录修复，以及从 API 到看板的端到端一致性校验，提升数据可靠性。",
       },
       {
-        en: "Optimized data operations through incremental CSV synchronization, database indexing and a controlled full-refresh fallback, followed by data-integrity checks.",
-        zh: "通过增量 CSV 同步、数据库索引与可控的全量刷新兜底优化数据处理，并进行数据完整性校验。",
+        en: "Optimized large CSV synchronization using file-state tracking, incremental processing and database indexing to avoid unnecessary full reprocessing.",
+        zh: "通过文件状态跟踪、增量处理与数据库索引优化大规模 CSV 同步，避免不必要的全量重复处理。",
       },
       {
-        en: "Contributed across frontend, backend and operational workflows using TypeScript, Django-based services, Git and database validation while supporting AI annotation and dataset quality control.",
-        zh: "使用 TypeScript、基于 Django 的服务、Git 与数据库校验，横跨前端、后端与运维流程贡献，同时支持 AI 标注与数据集质量控制。",
+        en: "Developed and troubleshot AutoML and Talkbot features across Django REST Framework, Vue.js, PostgreSQL, Redis/Celery and MinIO-based workflows.",
+        zh: "在 Django REST Framework、Vue.js、PostgreSQL、Redis/Celery 与 MinIO 技术栈上开发并排查 AutoML 与聊天机器人（Talkbot）相关功能。",
+      },
+      {
+        en: "Built Playwright staging E2E tests covering authentication, dataset upload, model training, deployment and single/batch inference, and supported AI dataset annotation and quality assurance for document tamper, recapture and face-verification workflows.",
+        zh: "构建覆盖登录认证、数据集上传、模型训练、部署与单条/批量推理的 Playwright 预发布环境端到端测试，同时支持文档篡改、翻拍与人脸核验流程的 AI 数据标注与质量把控。",
       },
     ],
     caseSlug: "enterprise-ai-ops",
@@ -121,10 +125,10 @@ export const PROJECTS = [
       zh: "独立设计与开发，端到端完成整个产品。",
     },
     outcome: {
-      en: "A login-first, role-based platform (Owner / Friend / Public) with a public résumé surface, English/Chinese i18n and an installable PWA.",
-      zh: "一个登录优先、基于角色（Owner / Friend / Public）的平台，带公开简历入口、中英双语与可安装 PWA。",
+      en: "A login-first, role-based platform (Owner / Friend / Public) with a public résumé surface, English/Chinese i18n and an installable PWA. Ships through a Development → Staging → Production workflow with isolated, fail-closed Firebase environments and Netlify Functions with automated tests, and now includes an AniList- and Qwen-powered anime tracker with PWA/FCM airing reminders.",
+      zh: "一个登录优先、基于角色（Owner / Friend / Public）的平台，带公开简历入口、中英双语与可安装 PWA。产品经由开发 → 预发布 → 生产的流程发布，各环境的 Firebase 项目相互隔离并采用故障时默认拒绝（fail-closed）的安全策略，配合 Netlify Functions 与自动化测试；近期还新增了基于 AniList 与通义千问（Qwen）的追番推荐功能，并支持 PWA/FCM 推送的更新提醒。",
     },
-    tech: ["HTML/CSS/JS", "Firebase Auth", "Firestore", "Storage"],
+    tech: ["HTML/CSS/JS", "Firebase Auth", "Firestore", "Storage", "Netlify Functions"],
   },
   {
     slug: "utar-epms",
@@ -243,15 +247,26 @@ export const RESUME_SKILLS = [
   },
   {
     labelKey: "career.skills_programming",
-    items: ["HTML", "CSS", "JavaScript", "Python", "SQL"],
+    items: ["HTML", "CSS", "JavaScript", "TypeScript", "Python", "SQL"],
   },
   {
     labelKey: "career.skills_platforms",
-    items: ["Firebase Auth", "Firestore", "Firebase Storage", "GitHub Pages"],
+    items: [
+      "Firebase Auth",
+      "Firestore",
+      "Firebase Storage",
+      "GitHub Pages",
+      "Vue.js",
+      "Django REST Framework",
+      "PostgreSQL",
+      "Redis",
+      "Celery",
+      "MinIO",
+    ],
   },
   {
     labelKey: "career.skills_tools",
-    items: ["Git", "GitHub", "VS Code"],
+    items: ["Git", "GitHub", "VS Code", "Docker", "Playwright", "API Testing", "Database Migration", "E2E Testing"],
   },
   {
     labelKey: "career.skills_soft",

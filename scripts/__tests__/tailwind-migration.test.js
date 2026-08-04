@@ -319,11 +319,15 @@ async function run() {
     });
     // The "My List" anime-card delete-button responsive-overflow fix's own new suite
     // (discover-card-actions-layout.test.js — proves the min-w-0/flex-wrap layout fix and that
-    // status/notify/remove functionality is unchanged) is the newest addition on top — never a
-    // silent removal disguised as a reorder.
+    // status/notify/remove functionality is unchanged), plus the 2026 internship Résumé update's
+    // own new suite (resume-experience-dates.test.js — proves the EXPERIENCE[].dates bilingual
+    // { en, zh } shape change renders correctly in both career.js and portfolio.js and never
+    // regresses to "[object Object]"), are the newest additions on top — never a silent removal
+    // disguised as a reorder.
     assert.deepStrictEqual(frontendCmds, [
       ...priorFrontendCmds,
       "node js/__tests__/discover-card-actions-layout.test.js",
+      "node js/__tests__/resume-experience-dates.test.js",
     ]);
 
     assert.strictEqual(pkg.scripts.test, "npm run test:functions && npm run test:frontend");

@@ -333,7 +333,8 @@ const FALLBACK_EXPERIENCES = EXPERIENCE.map((e) => ({
   role_zh: e.role.zh,
   company_en: e.company.en,
   company_zh: e.company.zh,
-  datesText: e.dates,
+  datesText_en: e.dates.en,
+  datesText_zh: e.dates.zh,
   location_en: e.location.en,
   location_zh: e.location.zh,
   bullets: e.bullets,
@@ -654,9 +655,13 @@ function renderExperiences() {
     ...sorted.map((exp) => {
       const el = document.createElement("div");
       el.className = "bg-darkBg/60 border border-borderNeon rounded-xl p-5";
-      // Fallback entries carry bilingual company/location + a preformatted datesText; CMS docs use
-      // a monolingual company/location string and startDate/endDate fields.
-      const dates = esc(exp.datesText || `${exp.startDate || ""} – ${exp.endDate || "Present"}`);
+      // Fallback entries carry bilingual company/location + a bilingual datesText_en/_zh pair;
+      // CMS docs use a monolingual company/location string and startDate/endDate fields.
+      const dates = esc(
+        (exp.datesText_en || exp.datesText_zh)
+          ? bi(exp, "datesText")
+          : (exp.datesText || `${exp.startDate || ""} – ${exp.endDate || "Present"}`)
+      );
       const company = esc((exp.company_en || exp.company_zh) ? bi(exp, "company") : (exp.company || ""));
       const loc = esc((exp.location_en || exp.location_zh) ? bi(exp, "location") : (exp.location || ""));
       const skills = (exp.skills || []).map((s) => `<span class="px-2 py-0.5 rounded-full border border-borderNeon text-[10px] font-code text-textGray">${esc(s)}</span>`).join(" ");
