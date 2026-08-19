@@ -37,6 +37,16 @@ function boundedJson(value, maxChars) {
 // A single, non-retried call to Qwen's OpenAI-compatible /chat/completions endpoint. No
 // automatic retry on failure — the task explicitly requires no retries that could create
 // uncontrolled cost; a failed call surfaces as a QwenError for the caller to report once.
+//
+// `enable_thinking: false` is required, not cosmetic: DashScope's OpenAI-compatible endpoint
+// rejects a non-streaming (`stream` left unset/false — the only mode this client ever uses, no
+// call site here or in discover-ai.js ever sets `stream: true`) request with an HTTP 400 for any
+// Qwen3-generation "hybrid thinking" model (the qwen3-* family, and current qwen-plus/qwen-turbo/
+// qwen-flash snapshots) whose default is thinking-enabled — this is Alibaba's own documented
+// constraint, not a bug in this client. Neither this file nor discover-ai.js's callers ever parse
+// a `reasoning_content` field, so there is no scenario where this app wants thinking mode on;
+// setting this explicitly keeps every call compatible regardless of which exact model snapshot
+// QWEN_MODEL is configured to, rather than depending on a model's own default.
 async function callQwenChatCompletions({ baseUrl, apiKey, model, messages, tools, fetchImpl }) {
   const doFetch = fetchImpl || fetch;
   const controller = new AbortController();
@@ -52,6 +62,7 @@ async function callQwenChatCompletions({ baseUrl, apiKey, model, messages, tools
         ...(tools && tools.length ? { tools, tool_choice: "auto" } : {}),
         max_tokens: MAX_OUTPUT_TOKENS,
         temperature: TEMPERATURE,
+        enable_thinking: false,
       }),
       signal: controller.signal,
     });
