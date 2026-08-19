@@ -166,6 +166,78 @@ async function run() {
     assert.deepStrictEqual(retrievalStatus(context).resolvedDateRange, { startDate: "2026-08-01", endDate: "2026-08-31", timeZone: TIME_ZONE, resolvedFrom: "named_month" });
   });
 
+  await test("explicit Chinese August 2026 retrieval selects a Gallery-shaped Memory uploaded on 2026-08-19", async () => {
+    const augustUpload = {
+      id: "gallery-august-upload",
+      data: {
+        url: "https://private.invalid/august-photo?token=never-prompt",
+        storagePath: `gallery/${OWNER_UID}/private/dailylife/august.jpg`,
+        category: "dailylife",
+        visibility: "private",
+        featured: false,
+        caption: "event",
+        uploadedAt: ts("2026-08-19T02:37:50Z"),
+        uid: OWNER_UID,
+        collectionId: null,
+        tags: [],
+        locationName: "Kampar",
+      },
+    };
+    const db = makeMockDb({ photos: [augustUpload], journals: [], life_events: [] });
+    const message = "\u5e2e\u6211\u627e\u6211\u57282026\u5e748\u6708\u4e0a\u4f20\u7684 Memory\u3002";
+    const context = await buildAtlasAutoContext({ db, uid: OWNER_UID, scopes: ["memories"], userMessage: message, now: NOW, timeZone: TIME_ZONE });
+
+    assert.strictEqual(context.summary.retrieval.status, "matched");
+    assert.strictEqual(context.summary.retrieval.candidateCount, 1);
+    assert.strictEqual(context.summary.retrieval.selectedCount, 1);
+    assert.deepStrictEqual(context.summary.retrieval.resolvedDateRange, {
+      startDate: "2026-08-01",
+      endDate: "2026-08-31",
+      timeZone: TIME_ZONE,
+      resolvedFrom: "explicit_month",
+    });
+    assert.strictEqual(context.selectedItems[0].title, "event");
+    assert.ok(!context.serializedContext.includes("storagePath"));
+    assert.ok(!context.serializedContext.includes("private.invalid"));
+  });
+
+  await test("a deterministic matched retrieval is answered without contradictory secondary tools", async () => {
+    _resetBurstStateForTests();
+    const augustUpload = {
+      id: "gallery-august-upload",
+      data: {
+        uid: OWNER_UID,
+        caption: "event",
+        uploadedAt: ts("2026-08-19T02:37:50Z"),
+        locationName: "Kampar",
+      },
+    };
+    let qwenRequest = null;
+    const handler = createHandler(handlerDeps({
+      getDb: () => makeMockDb({ photos: [augustUpload], journals: [], life_events: [] }),
+      fetchImpl: async (_url, options) => {
+        qwenRequest = JSON.parse(options.body);
+        return {
+          ok: true,
+          status: 200,
+          text: async () => JSON.stringify({ choices: [{ message: { content: "Found the August Memory." } }] }),
+        };
+      },
+    }));
+    const response = await handler(event({
+      message: "\u5e2e\u6211\u627e\u6211\u57282026\u5e748\u6708\u4e0a\u4f20\u7684 Memory\u3002",
+      history: [],
+      scopes: ["memories", "journey"],
+    }));
+    const body = JSON.parse(response.body);
+
+    assert.strictEqual(response.statusCode, 200);
+    assert.strictEqual(body.answer, "Found the August Memory.");
+    assert.strictEqual(body.roundsUsed, 1);
+    assert.ok(qwenRequest && !Object.prototype.hasOwnProperty.call(qwenRequest, "tools"), "matched context must not offer redundant tools");
+    assert.deepStrictEqual(body.provenance.toolsUsed, []);
+  });
+
   await test("relative last-month retrieval uses stored timestamps, not model date guesses", async () => {
     const context = await buildAtlasAutoContext({ db: makeMockDb(), uid: OWNER_UID, scopes: ["journal"], userMessage: "What did I save about Alpine last month?", now: NOW, timeZone: TIME_ZONE });
     assert.strictEqual(context.selectedItems[0].title, "Alpine packing notes");

@@ -222,10 +222,16 @@ function createProvenanceTracker() {
 // assistant.js, which reads `now` once and passes it here) — every date-resolving tool call
 // during this loop sees the exact same `now`, so a multi-round conversation can never drift
 // between two different ideas of "today" mid-turn.
-async function runAgentLoop({ qwenConfig, systemPrompt, history, userMessage, serializedContext, scopes, db, uid, now, timeZone, fetchImpl }) {
+async function runAgentLoop({ qwenConfig, systemPrompt, history, userMessage, serializedContext, scopes, db, uid, now, timeZone, fetchImpl, authoritativeRetrievalMatch = false }) {
   const currentTurn = buildAtlasTurnMessage({ userMessage, serializedContext });
   const messages = [{ role: "system", content: systemPrompt }, ...history, { role: "user", content: currentTurn }];
-  const toolDefs = toolDefsForScopes(scopes);
+  // A matched retrieval_status means the server has already performed the authorized,
+  // date-aware search and placed its bounded candidates in this turn's Application Context.
+  // Offering Qwen the older text-only tools here lets a later empty tool result contradict that
+  // authoritative match (for example, search_memories cannot express an August date range).
+  // Keep the ordinary/fallback agent loop unchanged; only a proven server-side match is
+  // answered directly from its selected context.
+  const toolDefs = authoritativeRetrievalMatch ? [] : toolDefsForScopes(scopes);
   const registry = createRefRegistry();
   const provenanceTracker = createProvenanceTracker();
   const ctx = {

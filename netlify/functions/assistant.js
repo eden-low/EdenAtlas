@@ -412,6 +412,7 @@ function createHandler(deps) {
         db,
         uid,
         fetchImpl: deps.fetchImpl,
+        authoritativeRetrievalMatch: !!autoContext.summary.retrieval && autoContext.summary.retrieval.status === "matched",
       });
       return jsonResponse(
         200,
