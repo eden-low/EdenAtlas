@@ -1,6 +1,11 @@
-import { auth, db, isOwner } from "./firebase-init.js";
+import { auth, db, isOwner, isStagingWritesUnsafe } from "./firebase-init.js";
 import { t as i18nT, getLang } from "./js/i18n.js";
 import { resolveDisplayName } from "./js/identity.js";
+import {
+  isPushApiSupported, isPushConfigured, getPermissionState, fetchMySubscriptions,
+  subscribeThisDevice, unsubscribeThisDevice, disableAllNotifications, onForegroundAiringMessage,
+  SUBSCRIBE_REASON,
+} from "./js/push-notifications.js";
 import {
   onAuthStateChanged,
   signOut,
@@ -426,6 +431,13 @@ const animeModalTitle = document.getElementById("anime-modal-title");
 const animeModalClose = document.getElementById("anime-modal-close");
 const animeModalBody = document.getElementById("anime-modal-body");
 
+const notifySettingsBtn = document.getElementById("notify-settings-btn");
+const notifyModal = document.getElementById("notify-modal");
+const notifyModalBackdrop = document.getElementById("notify-modal-backdrop");
+const notifyModalPanel = document.getElementById("notify-modal-panel");
+const notifyModalClose = document.getElementById("notify-modal-close");
+const notifyModalBody = document.getElementById("notify-modal-body");
+
 const discoverToast = document.getElementById("discover-toast");
 const discoverToastText = document.getElementById("discover-toast-text");
 const discoverToastAction = document.getElementById("discover-toast-action");
@@ -440,6 +452,8 @@ let lastSearchQuery = "";
 let discoverResults = []; // last successfully loaded Discover-view results
 let discoverCache = new Map(); // subtab/search key -> results[]
 let cachedFollowed = new Map(); // anilistId -> followed_anime doc {id, ...data}
+let cachedSubscriptions = new Map(); // push_subscriptions doc id -> {id, ...data} (this account, any device)
+let notifyModalPendingFollowedId = null; // anilistId a per-card bell tap is waiting to enable, or null
 let myListLive = new Map(); // anilistId -> live sanitized AniList media (best-effort)
 let pageInitialized = false;
 
@@ -488,6 +502,19 @@ function followDocId(user, anilistId) {
   return `${user.uid}_${anilistId}`;
 }
 
+// Phase 1 safeguard #1: "Do not point writable online staging tests at Production Firestore."
+// isStagingWritesUnsafe() is only ever true on a Staging deploy that has no dedicated staging
+// Firebase project configured (see firebase-init.js) — i.e. exactly the situation where a write
+// from this page would otherwise land in the SAME Firestore project Production uses. Every
+// mutating Discover call below checks this first and no-ops with an explanatory toast instead of
+// writing. Reads (fetchFollowed/loadMyList/loadDiscoverGrid/loadForYou) are NOT gated — read-only
+// browsing of a shared project is not the risk this guards against.
+function guardStagingWrite() {
+  if (!isStagingWritesUnsafe()) return false;
+  showToast(i18nT("discover.staging_write_blocked"));
+  return true;
+}
+
 async function fetchFollowed() {
   const user = auth.currentUser;
   if (!user || !isOwner(user)) {
@@ -503,6 +530,7 @@ async function fetchFollowed() {
 async function addFollow(media, status) {
   const user = auth.currentUser;
   if (!user || !isOwner(user)) return;
+  if (guardStagingWrite()) return;
   if (cachedFollowed.has(media.id)) return; // already followed — the UI shouldn't offer Add here
   const ref = doc(db, "followed_anime", followDocId(user, media.id));
   const payload = {
@@ -514,6 +542,7 @@ async function addFollow(media, status) {
     format: media.format || null,
     status,
     isAdult: false,
+    notifyOnAiring: false,
     followedAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
   };
@@ -538,6 +567,7 @@ async function addFollow(media, status) {
 async function updateFollowStatus(followedDoc, newStatus) {
   const user = auth.currentUser;
   if (!user || !isOwner(user)) return;
+  if (guardStagingWrite()) { renderCurrentView(); return; } // revert an already-changed <select>
   const ref = doc(db, "followed_anime", followedDoc.id);
   try {
     await updateDoc(ref, { status: newStatus, updatedAt: serverTimestamp() });
@@ -554,6 +584,7 @@ async function updateFollowStatus(followedDoc, newStatus) {
 async function removeFollow(followedDoc) {
   const user = auth.currentUser;
   if (!user || !isOwner(user)) return;
+  if (guardStagingWrite()) return;
   const ref = doc(db, "followed_anime", followedDoc.id);
   const snapshot = { ...followedDoc };
   try {
@@ -576,6 +607,7 @@ async function removeFollow(followedDoc) {
 async function undoRemove(snapshot) {
   const user = auth.currentUser;
   if (!user || !isOwner(user)) return;
+  if (guardStagingWrite()) return;
   const ref = doc(db, "followed_anime", followDocId(user, snapshot.anilistId));
   const payload = {
     uid: user.uid,
@@ -586,6 +618,7 @@ async function undoRemove(snapshot) {
     format: snapshot.format || null,
     status: snapshot.status,
     isAdult: false,
+    notifyOnAiring: false,
     followedAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
   };
@@ -598,13 +631,179 @@ async function undoRemove(snapshot) {
   }
 }
 
+// ---- Airing reminders (Phase 4 — opt-in per-anime push notifications) ----
+//
+// Lifecycle requirement recap (see js/push-notifications.js's own header comment for the full
+// rationale): permission is requested ONLY from a real click on a bell — never on page load,
+// never merely from opening My List. Two distinct bell taps exist: the per-card toggle (fast
+// path once this device is already subscribed) and the settings modal's Enable button (the path
+// that actually asks for permission the first time, with an explainer paragraph already visible
+// in the modal before the tap).
+
+async function updateFollowNotify(followedDoc, notifyOnAiring) {
+  if (guardStagingWrite()) return;
+  const ref = doc(db, "followed_anime", followedDoc.id);
+  try {
+    await updateDoc(ref, { notifyOnAiring, updatedAt: serverTimestamp() });
+    followedDoc.notifyOnAiring = notifyOnAiring;
+    cachedFollowed.set(followedDoc.anilistId, followedDoc);
+    renderCurrentView();
+    refreshOpenModalActions(followedDoc.anilistId);
+  } catch (err) {
+    console.error("[discover] notify toggle failed:", err.code || err);
+    showToast(i18nT("discover.error_status_failed"));
+  }
+}
+
+async function handleNotifyToggleClick(followedDoc) {
+  if (followedDoc.notifyOnAiring) {
+    // Turning OFF never needs permission — always safe to do immediately.
+    await updateFollowNotify(followedDoc, false);
+    return;
+  }
+  if (!isPushApiSupported() || !isPushConfigured()) {
+    showToast(i18nT(!isPushApiSupported() ? "discover.notify_unsupported" : "discover.notify_not_configured"));
+    return;
+  }
+  cachedSubscriptions = await fetchMySubscriptions().catch(() => cachedSubscriptions);
+  if (cachedSubscriptions.size > 0 && getPermissionState() === "granted") {
+    // Already subscribed on this device/account — flip the per-anime flag straight away, no
+    // permission dance needed for a device that's already opted in.
+    await updateFollowNotify(followedDoc, true);
+    return;
+  }
+  // Not subscribed yet on this device — open the explainer modal instead of requesting
+  // permission directly from this tap, so the Owner sees WHY before the browser's own prompt
+  // appears. The modal's own Enable button is the actual user gesture that calls
+  // subscribeThisDevice().
+  notifyModalPendingFollowedId = followedDoc.anilistId;
+  openNotifyModal();
+}
+
+function notifyStatusLine() {
+  if (!isPushApiSupported()) return { text: i18nT("discover.notify_unsupported"), tone: "text-textGray" };
+  if (!isPushConfigured()) return { text: i18nT("discover.notify_not_configured"), tone: "text-textGray" };
+  if (isStagingWritesUnsafe()) return { text: i18nT("discover.staging_write_blocked"), tone: "text-amber-400" };
+  const perm = getPermissionState();
+  if (perm === "denied") return { text: i18nT("discover.notify_permission_denied"), tone: "text-rose-400" };
+  if (cachedSubscriptions.size > 0) return { text: i18nT("discover.notify_subscribed"), tone: "text-emerald-400" };
+  return { text: i18nT("discover.notify_not_subscribed"), tone: "text-textGray" };
+}
+
+function renderNotifyModalBody() {
+  notifyModalBody.replaceChildren();
+  const status = notifyStatusLine();
+  const statusEl = document.createElement("p");
+  statusEl.className = `text-xs font-code ${status.tone}`;
+  statusEl.textContent = status.text;
+  notifyModalBody.appendChild(statusEl);
+
+  const actions = document.createElement("div");
+  actions.className = "flex flex-wrap gap-2 mt-1";
+
+  const canOfferEnable =
+    isPushApiSupported() && isPushConfigured() && !isStagingWritesUnsafe() &&
+    getPermissionState() !== "denied" && cachedSubscriptions.size === 0;
+  const canOfferDisable = cachedSubscriptions.size > 0;
+
+  if (canOfferEnable) {
+    const enableBtn = document.createElement("button");
+    enableBtn.type = "button";
+    enableBtn.className = "px-3 py-1.5 bg-gradient-to-r from-neonViolet to-neonPurple rounded-xl text-[11px] font-cyber font-bold tracking-wider text-white hover:scale-105 transition-all";
+    enableBtn.textContent = i18nT("discover.notify_enable");
+    enableBtn.addEventListener("click", async () => {
+      enableBtn.disabled = true;
+      enableBtn.classList.add("opacity-60", "cursor-wait");
+      const result = await subscribeThisDevice();
+      enableBtn.disabled = false;
+      enableBtn.classList.remove("opacity-60", "cursor-wait");
+      if (result.ok) {
+        cachedSubscriptions = await fetchMySubscriptions().catch(() => cachedSubscriptions);
+        if (notifyModalPendingFollowedId != null) {
+          const target = cachedFollowed.get(notifyModalPendingFollowedId);
+          notifyModalPendingFollowedId = null;
+          if (target) await updateFollowNotify(target, true);
+        }
+        showToast(i18nT("discover.notify_enabled"));
+        renderNotifyModalBody();
+      } else {
+        const reasonKey = {
+          [SUBSCRIBE_REASON.PERMISSION_DENIED]: "discover.notify_permission_denied",
+          [SUBSCRIBE_REASON.PERMISSION_DISMISSED]: "discover.notify_permission_dismissed",
+          [SUBSCRIBE_REASON.TOKEN_FAILED]: "discover.error_generic",
+          [SUBSCRIBE_REASON.STAGING_UNSAFE]: "discover.staging_write_blocked",
+        }[result.reason] || "discover.error_generic";
+        showToast(i18nT(reasonKey));
+        renderNotifyModalBody();
+      }
+    });
+    actions.appendChild(enableBtn);
+  }
+
+  if (canOfferDisable) {
+    const unsubBtn = document.createElement("button");
+    unsubBtn.type = "button";
+    unsubBtn.className = "px-3 py-1.5 bg-cardBg/70 border border-borderNeon rounded-xl text-[11px] font-cyber font-bold tracking-wider text-white hover:border-neonPurple transition-all";
+    unsubBtn.textContent = i18nT("discover.notify_unsubscribe_device");
+    unsubBtn.addEventListener("click", async () => {
+      await unsubscribeThisDevice();
+      cachedSubscriptions = await fetchMySubscriptions().catch(() => cachedSubscriptions);
+      renderNotifyModalBody();
+    });
+
+    const disableAllBtn = document.createElement("button");
+    disableAllBtn.type = "button";
+    disableAllBtn.className = "px-3 py-1.5 bg-rose-500/10 text-rose-400 hover:bg-rose-500/20 rounded-xl text-[11px] font-cyber font-bold tracking-wider transition-colors";
+    disableAllBtn.textContent = i18nT("discover.notify_disable_all");
+    disableAllBtn.addEventListener("click", async () => {
+      await disableAllNotifications();
+      cachedSubscriptions = await fetchMySubscriptions().catch(() => cachedSubscriptions);
+      await fetchFollowed();
+      renderCurrentView();
+      renderNotifyModalBody();
+    });
+
+    actions.append(unsubBtn, disableAllBtn);
+  }
+
+  if (actions.childElementCount) notifyModalBody.appendChild(actions);
+}
+
+let notifyModalUntrap = null;
+let notifyModalReturnFocusEl = null;
+
+function closeNotifyModal() {
+  notifyModal.classList.add("hidden");
+  notifyModalPendingFollowedId = null;
+  if (notifyModalUntrap) { notifyModalUntrap(); notifyModalUntrap = null; }
+  if (notifyModalReturnFocusEl && document.body.contains(notifyModalReturnFocusEl)) notifyModalReturnFocusEl.focus();
+  notifyModalReturnFocusEl = null;
+}
+
+async function openNotifyModal() {
+  notifyModalReturnFocusEl = document.activeElement;
+  cachedSubscriptions = await fetchMySubscriptions().catch(() => cachedSubscriptions);
+  renderNotifyModalBody();
+  notifyModal.classList.remove("hidden");
+  notifyModalUntrap = trapFocus(notifyModalPanel, closeNotifyModal);
+  notifyModalClose.focus();
+}
+
+notifySettingsBtn.addEventListener("click", () => openNotifyModal());
+notifyModalClose.addEventListener("click", closeNotifyModal);
+notifyModalBackdrop.addEventListener("click", closeNotifyModal);
+
 // ---- Card + detail-modal actions (shared renderer) ----
 
 function renderCardActions(container, media, followedDoc) {
   container.replaceChildren();
   if (followedDoc) {
     const select = document.createElement("select");
-    select.className = "status-select flex-1 bg-darkBg/60 border border-borderNeon rounded-lg px-2 py-1.5 text-[11px] font-code text-white";
+    // min-w-0 overrides the <select>'s automatic (content-based) minimum width — a native
+    // <select> won't shrink below the width its longest <option> text needs unless told to;
+    // with it, the browser truncates the visible label instead of forcing this flex row (and
+    // the notify/delete buttons riding along with it) past the card's padded edge.
+    select.className = "status-select flex-1 min-w-0 bg-darkBg/60 border border-borderNeon rounded-lg px-2 py-1.5 text-[11px] font-code text-white";
     select.setAttribute("aria-label", i18nT("discover.change_status"));
     STATUS_ORDER.forEach((s) => {
       const opt = document.createElement("option");
@@ -619,6 +818,20 @@ function renderCardActions(container, media, followedDoc) {
       updateFollowStatus(followedDoc, select.value);
     });
 
+    const notifyBtn = document.createElement("button");
+    notifyBtn.type = "button";
+    const notifyOn = !!followedDoc.notifyOnAiring;
+    notifyBtn.className = `flex-shrink-0 w-8 h-8 rounded-lg transition-colors flex items-center justify-center ${
+      notifyOn ? "bg-neonPurple/20 text-neonPurple" : "bg-darkBg/60 text-textGray hover:text-neonPurple"
+    }`;
+    notifyBtn.setAttribute("aria-label", i18nT(notifyOn ? "discover.notify_on" : "discover.notify_off"));
+    notifyBtn.setAttribute("aria-pressed", String(notifyOn));
+    notifyBtn.innerHTML = `<i class="fa-${notifyOn ? "solid" : "regular"} fa-bell text-xs"></i>`;
+    notifyBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      handleNotifyToggleClick(followedDoc);
+    });
+
     const removeBtn = document.createElement("button");
     removeBtn.type = "button";
     removeBtn.className = "flex-shrink-0 w-8 h-8 rounded-lg bg-rose-500/10 text-rose-400 hover:bg-rose-500/20 transition-colors flex items-center justify-center";
@@ -629,7 +842,7 @@ function renderCardActions(container, media, followedDoc) {
       removeFollow(followedDoc);
     });
 
-    container.append(select, removeBtn);
+    container.append(select, notifyBtn, removeBtn);
   } else {
     const addBtn = document.createElement("button");
     addBtn.type = "button";
@@ -647,7 +860,11 @@ function renderCardActions(container, media, followedDoc) {
 
 function mediaCard(media, followedDoc) {
   const card = document.createElement("div");
-  card.className = "card-lift is-visible bg-cardBg/90 neon-border-purple rounded-xl overflow-hidden flex flex-col cursor-pointer";
+  // min-w-0: without it, a grid item's automatic minimum width defaults to its content's
+  // min-content size — the status <select> below (driven by the longest translated status
+  // label, e.g. "Plan to Watch") would otherwise force this card wider than its grid track,
+  // pushing the delete button outside the card/grid on narrow viewports.
+  card.className = "card-lift is-visible bg-cardBg/90 neon-border-purple rounded-xl overflow-hidden flex flex-col cursor-pointer min-w-0";
   const title = preferredTitle(media);
   const cover = (media.coverImage && (media.coverImage.large || media.coverImage.medium)) || "";
   const airing = AIRING_STATUS_META[media.status] || null;
@@ -661,7 +878,7 @@ function mediaCard(media, followedDoc) {
       ${followedDoc ? `<span class="absolute top-2 left-2 px-2 py-0.5 rounded-full bg-darkBg/80 backdrop-blur-sm text-[10px] font-code text-white flex items-center gap-1"><i class="fa-solid ${STATUS_META[followedDoc.status] ? STATUS_META[followedDoc.status].icon : "fa-bookmark"}"></i>${esc(STATUS_META[followedDoc.status] ? i18nT(STATUS_META[followedDoc.status].i18n) : followedDoc.status)}</span>` : ""}
       ${airing ? `<span class="absolute top-2 right-2 px-2 py-0.5 rounded-full text-[10px] font-code ${airing.cls}">${esc(i18nT(airing.label))}</span>` : ""}
     </div>
-    <div class="p-3 flex-1 flex flex-col gap-2">
+    <div class="p-3 flex-1 flex flex-col gap-2 min-w-0">
       <p class="text-sm font-semibold text-white leading-snug line-clamp-2">${esc(title)}</p>
       <div class="flex items-center flex-wrap gap-x-2 gap-y-1 text-[10px] font-code text-textGray">
         ${media.format ? `<span>${esc(media.format)}</span>` : ""}
@@ -669,7 +886,7 @@ function mediaCard(media, followedDoc) {
         ${eps != null ? `<span>${eps} ep${eps === 1 ? "" : "s"}</span>` : ""}
       </div>
       ${nextAiring ? `<p class="text-[10px] font-code text-neonPurple">${esc(nextAiring)}</p>` : ""}
-      <div class="mt-auto pt-2 flex items-center gap-1.5" data-card-actions></div>
+      <div class="mt-auto pt-2 flex flex-wrap items-center gap-1.5 min-w-0" data-card-actions></div>
     </div>`;
 
   if (cover) {
@@ -1292,6 +1509,14 @@ onAuthStateChanged(auth, (user) => {
   if (user && isOwner(user)) {
     renderSignedIn(user);
     initDiscoverPage();
+    fetchMySubscriptions().then((subs) => { cachedSubscriptions = subs; }).catch(() => {});
+    // Foreground airing-reminder delivery: the tab is open and focused, so FCM routes the
+    // message here instead of to service-worker.js's background handler (see that file's
+    // onBackgroundMessage). A toast is enough — the Owner is already looking at Discover.
+    onForegroundAiringMessage((payload) => {
+      const title = (payload && payload.notification && payload.notification.title) || i18nT("discover.airing_notification_generic");
+      showToast(title);
+    });
   }
 });
 

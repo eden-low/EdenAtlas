@@ -6,14 +6,18 @@
   "scripts": {
     "build:css": "tailwindcss -c tailwind.config.js -i ./tailwind-input.css -o ./tailwind.generated.css --minify",
     "watch:css": "tailwindcss -c tailwind.config.js -i ./tailwind-input.css -o ./tailwind.generated.css --watch",
-    "build": "npm run build:css && node scripts/generate-deploy-origin.js && node scripts/build-site.js",
+    "build": "npm run build:css && node scripts/generate-deploy-origin.js && node scripts/generate-function-context.js && node scripts/generate-build-info.js && node scripts/build-site.js",
     "generate:deploy-origin": "node scripts/generate-deploy-origin.js",
-    "test:functions": "node netlify/functions/__tests__/assistant.test.js && node netlify/functions/__tests__/weather.test.js && node netlify/functions/__tests__/anilist.test.js && node netlify/functions/__tests__/discover-ai.test.js",
-    "test:frontend": "node js/__tests__/date-utils.test.js && node js/__tests__/reflection.test.js && node js/__tests__/home-recent-memories.test.js && node js/__tests__/xss-security.test.js && node js/__tests__/auth-pulse-scope.test.js && node js/__tests__/discover-security.test.js && node js/__tests__/discover-tabs.test.js && node js/__tests__/discover-description.test.js && node js/__tests__/discover-foryou.test.js && node js/__tests__/discover-translate.test.js",
+    "generate:function-context": "node scripts/generate-function-context.js",
+    "generate:build-info": "node scripts/generate-build-info.js",
+    "test:functions": "node netlify/functions/__tests__/assistant.test.js && node netlify/functions/__tests__/weather.test.js && node netlify/functions/__tests__/anilist.test.js && node netlify/functions/__tests__/discover-ai.test.js && node netlify/functions/__tests__/airing-check-core.test.js && node netlify/functions/__tests__/anime-airing-check.test.js && node netlify/functions/__tests__/staging-isolation-wiring.test.js",
+    "test:frontend": "node js/__tests__/date-utils.test.js && node js/__tests__/reflection.test.js && node js/__tests__/home-recent-memories.test.js && node js/__tests__/xss-security.test.js && node js/__tests__/auth-pulse-scope.test.js && node js/__tests__/discover-security.test.js && node js/__tests__/discover-tabs.test.js && node js/__tests__/discover-description.test.js && node js/__tests__/discover-foryou.test.js && node js/__tests__/discover-translate.test.js && node js/__tests__/environment.test.js && node js/__tests__/push-notifications.test.js && node js/__tests__/discover-card-actions-layout.test.js && node js/__tests__/resume-experience-dates.test.js && node js/__tests__/resume-print-stylesheet.test.js",
     "test:tailwind-migration": "node scripts/__tests__/tailwind-migration.test.js",
+    "test:generate-build-info": "node scripts/__tests__/generate-build-info.test.js",
     "test:firestore-rules": "firebase emulators:exec --project demo-edenatlas-discover-rules --only firestore \"node firestore/__tests__/discover-rules.test.js\"",
+    "test:staging-packaging": "node netlify/functions/__tests__/staging-packaging.test.js",
     "test": "npm run test:functions && npm run test:frontend",
-    "test:all": "npm run test && npm run test:firestore-rules && npm run test:tailwind-migration"
+    "test:all": "npm run test && npm run test:firestore-rules && npm run test:tailwind-migration && npm run test:generate-build-info && npm run test:staging-packaging"
   },
   "dependencies": {
     "firebase-admin": "^14.2.0"
@@ -23,6 +27,8 @@
   },
   "devDependencies": {
     "@firebase/rules-unit-testing": "5.0.1",
+    "@netlify/zip-it-and-ship-it": "15.3.1",
+    "adm-zip": "0.6.0",
     "dompurify": "3.4.12",
     "firebase": "12.16.0",
     "firebase-tools": "15.24.0",

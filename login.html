@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+<script src="js/build-info.generated.js"></script>
   <script>(function(){try{var s=JSON.parse(localStorage.getItem('lfj:settings')||'{}');if(s.theme==='light')document.documentElement.setAttribute('data-theme','light');}catch(e){}})();</script>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -66,10 +67,16 @@
   <script src="scripts.js" defer></script>
   <script type="module">
     import { auth, googleProvider, db, isOwner, USER_MODE_KEY } from "./firebase-init.js";
+    import { mountNonProductionBanner } from "./js/environment.js";
     import {
       onAuthStateChanged, signInWithPopup, signInWithRedirect, getRedirectResult,
     } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-auth.js";
     import { addDoc, collection, doc, getDoc, setDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-firestore.js";
+
+    // Phase 1 safeguard #9 — see js/environment.js's mountNonProductionBanner() header comment.
+    // login.html is the one page that doesn't load auth-guard.js (see that file's own header
+    // comment), so it calls the shared implementation directly here instead.
+    mountNonProductionBanner();
 
     const signinBtn = document.getElementById("signin-btn");
     const statusEl = document.getElementById("signin-status");

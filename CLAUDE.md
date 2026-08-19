@@ -2536,6 +2536,282 @@ Netlify Function — never a modification of `assistant.js` (the personal-data-t
    deployed, or pushed by this pass — see the completion report handed to the user for the
    Deploy-Preview verification and remaining live-QA checklist.
 
+**"Development → Staging → Production workflow + Discover airing reminders" (most recent,
+unmerged — `feat/discover-staging-push` branch off a new `staging` branch)** — Audit first found
+the two branches described above as "unmerged" (`feat/discover-anime-mvp`/PR #8, `feat/discover-
+ai-v1`/PR #9) had actually already been merged into `origin/main` on GitHub (2026-07-20 and
+2026-07-22, confirmed via `gh pr list`/`git log` — `main` was 5 commits behind `origin/main`
+locally, and PR #9's merge commit has zero diff against its branch tip), meaning the Discover
+core/five-status/dedup/AniList proxy/Qwen translation+recommendations described in the two history
+entries above are already live Discover functionality, not a pending branch — this pass verified
+that by reading the actual shipped `discover.js`/`firestore.rules`, not by trusting the stale
+"unmerged" framing. This pass's own real scope, once that was corrected, was the two genuine gaps:
+a Development → Staging → Production environment model (none existed before) and opt-in per-anime
+airing push reminders (no push/FCM/VAPID infrastructure existed anywhere in this repo before).
+Branch strategy: a new `staging` branch was cut from `origin/main` (intended as the stable branch
+Netlify branch-deploys), with this pass's own work on a feature branch off it, per the task's
+explicit "no merge to main" instruction — `main`/Production untouched.
+1. **Environment model** — [js/environment.js](js/environment.js) (a **seventh** sanctioned
+   shared module) resolves Production/Staging/Deploy-Preview/Development from an explicit,
+   pure `resolveEnvironment({netlifyContext, branch, hostname})`, never a bare hostname guess.
+   The real inputs come from a build-time snapshot,
+   [scripts/generate-build-info.js](scripts/generate-build-info.js) → a gitignored
+   `js/build-info.generated.js` (loaded as the literal first line of every protected page's
+   `<head>`, a classic non-module script so `window.__EDEN_BUILD__` is synchronously available
+   before any later module runs, and gracefully absent — a harmless 404, falling back to
+   `ENV.DEVELOPMENT` — on a fresh checkout with no build run yet) — same "capture at build time,
+   since a static page has no `process.env`, gitignore the output" pattern
+   `generate-deploy-origin.js` already established. `mountNonProductionBanner()` (called from
+   `auth-guard.js` and from `login.html`'s own inline module, since login.html is the one page
+   that doesn't load `auth-guard.js`) shows a fixed "⚠ STAGING/PREVIEW/DEVELOPMENT" bar, appended
+   to `<html>` directly (same reasoning as `js/splash.js`'s overlay). `scripts/build-site.js`
+   writes a `site/_headers` file with `X-Robots-Tag: noindex, nofollow` for any non-Production
+   `CONTEXT` (fails closed: an unset/unknown context defaults to noindex, only an explicit
+   `CONTEXT=production` build ships without it).
+2. **Firebase config abstraction** — `firebase-init.js` now optionally swaps in a dedicated
+   Staging Firebase project (`STAGING_FIREBASE_API_KEY`/`_AUTH_DOMAIN`/`_PROJECT_ID`/
+   `_STORAGE_BUCKET`/`_MESSAGING_SENDER_ID`/`_APP_ID`, all six or none — a partial set never
+   activates) when `isStaging()` is true and every value is present, snapshotted the same way as
+   above. No such project exists yet in this environment (none was created — no cloud resources
+   were provisioned by this pass, per its own instructions), so this stays inert today and
+   Staging shares Production's Firebase project — which is exactly why
+   `isStagingWritesUnsafe()`/`isUsingIsolatedStagingBackend()` exist: `discover.js`'s
+   `guardStagingWrite()` blocks every Discover mutation (`addFollow`/`updateFollowStatus`/
+   `removeFollow`/`undoRemove`/`updateFollowNotify`) and `js/push-notifications.js`'s subscribe/
+   unsubscribe/disable-all calls whenever a Staging deploy would otherwise write into the SAME
+   Firestore project Production uses — reads are unaffected. `netlify.toml` gained a documented
+   "Staging" comment block (no functional change needed for CORS: `DEPLOY_PRIME_URL`-based
+   origin auto-allow, already used for Deploy Previews, already covers branch deploys too) and
+   an explicit list of the manual steps this repo cannot perform itself (Netlify UI: enable branch
+   deploys for `staging` specifically; Firebase Console: add the resulting domain to Authorized
+   domains; optionally provision the six `STAGING_FIREBASE_*` values).
+3. **Discover airing reminders** — `followed_anime` gained a required `notifyOnAiring: boolean`
+   (default `false` — a new follow is never silently subscribed), plus two Admin-only fields
+   written exclusively by the new scheduled Function (`nextEpisodeSnapshot`/`scheduleRefreshedAt`
+   — deliberately excluded from the client-facing `firestore.rules` `keys().hasOnly()` allowlist,
+   since Admin SDK writes bypass rules entirely, same as every other server-only field in this
+   app). Two new collections: `push_subscriptions/{uid}_{tokenHash}` (deterministic ID, same
+   "structural uniqueness" trick as `followed_anime`/`daily_reflections`/`usernames`, Owner-only
+   read/write/delete scoped to the caller's own uid) and `anime_notification_log/{uid}_
+   {anilistId}_{episode}` (Admin-write-only dedup log, Owner-only read, no client create/update/
+   delete rule at all — Firestore's default-deny already closes it, same as the `ai_usage*`
+   precedent). [js/push-notifications.js](js/push-notifications.js) (an **eighth** shared module,
+   though a plain importable helper rather than a self-injecting one) wraps Firebase Cloud
+   Messaging: `subscribeThisDevice()` is only ever called from a real click (the notify-settings
+   modal's Enable button, or indirectly a per-card bell tap on an already-subscribed device) and
+   requests `Notification.requestPermission()` as close to that click as the async chain allows —
+   never on page load, never merely from opening My List. discover.html gained a bell icon
+   (`#notify-settings-btn`) opening an accessible focus-trapped `#notify-modal` (Enable/
+   Unsubscribe-this-device/Disable-all, state-dependent — unsupported/not-configured/denied/
+   subscribed/not-subscribed) and each My List card's `renderCardActions()` gained a per-anime
+   bell toggle next to the status select and remove button. Turning a reminder OFF never needs
+   permission; turning one ON when this device isn't subscribed yet opens the explainer modal
+   first rather than requesting permission directly from the card tap. There is no "push private
+   key" anywhere in this design — FCM's public VAPID key (`FIREBASE_VAPID_PUBLIC_KEY`, build-time
+   snapshotted like everything else in this section) is the only new credential-shaped value, and
+   sending a push server-side reuses the EXISTING `FIREBASE_SERVICE_ACCOUNT` Admin credential
+   (`admin.messaging().send()`), never a raw VAPID private key. Until
+   `FIREBASE_VAPID_PUBLIC_KEY` is set, the whole feature stays in a documented "not yet
+   configured" disabled state — no placeholder value was invented.
+4. **[netlify/functions/anime-airing-check.js](netlify/functions/anime-airing-check.js)** (new) —
+   a Netlify Scheduled Function (`netlify.toml`'s `[functions."anime-airing-check"] schedule =
+   "*/20 * * * *"`, gated on the connected Netlify account actually supporting Scheduled
+   Functions — not confirmed in this environment, called out as a manual verification step, not
+   assumed). No CORS/bearer-token check (Netlify's scheduler invokes it directly, server-side —
+   every doc it touches already belongs to the Owner, since Discover has never had another
+   writer). Every run: reads every `notifyOnAiring: true` doc, batch-fetches fresh
+   `nextAiringEpisode` from AniList (reusing the unmodified `lib/anilist-operations.js`
+   allowlist/sanitizer — chunked at 25 ids, the same `MAX_BATCH_IDS` the browser-facing `batch`
+   operation already enforces, never one AniList call per title), refreshes each doc's
+   `nextEpisodeSnapshot`/`scheduleRefreshedAt` regardless of whether anything is due (Requirement
+   9's "refreshes due schedules"), and — only once `airingAt` has actually passed AND the
+   deterministic `anime_notification_log` doc for that exact episode doesn't already exist — sends
+   a DATA-only (never `notification`-shaped, so FCM never auto-displays anything) push to every
+   one of the Owner's subscribed devices via `admin.messaging().send()`, then records the dedup
+   log doc (even when zero devices are currently subscribed, so a device subscribing later never
+   gets a backlog of stale "just aired" pings). A token FCM reports as
+   not-registered/invalid/invalid-argument is deleted from `push_subscriptions` on the spot
+   (Requirement 11); any other send failure is logged and left for the next run. Missing/absent
+   `nextAiringEpisode` (FINISHED/CANCELLED/not-yet-scheduled) is stored as `null` and treated as
+   UNKNOWN, never as "not airing" or an implicit zero — matching Requirement 13 exactly.
+5. **`service-worker.js` → `eden-shell-v37`** — gained real Firebase Cloud Messaging BACKGROUND
+   handling: `importScripts()`-loaded classic/compat SDK (Firebase's own documented requirement
+   for a service worker background handler — the modular SDK the rest of this app uses can't run
+   reliably in a worker the browser just woke up specifically to deliver one push), a hardcoded
+   Production Firebase Web config (same public values already public in `firebase-init.js` — see
+   the file's own comment for the known limitation this creates: a future isolated Staging
+   Firebase project would need this file templated per environment before Staging pushes could
+   use their own project, not attempted this pass), `onBackgroundMessage()` building a real
+   `self.registration.showNotification()` call, and a `notificationclick` handler that
+   focuses/navigates an already-open EdenAtlas tab to `discover.html` (or opens one). Also added
+   `js/environment.js`/`js/push-notifications.js`/`js/build-info.generated.js` to `PRECACHE`.
+6. **i18n**: 16 new `discover.*` keys in both locales (`notify_settings`, `notify_explainer`,
+   `notify_on`/`notify_off`, `notify_enable`/`notify_enabled`, `notify_unsubscribe_device`,
+   `notify_disable_all`, `notify_unsupported`/`notify_not_configured`/
+   `notify_permission_denied`/`notify_permission_dismissed`, `notify_subscribed`/
+   `notify_not_subscribed`, `staging_write_blocked`, `airing_notification_generic`).
+7. **`.env.example`** gained `FIREBASE_VAPID_PUBLIC_KEY` and the six `STAGING_FIREBASE_*`
+   variables, both documented as public-safe (not secrets) and never invented with placeholder
+   working values.
+8. **Explicitly not part of this pass**: no manga reading, anime playback, streaming, or
+   scraping (none was requested, none was added); no `main`/Production deploy, no Firebase
+   staging project actually created, no VAPID key actually generated (all three require a manual
+   step in an external console this environment cannot perform — see the completion report); the
+   pre-existing Discover core/Qwen AI features (statuses, dedup, translation, For You) were
+   verified, not re-implemented. See the completion report for the exact test commands/counts,
+   the corrected historical-assumption findings, and the full manual-setup checklist.
+
+**"Staging/Production Firebase isolation follow-up" (most recent, same `feat/discover-staging-
+push` branch, PR #10, unmerged)** — a review found the pass above's Staging safety relied only on
+a browser-side guard (`isStagingWritesUnsafe()`), which is a UX safeguard, never a security
+boundary, since Firebase Admin bypasses `firestore.rules` entirely. Three gaps closed:
+1. **Server-side Admin isolation** — [netlify/functions/lib/build-context.js](netlify/functions/lib/build-context.js)
+   (reader) + [scripts/generate-function-context.js](scripts/generate-function-context.js)
+   (generator, part of `npm run build`) snapshot Netlify's build-time `CONTEXT`/`BRANCH` (Functions
+   can't read these at runtime, only at build time — same constraint `lib/deploy-origin.js` already
+   worked around for `DEPLOY_PRIME_URL`) plus `STAGING_FIREBASE_PROJECT_ID` (the "expected staging
+   project," reusing the exact same build var the client-side override already reads) into a
+   gitignored `netlify/functions/lib/build-context.generated.json`. `lib/firebase-admin.js` gained
+   `assertProjectMatchesBuildContext(resolvedProjectId, buildContext)`, called as the FIRST thing
+   `initializeFirebaseAdmin()` does — before even the warm-instance `getApps().length` reuse
+   shortcut, so it re-runs on every call, not just a cold start — throwing a classified
+   `FirebaseConfigError` (`config/production-credentials-in-staging` / `config/staging-project-
+   mismatch`) whenever a build verified as the `staging` branch deploy resolves its Admin
+   credentials to Production's project or to neither Production's nor the configured staging
+   project. A context that isn't verifiably Staging (Production, a Deploy Preview, missing/no
+   build) is completely unrestricted — Production's behavior is byte-for-byte unchanged. All five
+   Functions that initialize Admin (`anilist.js`, `discover-ai.js`, `assistant.js`, `weather.js`,
+   `anime-airing-check.js`) now pass `buildContext: readGeneratedBuildContext()` into their
+   `initializeFirebaseAdmin({...})` call — verified by a structural test
+   (`netlify/functions/__tests__/staging-isolation-wiring.test.js`) that reads each file's actual
+   source rather than trusting a code comment. `FIREBASE_PROJECT_ID`/`FIREBASE_SERVICE_ACCOUNT`
+   keep their existing names — the actual fix is configuring them with different values scoped to
+   Netlify's Production vs. `staging` branch contexts, a Netlify UI setting, not a code change.
+   Owner-token verification is inherently project-scoped for free: `verifyIdToken()` validates a
+   token's `aud` claim against the initialized app's own project, so a client/server project
+   mismatch already fails at that layer by Firebase's own design.
+2. **Service worker config (Gap 2)** — the hardcoded Production Firebase config the previous
+   pass's `service-worker.js` shipped (explicitly flagged there as a known limitation) is gone.
+   `scripts/generate-build-info.js` now also writes a second output,
+   `js/fcm-config.generated.js` (gitignored, `self.__EDEN_FCM_CONFIG__ = {firebaseConfig,
+   vapidPublicKey}` — public values ONLY, computed by the SAME staging-vs-production resolution
+   firebase-init.js's browser code already uses, not a second independent resolver that could
+   disagree). `service-worker.js` loads it via `importScripts()` (synchronous, required for a
+   worker's background-message handler to be ready before a `push` event arrives) and only
+   proceeds to load the Firebase Messaging SDK / call `firebase.initializeApp()` when
+   `hasUsableFirebaseConfig()` confirms all four required fields are present — a missing/partial
+   config (no build run, or a build with no staging project configured) disables background push
+   entirely, never falls back to any hardcoded default. `CACHE` → `eden-shell-v38` so an
+   already-installed worker's stale embedded config actually gets replaced.
+3. **Scheduled Function testability (Gap 3)** — `netlify/functions/anime-airing-check.js` is now
+   a thin wrapper; the real scheduling/dedup/delivery logic moved to
+   [netlify/functions/lib/airing-check-core.js](netlify/functions/lib/airing-check-core.js)'s
+   `runAiringCheck(deps, options)`, independently testable with an injected clock and fully mocked
+   deps (`netlify/functions/__tests__/airing-check-core.test.js`, 14 assertions — same scenarios
+   the original single-file version had, plus new dry-run coverage) — this is how the logic is
+   verified in an environment (and on a `staging` branch deploy) where Netlify's Scheduled
+   Functions cron structurally cannot fire (Netlify only runs a `schedule` on a published/
+   Production-context deploy). The wrapper recognizes two invocation sources: Netlify's own
+   scheduler (a best-effort, documented-as-unverified check for its documented `{"next_run":
+   "..."}` invocation body shape) always runs the real logic, never dry-run; anything else
+   requires the exact same Owner-only Firebase ID-token authorization every other Discover
+   Function already uses, and MAY set `dryRun: true` (JSON body or `?dryRun=1`) — dry-run still
+   performs every read (AniList fetch, dedup check, subscription lookup) for real but skips every
+   write/send, enforced inside `runAiringCheck()` itself so a caller can't forget to wire it
+   correctly. No unauthenticated public HTTP path exists for this Function. The real cron firing
+   on its 20-minute interval can only be confirmed after the eventual real Production deploy —
+   documented as such, not assumed working.
+4. **Tests**: `netlify/functions/__tests__/assistant.test.js` gained a new "Staging/Production
+   Firebase Admin isolation" section (14 assertions) exercising
+   `assertProjectMatchesBuildContext()`/`initializeFirebaseAdmin({buildContext})` directly — kept
+   there rather than a new file, consolidating with that file's pre-existing `lib/firebase-admin.js`
+   coverage. New `netlify/functions/__tests__/staging-isolation-wiring.test.js` (13 assertions,
+   structural/source-reading) and `scripts/__tests__/generate-build-info.test.js` (7 assertions —
+   staging vs. Production builds produce different project ids; a fake DashScope key/PEM marker/
+   service-account JSON shape planted in `process.env` never appears in either generated file's
+   bytes). `netlify/functions/__tests__/discover-ai.test.js` gained 3 new service-worker
+   structural tests (no hardcoded apiKey literal remains; `firebase.initializeApp()` is called
+   with a fake non-Production config when one is present; never called at all when absent).
+5. **`.gitignore`** gained `/netlify/functions/lib/build-context.generated.json` and
+   `/js/fcm-config.generated.js` (same gitignored/regenerated/graceful-fallback-if-absent
+   treatment as every other generated file in this repo). README's "Staging environment" section
+   gained the full 15-step Staging Firebase readiness checklist (exact order) plus a description
+   of all three fixes above.
+6. **Explicitly not part of this pass**: no `firestore.rules`/`storage.rules` change (none was
+   needed for these three gaps); no Firebase staging project actually created, no VAPID key
+   actually generated, no `main`/Production deploy, nothing merged — PR #10 (`feat/discover-
+   staging-push` → `staging`) was updated with focused follow-up commits, not merged. Netlify's
+   exact scheduled-invocation request shape (used by `looksLikeScheduledInvocation()`) was not
+   independently verified against a live deployment in this environment — documented as a
+   best-effort, defense-in-depth signal, not the sole boundary.
+
+**"Deploy-context policy hardening + scheduled Function auth removal" (most recent, same
+`feat/discover-staging-push` branch, PR #10, unmerged)** — a review found the pass above's policy
+still too loose in two ways, plus corrected a false premise about branch divergence. Three fixes:
+1. **Every non-Production deploy is now pre-production, not just the literal `staging` branch.**
+   The prior pass's `assertProjectMatchesBuildContext()` only restricted the `staging` branch-
+   deploy specifically — a Deploy Preview or any OTHER branch deploy was **completely
+   unrestricted**, free to use Production Firebase credentials (both server-side Admin AND, via
+   `firebase-init.js`'s old `isStaging()`-only check, client-side too) with no check at all.
+   Replaced with an explicit four-role policy in
+   [netlify/functions/lib/firebase-admin.js](netlify/functions/lib/firebase-admin.js)'s
+   `resolveDeployRole()`/`enforceDeployContextPolicy()`: **Production** (`CONTEXT=="production"`
+   AND `BRANCH==` the configured Production branch, `main` — a `production` context on any OTHER
+   branch is never trusted as Production either) requires the resolved Admin project to exactly
+   equal Production's; **Pre-production** (`deploy-preview` OR **any** `branch-deploy`) can never
+   equal Production's project AND requires a configured, matching staging project
+   (`STAGING_FIREBASE_PROJECT_ID`) — **no staging project configured now fails closed**, it no
+   longer falls back to sharing Production's project the way the prior pass's design did;
+   **Dev** (Netlify Dev's own context) requires `FIRESTORE_EMULATOR_HOST` (the real, standard
+   Firebase Emulator Suite variable) to be set; **Unknown** (missing/malformed context, no build
+   ever ran) **always** fails closed unconditionally — the prior pass's version left an unknown
+   context completely unrestricted, which this task explicitly called out as unacceptable. The
+   check re-runs on every `initializeFirebaseAdmin()` call (before the warm-instance reuse
+   shortcut), so a warm container can't bypass it. Client-side, `js/environment.js` gained
+   `isPreProduction()` (Staging OR Deploy Preview) replacing the old `isStaging()`-only guard, and
+   `resolveEnvironment()` now applies the same Production-branch check. `firebase-init.js`'s
+   fallback for pre-production-without-staging-config changed from "silently use Production's real
+   config" to an inert, deliberately-invalid placeholder project — so a misconfigured pre-
+   production deploy's Firebase calls fail loudly instead of quietly touching real Production data
+   merely because the Owner's own Google sign-in still succeeds against it (the one identity that
+   always passes `firestore.rules`, making it exactly the wrong case to leave silently working).
+   `scripts/generate-build-info.js`'s `js/fcm-config.generated.js` resolution was broadened and
+   fixed the same way. 21 new assertions in `assistant.test.js`'s "Deploy-context policy" section
+   cover all 10 explicitly-required scenarios (Production+Production succeeds, Production+staging
+   fails, Deploy Preview+staging succeeds, Deploy Preview+Production fails closed, branch-deploy+
+   Production fails closed, staging+staging succeeds, unknown+anything fails closed, dev+emulator
+   succeeds, dev-without-emulator fails closed, warm-instance bypass proven impossible) plus the
+   pure `resolveDeployRole()` classifier and pre-production-with-no-staging-configured-at-all.
+2. **Scheduled Function: request-shape "authentication" removed entirely, no manual HTTP mode.**
+   The prior pass's `netlify/functions/anime-airing-check.js` used the invocation body's
+   `next_run` field's presence/shape as a signal to skip auth ("looks like Netlify's scheduler")
+   and, for anything else, exposed a manual Owner-bearer-token HTTP mode in the SAME function.
+   Both are gone: Netlify Scheduled Functions are not reachable through their ordinary deployed
+   URL by an arbitrary caller at all (only Netlify's own cron, the dashboard's "Run now," or
+   `netlify functions:invoke` reach this code) and `next_run` is scheduling metadata, never a
+   credential — this file now has no request-level auth check whatsoever. What decides real-vs-
+   dry-run is the SAME verified deploy-context policy from fix 1, never anything in the request:
+   Production may always send for real; pre-production defaults to **enforced dry-run** unless
+   `STAGING_ALLOW_REAL_SEND` is explicitly set AND isolated staging credentials are already
+   confirmed (the opt-in alone is never sufficient); Dev/anything else always stays dry-run, no
+   opt-in exists for it. `netlify/functions/lib/airing-check-core.js`'s `runAiringCheck()` (the
+   testable core extracted in the prior pass) is unchanged — dedup/dead-token-cleanup logic was
+   re-verified, not re-implemented. The wrapper test suite was rewritten around this design (env/
+   Admin-init checks, dry-run-default-by-role matrix, and an explicit regression test proving
+   `next_run`'s presence can never flip pre-production into a real send).
+3. **Branch-reconciliation premise corrected.** The task assumed `staging` (`4877342`) had
+   fallen behind the current Production baseline because a STALE LOCAL `main` branch ref
+   (`6ab036d`, never fast-forwarded in this environment) was reported as "current main." Re-
+   fetched `origin/main` directly: it is **also** `4877342`, identical to `staging` — `6ab036d` is
+   simply an ancestor of it, not a divergent, newer baseline. `git merge origin/main` into
+   `feat/discover-staging-push` confirmed "Already up to date" — zero new commits, zero conflicts,
+   nothing to reconcile. No files needed merging; this is a corrected-premise finding, not a
+   no-op treated as one.
+4. **Explicitly not part of this pass**: no `firestore.rules`/`storage.rules` change; no Firebase
+   staging project actually created, no VAPID key actually generated; no separate manual Owner-
+   authenticated HTTP trigger Function (would be a genuinely new, separately-tested Function, not
+   built since not required this pass); no `main`/`staging` merge, no Production deployment.
+
 ## Architecture
 
 ### Roles and the multi-tenant data model

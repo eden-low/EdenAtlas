@@ -44,7 +44,7 @@ const ORDER = ["edenatlas", "utar-epms", "enterprise-ai-ops"];
 // case-study-specific tech list + narrative sections.
 const CASE_STUDIES = {
   edenatlas: {
-    tech: ["HTML/CSS/JS", "Firebase Auth", "Firestore", "Firebase Storage", "PWA"],
+    tech: ["HTML/CSS/JS", "Firebase Auth", "Firestore", "Firebase Storage", "PWA", "Netlify Functions"],
     overview: {
       en: "EdenAtlas is a private, login-first personal platform that brings memories, journaling, career and daily life into one calm, unified home.",
       zh: "EdenAtlas 是一个私密、登录优先的个人平台，把回忆、日记、职业与日常整理进一个安静、统一的入口。",
@@ -62,12 +62,12 @@ const CASE_STUDIES = {
       zh: "我选择了无需构建的静态 HTML/CSS/JS + Firebase 技术栈，以在没有框架和构建步骤的情况下保持可维护；并设计了角色模型（Owner / Friend / Public）与按用户隔离的数据结构，使私密内容不会在账户间泄露。",
     },
     solution: {
-      en: "Firebase Auth gates the whole app; Firestore and Storage hold per-uid content with security rules enforcing visibility (private / connections / public). A public résumé surface, English/Chinese i18n and an installable PWA round it out.",
-      zh: "Firebase Auth 守护整个应用；Firestore 与 Storage 以按用户隔离的方式存储内容，并由安全规则强制可见性（私密 / 好友 / 公开）。再加上公开简历入口、中英双语与可安装的 PWA。",
+      en: "Firebase Auth gates the whole app; Firestore and Storage hold per-uid content with security rules enforcing visibility (private / connections / public). A public résumé surface, English/Chinese i18n and an installable PWA round it out. The app now ships through a Development → Staging → Production workflow with isolated, fail-closed Firebase environments per stage, plus a Netlify Functions backend with automated test coverage.",
+      zh: "Firebase Auth 守护整个应用；Firestore 与 Storage 以按用户隔离的方式存储内容，并由安全规则强制可见性（私密 / 好友 / 公开）。再加上公开简历入口、中英双语与可安装的 PWA。产品现已改为经开发 → 预发布 → 生产的流程发布，各环境使用相互隔离、故障时默认拒绝的 Firebase 项目，并配有 Netlify Functions 后端与自动化测试覆盖。",
     },
     result: {
-      en: "A working multi-tenant personal platform I use daily, with a shareable public résumé and installable app — designed so privacy is enforced by security rules, not just the UI.",
-      zh: "一个我每天使用的、可多用户使用的个人平台，带可分享的公开简历与可安装应用——隐私由安全规则强制保障，而不仅仅依赖界面。",
+      en: "A working multi-tenant personal platform I use daily, with a shareable public résumé and installable app — designed so privacy is enforced by security rules, not just the UI. Recent additions include an AniList- and Qwen-powered anime-tracking assistant with PWA/FCM airing reminders, built on the same staged release pipeline.",
+      zh: "一个我每天使用的、可多用户使用的个人平台，带可分享的公开简历与可安装应用——隐私由安全规则强制保障，而不仅仅依赖界面。近期新增了基于 AniList 与通义千问（Qwen）的追番助手，支持 PWA/FCM 推送的更新提醒，并同样运行在这套分阶段发布流程之上。",
     },
     learned: {
       en: "Designing the security rules before the UI made the whole product simpler: access control is a data-model decision, not a screen.",
@@ -106,7 +106,7 @@ const CASE_STUDIES = {
     },
   },
   "enterprise-ai-ops": {
-    tech: ["TypeScript", "Django REST Framework", "Vue 3", "PostgreSQL", "MinIO", "Redis", "Celery", "Git"],
+    tech: ["TypeScript", "Django REST Framework", "Vue 3", "PostgreSQL", "MinIO", "Redis", "Celery", "Playwright", "Git"],
     overview: {
       en: "During an internship I worked across several internal AI platforms — an identity-verification review tool and an AutoML / chat-bot administration system — improving review workflows, analytics reliability and data operations.",
       zh: "在一次实习中，我参与了多个内部 AI 平台——一个身份核验审核工具，以及一个 AutoML / 聊天机器人管理系统——改进审核流程、分析可靠性与数据运维。",
@@ -124,8 +124,8 @@ const CASE_STUDIES = {
       zh: "主要工作：搭建专门的审核讨论流程，让需要讨论的案例集中处理；用管理员可配置的规则替换硬编码分类；改善前端加载与筛选可用性；并引入增量数据同步与可控的全量刷新选项。",
     },
     solution: {
-      en: "Configurable category rules, a consolidated review-discussion queue, accordion-based advanced filters, and incremental CSV synchronization with a Force Data Loading escape hatch — validated for consistency across APIs, backend calculations and the dashboard.",
-      zh: "可配置的分类规则、集中的审核讨论队列、折叠式高级筛选，以及带「强制加载」兜底的增量 CSV 同步——并在 API、后端计算与看板之间验证一致性。",
+      en: "Configurable category rules, a consolidated review-discussion queue, accordion-based advanced filters, and incremental CSV synchronization with a Force Data Loading escape hatch — validated for consistency across APIs, backend calculations and the dashboard. On the AutoML / chat-bot platform I also developed and troubleshot features (Django REST Framework, Vue.js, PostgreSQL, Redis/Celery, MinIO) and built Playwright staging end-to-end tests covering authentication, dataset upload, training, deployment and inference.",
+      zh: "可配置的分类规则、集中的审核讨论队列、折叠式高级筛选，以及带「强制加载」兜底的增量 CSV 同步——并在 API、后端计算与看板之间验证一致性。在 AutoML / 聊天机器人平台上，我也基于 Django REST Framework、Vue.js、PostgreSQL、Redis/Celery、MinIO 开发并排查功能问题，并构建了覆盖登录、数据集上传、训练、部署与推理的 Playwright 预发布环境端到端测试。",
     },
     result: {
       en: "A more maintainable review and reporting workflow, reduced unnecessary repeat processing, and improved clarity and reliability — without exposing internal business data.",

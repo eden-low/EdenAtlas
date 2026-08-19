@@ -825,6 +825,22 @@
     "foryou_empty_history": "Add a few titles to My List first.",
     "foryou_empty_subtitle": "We'll use your list to suggest what to watch next.",
     "foryou_no_recommendations": "Nothing stood out this time — try Refresh later.",
-    "why_this_fits": "Why this fits you"
+    "why_this_fits": "Why this fits you",
+    "staging_write_blocked": "This is a Staging environment without its own Firebase project — writes are disabled to protect Production data.",
+    "notify_settings": "Airing reminders",
+    "notify_explainer": "Get a browser/device notification when a new episode airs for anime you've turned this on for. Times come from AniList's own schedule — never guessed or generated.",
+    "notify_on": "Airing reminders on",
+    "notify_off": "Airing reminders off",
+    "notify_enable": "Enable reminders",
+    "notify_enabled": "Reminders enabled on this device.",
+    "notify_unsubscribe_device": "Unsubscribe this device",
+    "notify_disable_all": "Disable all reminders",
+    "notify_unsupported": "Notifications are not supported in this browser.",
+    "notify_not_configured": "Airing reminders are not yet configured for this site.",
+    "notify_permission_denied": "Notifications are blocked for this site in your browser settings.",
+    "notify_permission_dismissed": "Notification permission was not granted.",
+    "notify_subscribed": "This device is subscribed to airing reminders.",
+    "notify_not_subscribed": "This device is not subscribed yet.",
+    "airing_notification_generic": "A new episode just aired."
   }
 }

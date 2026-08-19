@@ -33,18 +33,49 @@
 
 # `npm run build` runs `build:css` (compiles the pinned local Tailwind v3.4.19 build from
 # tailwind.config.js/tailwind-input.css into tailwind.generated.css), then
-# scripts/generate-deploy-origin.js (snapshots DEPLOY_PRIME_URL/DEPLOY_URL — build-step-only
-# variables, unavailable to a Function at runtime — into a small generated file
-# netlify/functions/anilist.js reads at cold start, so a Deploy Preview's exact origin can be
-# allowed through that Function's CORS check; see that script's header comment), then
-# scripts/build-site.js — see package.json's "build" script. Netlify invokes that one repository
-# script rather than duplicating the Tailwind CLI invocation here. This ordering matters: Netlify
-# bundles Functions with esbuild only AFTER this whole build command finishes, so the generated
-# file already exists on disk by the time netlify/functions/anilist.js is bundled.
+# scripts/generate-deploy-origin.js and scripts/generate-function-context.js (each snapshot
+# build-step-only Netlify variables — DEPLOY_PRIME_URL/DEPLOY_URL, and CONTEXT/BRANCH/
+# STAGING_FIREBASE_PROJECT_ID respectively — into small generated JSON files under
+# netlify/functions/lib/ that the Functions read at cold start, since none of these variables are
+# available inside a deployed Function's own process.env; see each script's header comment), then
+# scripts/generate-build-info.js (the browser-side twin snapshot) and scripts/build-site.js — see
+# package.json's "build" script. Netlify invokes that one repository script rather than
+# duplicating the Tailwind CLI invocation here. This ordering matters: Netlify bundles Functions
+# with esbuild only AFTER this whole build command finishes, so both generated files already
+# exist on disk by the time any Function is bundled — see `included_files` below for why they
+# also need to be explicitly declared, not just present on disk in time.
 [build]
   command = "npm run build"
   publish = "site"
   functions = "netlify/functions"
+
+# --- Staging (Development -> Staging -> Production workflow) ---
+# `staging` is a real, stable Git branch (not a per-PR Deploy Preview) whose build is meant to be
+# reachable at a stable URL for manual/E2E QA before anything reaches `main`/Production. No
+# `[context.staging]` override block is needed here for the build itself to work correctly —
+# Netlify already injects CONTEXT="branch-deploy" and BRANCH="staging" into every branch-deploy
+# build automatically, which is exactly what js/environment.js's resolveEnvironment() (via
+# scripts/generate-build-info.js) reads to tell Staging apart from Production/any other branch.
+# CORS also needs no new ALLOWED_ORIGIN entry: netlify/functions/{anilist,discover-ai,assistant,
+# weather}.js already auto-allow whatever origin THIS deploy's own DEPLOY_PRIME_URL resolves to
+# (see lib/deploy-origin.js) — DEPLOY_PRIME_URL is populated for branch deploys the same way it
+# is for Deploy Previews, so staging--edenatlas.netlify.app is allowed automatically once the
+# branch deploy exists, with zero code/config change here.
+#
+# What THIS repo cannot do on its own (no Netlify CLI/API access in this environment — see the
+# completion report for the exact manual steps):
+#   1. Netlify site UI: Site configuration -> Build & deploy -> Deploy contexts -> Branch
+#      deploys -> enable branch deploys for the `staging` branch specifically (not "all
+#      branches," which would also branch-deploy every throwaway feature branch).
+#   2. Firebase Console -> Authentication -> Settings -> Authorized domains: add the resulting
+#      staging--edenatlas.netlify.app domain (Google Sign-In will otherwise reject it).
+#   3. If/when a dedicated staging Firebase project is created (see js/environment.js /
+#      firebase-init.js's isUsingIsolatedStagingBackend()): set STAGING_FIREBASE_API_KEY /
+#      _AUTH_DOMAIN / _PROJECT_ID / _STORAGE_BUCKET / _MESSAGING_SENDER_ID / _APP_ID as Netlify
+#      environment variables, scoped to the `staging` branch context only (Netlify UI: Site
+#      configuration -> Environment variables -> add variable -> scope to "staging" branch).
+#      Until all six are set, Staging safely reuses Production's Firebase project in read-mostly
+#      fashion — see firebase-init.js's isStagingWritesUnsafe() and discover.js's write guard.
 
 # firebase-admin ^14.2.0 (netlify/functions/assistant.js's one dependency) requires Node >=22 —
 # matches package.json's own "engines" field. Explicit here too (not just left to Netlify's
@@ -58,6 +89,57 @@
 
 [functions]
   node_bundler = "esbuild"
+  # No `included_files` here on purpose — an earlier fix attempt added one for
+  # netlify/functions/lib/*.generated.json (build-context.generated.json / deploy-origin.
+  # generated.json, written by scripts/generate-function-context.js / generate-deploy-origin.js)
+  # and it did NOT resolve the "config/unknown-deploy-context" production incident on the staging
+  # branch deploy. Verified against the real Netlify Function packaging mechanism
+  # (@netlify/zip-it-and-ship-it + esbuild), not assumed: included_files DOES correctly copy a
+  # file into the deployed archive, but it preserves that file's ORIGINAL relative path
+  # (netlify/functions/lib/...). esbuild bundles an entry point like netlify/functions/anilist.js
+  # into a single output file that keeps the ENTRY file's own path inside the archive
+  # (netlify/functions/anilist.js) — but every module it required gets INLINED into that same
+  # physical file, so `__dirname` inside the bundle reflects the bundle's own location
+  # (netlify/functions/), one directory ABOVE where the included JSON actually landed
+  # (netlify/functions/lib/). A `path.join(__dirname, "...")`-based fs read was therefore always
+  # looking one directory too high, regardless of included_files. The real fix (see
+  # netlify/functions/lib/build-context.js's and lib/deploy-origin.js's header comments) is a
+  # literal, statically-analyzable `require("./x.generated.json")` in each of those two files —
+  # esbuild inlines the parsed JSON directly into the bundle at build time, so there is no runtime
+  # file path left to get wrong, and no included_files entry is needed for it at all (confirmed by
+  # re-packaging with zip-it-and-ship-it and no included_files config: the resulting zip contains
+  # no .generated.json files whatsoever, and the packaged handler correctly resolves the staging
+  # project id purely from the inlined bundle data).
+
+# --- Phase 4: scheduled airing-reminder delivery ---
+# Netlify Scheduled Functions (https://docs.netlify.com/functions/scheduled-functions/) —
+# invokes netlify/functions/anime-airing-check.js on its own cron, independent of any browser
+# request. Every 20 minutes is a deliberately conservative cadence: AniList's own
+# nextAiringEpisode.timeUntilAiring is minute-granular at best, and this Function already re-reads
+# fresh AniList data every run (never guesses/interpolates a schedule between runs) — see that
+# file's own header comment.
+#
+# KNOWN GATE, not yet confirmed in this environment: Scheduled Functions availability can depend
+# on the Netlify plan/account this site is on. This code path is otherwise fully inert and
+# harmless until Netlify's dashboard actually shows it registered under
+# Site configuration -> Functions -> Scheduled functions — deploying this repo does not, by
+# itself, spend anything or enable a paid feature; it only takes effect if the Netlify account
+# already supports Scheduled Functions. See the completion report for the exact manual
+# verification step.
+#
+# Invocation model: a Scheduled Function is NOT reachable through its ordinary deployed URL by an
+# arbitrary caller — Netlify only invokes it via its own internal cron trigger (Production only),
+# the "Run now" control in the Netlify UI (available on preview/branch deploys too, including
+# `staging`), or `netlify functions:invoke` locally. netlify/functions/anime-airing-check.js
+# therefore has NO request-level authentication check of its own (an earlier version tried using
+# the invocation body's `next_run` field as a security signal — removed; `next_run` is scheduling
+# metadata, not a credential, and is never used for any conditional in that file). What actually
+# gates real sends vs. dry-run is the VERIFIED deploy context (see
+# netlify/functions/lib/firebase-admin.js's resolveDeployRole()) — Production may always send for
+# real; `staging`/any Deploy Preview defaults to enforced dry-run unless STAGING_ALLOW_REAL_SEND is
+# explicitly set AND real, isolated staging Firebase credentials are already confirmed configured.
+[functions."anime-airing-check"]
+  schedule = "*/20 * * * *"
 
 # --- Firebase Auth handler proxy (iOS standalone-PWA sign-in fix) ---
 # Firebase's OAuth redirect flow serves its handler page at /__/auth/handler on whatever host

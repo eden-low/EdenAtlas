@@ -83,7 +83,7 @@ const FOREIGN_UID = "some-other-uid"; // used only to seed a doc that belongs to
 
 const STATUSES = ["planning", "watching", "completed", "paused", "dropped"];
 const ALLOWED_KEYS = [
-  "uid", "anilistId", "mediaType", "title", "coverImage", "format", "status", "isAdult", "followedAt", "updatedAt",
+  "uid", "anilistId", "mediaType", "title", "coverImage", "format", "status", "isAdult", "notifyOnAiring", "followedAt", "updatedAt",
 ];
 
 let pass = 0;
@@ -134,6 +134,7 @@ function validPayload(overrides = {}) {
     format: "TV",
     status: "planning",
     isAdult: false,
+    notifyOnAiring: false,
     followedAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
     ...overrides,
@@ -154,6 +155,14 @@ function validPayload(overrides = {}) {
 async function seed(id, data) {
   await testEnv.withSecurityRulesDisabled(async (ctx) => {
     await setDoc(doc(ctx.firestore(), `followed_anime/${id}`), data);
+  });
+}
+// Same admin-bypass shape as seed() above, for push_subscriptions — kept a separate helper
+// rather than parameterizing seed() itself, so every existing followed_anime call site stays
+// untouched.
+async function seedSub(id, data) {
+  await testEnv.withSecurityRulesDisabled(async (ctx) => {
+    await setDoc(doc(ctx.firestore(), `push_subscriptions/${id}`), data);
   });
 }
 async function seedValidOwnerDoc(overrides = {}) {
@@ -459,6 +468,237 @@ async function run() {
       await assertFails(batch.commit());
       assert.strictEqual(await adminExists(goodId), false, "the VALID half of a failed batch must not have been written");
       assert.strictEqual(await adminExists(badId), false);
+    });
+
+    // ---- Public Resume owner identity (public_profiles) ----
+
+    await test("a normal user cannot create or update public_profiles role to owner", async () => {
+      const db = friendCtx().firestore();
+      const ref = doc(db, "public_profiles", FRIEND_UID);
+      await assertFails(setDoc(ref, {
+        uid: FRIEND_UID, displayName: "Friend", role: "owner", careerVisibility: "public",
+      }));
+
+      await assertSucceeds(setDoc(ref, {
+        uid: FRIEND_UID, displayName: "Friend", role: "friend", careerVisibility: "public",
+      }));
+      await assertFails(updateDoc(ref, { role: "owner" }));
+    });
+
+    await test("normal allowed public-profile edits still work", async () => {
+      const db = viewerCtx().firestore();
+      const ref = doc(db, "public_profiles", VIEWER_UID);
+      await assertSucceeds(setDoc(ref, {
+        uid: VIEWER_UID, displayName: "Viewer", role: "viewer", careerVisibility: "public",
+      }));
+      await assertSucceeds(updateDoc(ref, {
+        displayName: "Updated Viewer", username: "updated-viewer", careerVisibility: "connections",
+      }));
+      const snap = await getDoc(ref);
+      assert.strictEqual(snap.data().displayName, "Updated Viewer");
+      assert.strictEqual(snap.data().role, "viewer");
+    });
+
+    await test("the actual Owner can create and update the canonical owner public profile", async () => {
+      const db = ownerCtx().firestore();
+      const ref = doc(db, "public_profiles", OWNER_UID);
+      await assertSucceeds(setDoc(ref, {
+        uid: OWNER_UID, displayName: "Owner", role: "owner", careerVisibility: "public",
+      }));
+      await assertSucceeds(updateDoc(ref, { displayName: "Updated Owner" }));
+      const snap = await getDoc(ref);
+      assert.strictEqual(snap.data().role, "owner");
+      assert.strictEqual(snap.data().displayName, "Updated Owner");
+    });
+
+    await test("signed-out Resume owner resolution query returns only the real Owner profile", async () => {
+      await assertSucceeds(setDoc(doc(ownerCtx().firestore(), "public_profiles", OWNER_UID), {
+        uid: OWNER_UID, displayName: "Owner", role: "owner", careerVisibility: "public",
+      }));
+      await assertSucceeds(setDoc(doc(friendCtx().firestore(), "public_profiles", FRIEND_UID), {
+        uid: FRIEND_UID, displayName: "Friend", role: "friend", careerVisibility: "public",
+      }));
+
+      const publicDb = ctxFor(null).firestore();
+      const snap = await assertSucceeds(getDocs(query(
+        collection(publicDb, "public_profiles"),
+        where("role", "==", "owner")
+      )));
+      assert.strictEqual(snap.size, 1);
+      assert.strictEqual(snap.docs[0].id, OWNER_UID);
+    });
+
+    // ---- Phase 4: notifyOnAiring (followed_anime) ----
+
+    await test("create WITHOUT notifyOnAiring is rejected (required field, no implicit default)", async () => {
+      const db = ownerCtx().firestore();
+      const id = followId(OWNER_UID, 3000);
+      const payload = validPayload({ anilistId: 3000 });
+      delete payload.notifyOnAiring;
+      await assertFails(setDoc(doc(db, "followed_anime", id), payload));
+    });
+
+    await test("create with notifyOnAiring as a non-boolean is rejected", async () => {
+      const db = ownerCtx().firestore();
+      const id = followId(OWNER_UID, 3001);
+      await assertFails(setDoc(doc(db, "followed_anime", id), validPayload({ anilistId: 3001, notifyOnAiring: "true" })));
+      await assertFails(setDoc(doc(db, "followed_anime", id), validPayload({ anilistId: 3001, notifyOnAiring: 1 })));
+    });
+
+    await test("create with notifyOnAiring: false succeeds (a new follow never starts subscribed)", async () => {
+      const db = ownerCtx().firestore();
+      const id = followId(OWNER_UID, 3002);
+      await assertSucceeds(setDoc(doc(db, "followed_anime", id), validPayload({ anilistId: 3002, notifyOnAiring: false })));
+    });
+
+    await test("update can toggle notifyOnAiring true/false without touching any other field", async () => {
+      const { id } = await seedValidOwnerDoc({ anilistId: 3003, notifyOnAiring: false });
+      const db = ownerCtx().firestore();
+      await assertSucceeds(updateDoc(doc(db, "followed_anime", id), { notifyOnAiring: true, updatedAt: serverTimestamp() }));
+      const snap = await adminGet(id);
+      assert.strictEqual(snap.data().notifyOnAiring, true);
+      await assertSucceeds(updateDoc(doc(db, "followed_anime", id), { notifyOnAiring: false, updatedAt: serverTimestamp() }));
+    });
+
+    await test("a status-only update leaves a previously-true notifyOnAiring unchanged (partial update semantics)", async () => {
+      const { id } = await seedValidOwnerDoc({ anilistId: 3004, notifyOnAiring: true });
+      const db = ownerCtx().firestore();
+      await assertSucceeds(updateDoc(doc(db, "followed_anime", id), { status: "watching", updatedAt: serverTimestamp() }));
+      const snap = await adminGet(id);
+      assert.strictEqual(snap.data().notifyOnAiring, true);
+    });
+
+    await test("update with notifyOnAiring as a non-boolean is rejected", async () => {
+      const { id } = await seedValidOwnerDoc({ anilistId: 3005 });
+      const db = ownerCtx().firestore();
+      await assertFails(updateDoc(doc(db, "followed_anime", id), { notifyOnAiring: "yes", updatedAt: serverTimestamp() }));
+    });
+
+    // ---- Phase 4: push_subscriptions ----
+
+    function subValidPayload(overrides = {}) {
+      return {
+        uid: OWNER_UID,
+        tokenHash: "hash-abc-123",
+        token: "fcm-token-xyz",
+        platform: "web",
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+        ...overrides,
+      };
+    }
+    function subId(uid, tokenHash) {
+      return `${uid}_${tokenHash}`;
+    }
+
+    await test("Owner can create a push_subscriptions doc with the correct deterministic id", async () => {
+      const db = ownerCtx().firestore();
+      const id = subId(OWNER_UID, "hash-abc-123");
+      await assertSucceeds(setDoc(doc(db, "push_subscriptions", id), subValidPayload()));
+    });
+
+    await test("push_subscriptions create with a mismatched id (not uid_tokenHash) is rejected", async () => {
+      const db = ownerCtx().firestore();
+      await assertFails(setDoc(doc(db, "push_subscriptions", "not-the-right-id"), subValidPayload()));
+    });
+
+    await test("push_subscriptions create with an extra field is rejected", async () => {
+      const db = ownerCtx().firestore();
+      const id = subId(OWNER_UID, "hash-extra");
+      await assertFails(setDoc(doc(db, "push_subscriptions", id), subValidPayload({ tokenHash: "hash-extra", nickname: "my phone" })));
+    });
+
+    await test("push_subscriptions create with platform other than 'web' is rejected", async () => {
+      const db = ownerCtx().firestore();
+      const id = subId(OWNER_UID, "hash-plat");
+      await assertFails(setDoc(doc(db, "push_subscriptions", id), subValidPayload({ tokenHash: "hash-plat", platform: "ios" })));
+    });
+
+    await test("Friend and Viewer can never create a push_subscriptions doc (strictly Owner-only, not canParticipate())", async () => {
+      const friendDb = friendCtx().firestore();
+      const viewerDb = viewerCtx().firestore();
+      await assertFails(setDoc(doc(friendDb, "push_subscriptions", subId(FRIEND_UID, "h1")), subValidPayload({ uid: FRIEND_UID, tokenHash: "h1" })));
+      await assertFails(setDoc(doc(viewerDb, "push_subscriptions", subId(VIEWER_UID, "h2")), subValidPayload({ uid: VIEWER_UID, tokenHash: "h2" })));
+    });
+
+    await test("a signed-out caller can never create a push_subscriptions doc", async () => {
+      const db = ctxFor(null).firestore();
+      await assertFails(setDoc(doc(db, "push_subscriptions", subId(OWNER_UID, "h3")), subValidPayload({ tokenHash: "h3" })));
+    });
+
+    await test("push_subscriptions update can refresh updatedAt only — uid/tokenHash/token/platform/createdAt are immutable", async () => {
+      const id = subId(OWNER_UID, "hash-refresh");
+      await seedSub(id, subValidPayload({ tokenHash: "hash-refresh", createdAt: Timestamp.now(), updatedAt: Timestamp.now() }));
+      const db = ownerCtx().firestore();
+      await assertSucceeds(updateDoc(doc(db, "push_subscriptions", id), { updatedAt: serverTimestamp() }));
+      await assertFails(updateDoc(doc(db, "push_subscriptions", id), { token: "a-different-token", updatedAt: serverTimestamp() }));
+      await assertFails(updateDoc(doc(db, "push_subscriptions", id), { tokenHash: "different-hash", updatedAt: serverTimestamp() }));
+      await assertFails(updateDoc(doc(db, "push_subscriptions", id), { platform: "ios", updatedAt: serverTimestamp() }));
+      await assertFails(updateDoc(doc(db, "push_subscriptions", id), { createdAt: serverTimestamp(), updatedAt: serverTimestamp() }));
+    });
+
+    await test("push_subscriptions: reading/deleting a doc whose resource uid belongs to another user is rejected even for the real Owner", async () => {
+      const id = subId(FOREIGN_UID, "hash-foreign");
+      await seedSub(id, subValidPayload({ uid: FOREIGN_UID, tokenHash: "hash-foreign", createdAt: Timestamp.now(), updatedAt: Timestamp.now() }));
+      const db = ownerCtx().firestore();
+      await assertFails(getDoc(doc(db, "push_subscriptions", id)));
+      await assertFails(deleteDoc(doc(db, "push_subscriptions", id)));
+    });
+
+    await test("Owner can read and delete their own push_subscriptions doc", async () => {
+      const id = subId(OWNER_UID, "hash-own");
+      await seedSub(id, subValidPayload({ tokenHash: "hash-own", createdAt: Timestamp.now(), updatedAt: Timestamp.now() }));
+      const db = ownerCtx().firestore();
+      await assertSucceeds(getDoc(doc(db, "push_subscriptions", id)));
+      await assertSucceeds(deleteDoc(doc(db, "push_subscriptions", id)));
+    });
+
+    // REGRESSION (root cause of the reported "开启提醒 fails with permission-denied" bug):
+    // js/push-notifications.js's subscribeThisDevice() calls getDoc(ref) on the device's
+    // deterministic push_subscriptions doc BEFORE deciding whether to setDoc (new device) or
+    // updateDoc (already-registered device) — this is the very first Firestore call a first-time
+    // subscribe makes. For a brand-new device, that doc does not exist yet, so `resource` is null
+    // when the `read`/`get` rule evaluates `resource.data.uid` — dereferencing a property of a
+    // null resource is a rules evaluation error, which Firestore reports to the client identically
+    // to a real permission denial (PERMISSION_DENIED), never NOT_FOUND. This never showed up in
+    // "Owner can read ... own push_subscriptions doc" above because that test seeds the doc first.
+    await test("Owner reading their OWN not-yet-existing push_subscriptions doc must not fail closed (first-time subscribe)", async () => {
+      const id = subId(OWNER_UID, "hash-brand-new-device");
+      const db = ownerCtx().firestore();
+      const snap = await getDoc(doc(db, "push_subscriptions", id));
+      assert.strictEqual(snap.exists(), false, "expected a clean non-existent read, not a thrown/denied error");
+    });
+
+    // ---- Phase 4: anime_notification_log (server-Admin-write-only dedup log) ----
+
+    await test("anime_notification_log: no client (Owner included) can ever create/update/delete — default-deny, no rule grants it", async () => {
+      const db = ownerCtx().firestore();
+      const id = "owner-uid-1_100_5";
+      await assertFails(setDoc(doc(db, "anime_notification_log", id), { uid: OWNER_UID, anilistId: 100, episode: 5, sentAt: serverTimestamp() }));
+      // Seed one via the rules-disabled admin bypass (simulating the real server-side writer),
+      // then confirm no client write path can touch it afterward either.
+      await testEnv.withSecurityRulesDisabled(async (ctx) => {
+        await setDoc(doc(ctx.firestore(), `anime_notification_log/${id}`), { uid: OWNER_UID, anilistId: 100, episode: 5, sentAt: Timestamp.now() });
+      });
+      await assertFails(updateDoc(doc(db, "anime_notification_log", id), { episode: 6 }));
+      await assertFails(deleteDoc(doc(db, "anime_notification_log", id)));
+    });
+
+    await test("Owner can read their own anime_notification_log doc; Friend/Viewer/signed-out and a foreign-uid doc are all rejected", async () => {
+      const id = "owner-uid-1_100_5";
+      await testEnv.withSecurityRulesDisabled(async (ctx) => {
+        await setDoc(doc(ctx.firestore(), `anime_notification_log/${id}`), { uid: OWNER_UID, anilistId: 100, episode: 5, sentAt: Timestamp.now() });
+      });
+      await assertSucceeds(getDoc(doc(ownerCtx().firestore(), "anime_notification_log", id)));
+      await assertFails(getDoc(doc(friendCtx().firestore(), "anime_notification_log", id)));
+      await assertFails(getDoc(doc(viewerCtx().firestore(), "anime_notification_log", id)));
+      await assertFails(getDoc(doc(ctxFor(null).firestore(), "anime_notification_log", id)));
+
+      const foreignId = "some-other-uid_200_1";
+      await testEnv.withSecurityRulesDisabled(async (ctx) => {
+        await setDoc(doc(ctx.firestore(), `anime_notification_log/${foreignId}`), { uid: FOREIGN_UID, anilistId: 200, episode: 1, sentAt: Timestamp.now() });
+      });
+      await assertFails(getDoc(doc(ownerCtx().firestore(), "anime_notification_log", foreignId)));
     });
   } finally {
     await testEnv.cleanup();

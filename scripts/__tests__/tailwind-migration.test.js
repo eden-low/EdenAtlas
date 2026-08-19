@@ -222,17 +222,28 @@ async function run() {
     assert.ok(!/tailwindcss/.test(toml), "netlify.toml must not duplicate the Tailwind CLI invocation");
   });
 
-  await test("package.json build script runs build:css, then generate-deploy-origin, then build-site.js", () => {
+  await test("package.json build script runs build:css, then generate-deploy-origin, then generate-build-info, then build-site.js", () => {
     // Updated by the Atlas Assistant Deploy Preview CORS fix — pkg.scripts.build legitimately
     // grew a new step (scripts/generate-deploy-origin.js, which must run before Netlify bundles
     // Functions with esbuild, i.e. before this whole command finishes; its exact position
     // relative to build-site.js doesn't matter functionally, since the two write to unrelated
     // locations, but stays between build:css and build-site.js for a stable, documented order).
+    // The Development -> Staging -> Production pass added a second, similarly build-time-only
+    // step, scripts/generate-build-info.js, which must run before build-site.js copies js/ into
+    // site/ (so the freshly-generated js/build-info.generated.js is actually included). The
+    // Staging/Production isolation follow-up pass added a THIRD, scripts/generate-function-
+    // context.js (Gap 1's server-side CONTEXT/BRANCH snapshot for Netlify Functions), inserted
+    // between generate-deploy-origin.js and generate-build-info.js.
     const pkg = JSON.parse(read("package.json"));
-    assert.strictEqual(pkg.scripts.build, "npm run build:css && node scripts/generate-deploy-origin.js && node scripts/build-site.js");
+    assert.strictEqual(
+      pkg.scripts.build,
+      "npm run build:css && node scripts/generate-deploy-origin.js && node scripts/generate-function-context.js && node scripts/generate-build-info.js && node scripts/build-site.js"
+    );
     assert.strictEqual(pkg.scripts["build:css"], "tailwindcss -c tailwind.config.js -i ./tailwind-input.css -o ./tailwind.generated.css --minify");
     assert.strictEqual(pkg.scripts["watch:css"], "tailwindcss -c tailwind.config.js -i ./tailwind-input.css -o ./tailwind.generated.css --watch");
     assert.strictEqual(pkg.scripts["generate:deploy-origin"], "node scripts/generate-deploy-origin.js");
+    assert.strictEqual(pkg.scripts["generate:function-context"], "node scripts/generate-function-context.js");
+    assert.strictEqual(pkg.scripts["generate:build-info"], "node scripts/generate-build-info.js");
   });
 
   await test("existing test scripts (test:functions, test:frontend, test) still run every prior suite", () => {
@@ -253,6 +264,8 @@ async function run() {
       "node netlify/functions/__tests__/assistant.test.js",
       "node netlify/functions/__tests__/weather.test.js",
       "node netlify/functions/__tests__/anilist.test.js",
+      "node netlify/functions/__tests__/discover-ai.test.js",
+      "node netlify/functions/__tests__/anime-airing-check.test.js",
     ];
     let functionsCursor = 0;
     priorFunctionsCmds.forEach((cmd) => {
@@ -260,17 +273,28 @@ async function run() {
       assert.ok(idx !== -1 && idx >= functionsCursor, `test:functions dropped or reordered pre-existing command: ${cmd}`);
       functionsCursor = idx + 1;
     });
+    // The Staging/Production Firebase Admin isolation follow-up (Gap 3: extracting the airing-
+    // check core into its own testable module) inserted a new suite BEFORE anime-airing-check.test.js
+    // (which now tests only the thin wrapper) and appended a new structural suite (Gap 1's
+    // buildContext wiring proof) after it — an insertion in the middle, not just an append, so
+    // this is checked by exact array equality rather than the ordered-subsequence check above.
     assert.deepStrictEqual(functionsCmds, [
-      ...priorFunctionsCmds,
+      "node netlify/functions/__tests__/assistant.test.js",
+      "node netlify/functions/__tests__/weather.test.js",
+      "node netlify/functions/__tests__/anilist.test.js",
       "node netlify/functions/__tests__/discover-ai.test.js",
+      "node netlify/functions/__tests__/airing-check-core.test.js",
+      "node netlify/functions/__tests__/anime-airing-check.test.js",
+      "node netlify/functions/__tests__/staging-isolation-wiring.test.js",
     ]);
 
     const frontendCmds = splitCmds(pkg.scripts["test:frontend"]);
-    // "Prior" here means "predates the Discover AI (Qwen translation + For You) pass's own new
-    // suites," reconciled by folding every previously-new addition (xss-security.test.js,
+    // "Prior" here means "predates the Discover 'My List' card-actions responsive-overflow fix's
+    // own new suite," reconciled by folding every previously-new addition (xss-security.test.js,
     // auth-pulse-scope.test.js, discover-security.test.js, discover-tabs.test.js,
-    // discover-description.test.js) into this baseline list — the same "new addition becomes next
-    // pass's baseline" convention this assertion has followed every time it was updated before.
+    // discover-description.test.js, environment.test.js, push-notifications.test.js) into this
+    // baseline list — the same "new addition becomes next pass's baseline" convention this
+    // assertion has followed every time it was updated before.
     const priorFrontendCmds = [
       "node js/__tests__/date-utils.test.js",
       "node js/__tests__/reflection.test.js",
@@ -280,6 +304,10 @@ async function run() {
       "node js/__tests__/discover-security.test.js",
       "node js/__tests__/discover-tabs.test.js",
       "node js/__tests__/discover-description.test.js",
+      "node js/__tests__/discover-foryou.test.js",
+      "node js/__tests__/discover-translate.test.js",
+      "node js/__tests__/environment.test.js",
+      "node js/__tests__/push-notifications.test.js",
     ];
     // Every pre-existing command is still present, in its original relative order (a genuine
     // ordered-subsequence check, not just an unordered "includes all of" set check).
@@ -289,16 +317,36 @@ async function run() {
       assert.ok(idx !== -1 && idx >= cursor, `test:frontend dropped or reordered pre-existing command: ${cmd}`);
       cursor = idx + 1;
     });
-    // And exactly two new commands were added on top — Discover AI's "For You" tab-lifecycle
-    // suite and its Translate to Chinese / View Original + localStorage-cache suite — never a
-    // silent removal disguised as a reorder.
+    // The "My List" anime-card delete-button responsive-overflow fix's own new suite
+    // (discover-card-actions-layout.test.js — proves the min-w-0/flex-wrap layout fix and that
+    // status/notify/remove functionality is unchanged), the 2026 internship Résumé update's own
+    // new suite (resume-experience-dates.test.js — proves the EXPERIENCE[].dates bilingual
+    // { en, zh } shape change renders correctly in both career.js and portfolio.js and never
+    // regresses to "[object Object]"), and the recruiter-PDF print-QA pass's own new suite
+    // (resume-print-stylesheet.test.js — proves the @media print fixes: the min-h-screen blank-
+    // page bug, the non-Production env banner leaking onto paper, the -webkit-backdrop-filter
+    // rasterization/no-extractable-text bug, empty Certificates/Awards sections, and the fixed-
+    // height project cover placeholder) are the newest additions on top — never a silent removal
+    // disguised as a reorder.
     assert.deepStrictEqual(frontendCmds, [
       ...priorFrontendCmds,
-      "node js/__tests__/discover-foryou.test.js",
-      "node js/__tests__/discover-translate.test.js",
+      "node js/__tests__/discover-card-actions-layout.test.js",
+      "node js/__tests__/resume-experience-dates.test.js",
+      "node js/__tests__/resume-print-stylesheet.test.js",
     ]);
 
     assert.strictEqual(pkg.scripts.test, "npm run test:functions && npm run test:frontend");
+    assert.strictEqual(pkg.scripts["test:generate-build-info"], "node scripts/__tests__/generate-build-info.test.js");
+    assert.strictEqual(
+      pkg.scripts["test:all"],
+      "npm run test && npm run test:firestore-rules && npm run test:tailwind-migration && npm run test:generate-build-info && npm run test:staging-packaging"
+    );
+    // test:staging-packaging is a real, heavy Netlify Function-packaging test (real esbuild via
+    // @netlify/zip-it-and-ship-it) — deliberately kept OUT of `test`/`test:functions`, the same
+    // way test:firestore-rules (a real Firestore Emulator, needing a JDK) is kept out, so the
+    // fast/dependency-free `npm test` invariant this file's own history repeatedly documents stays
+    // true for anyone/any CI without that heavier tooling installed.
+    assert.strictEqual(pkg.scripts["test:staging-packaging"], "node netlify/functions/__tests__/staging-packaging.test.js");
   });
 
   await test(".gitignore ignores tailwind.generated.css without disturbing existing entries", () => {

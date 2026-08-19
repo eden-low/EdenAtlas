@@ -499,10 +499,13 @@ function buildProductionDeps() {
   const { getAuth } = require("firebase-admin/auth");
   const { getFirestore } = require("firebase-admin/firestore");
   const { initializeFirebaseAdmin } = require("./lib/firebase-admin");
+  const { readGeneratedBuildContext } = require("./lib/build-context");
   let app = null; // memoized ONLY on success — see anilist.js's/assistant.js's ensureApp() comment
 
   function ensureApp() {
     if (app) return app;
+    // buildContext: Gap 1 (Staging/Production Firebase Admin isolation) — see
+    // lib/firebase-admin.js's assertProjectMatchesBuildContext().
     app = initializeFirebaseAdmin({
       getApps,
       getApp,
@@ -510,6 +513,7 @@ function buildProductionDeps() {
       cert,
       projectId: process.env.FIREBASE_PROJECT_ID,
       serviceAccountRaw: process.env.FIREBASE_SERVICE_ACCOUNT,
+      buildContext: readGeneratedBuildContext(),
     });
     return app;
   }

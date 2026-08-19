@@ -109,6 +109,23 @@ function copyDir(name, filter) {
   fs.cpSync(src, path.join(OUT, name), { recursive: true, filter });
 }
 
+// Phase 1 safeguard #10: "Prevent staging/preview pages from being indexed." Netlify's own
+// `_headers` file format (https://docs.netlify.com/routing/headers/) is additive alongside
+// netlify.toml's [[headers]] blocks, which already set sitewide security headers — this only
+// adds one more, and only for a non-Production build. Explicit, testable decision (this is the
+// SAME process.env.CONTEXT read scripts/generate-build-info.js already snapshots into
+// js/build-info.generated.js — never a hostname guess) rather than something a crawler-facing
+// robots.txt could get out of sync with per-deploy. Fails CLOSED by design: an unset/unknown
+// CONTEXT (a local `npm run build`, a misconfigured deploy) defaults to noindex, not indexable —
+// only an explicit CONTEXT=production build ever ships without this header.
+function writeRobotsHeader() {
+  const isProduction = process.env.CONTEXT === "production";
+  if (isProduction) return; // Production ships no extra robots header (net-new sitewide behavior otherwise)
+  const contents = "/*\n  X-Robots-Tag: noindex, nofollow\n";
+  fs.writeFileSync(path.join(OUT, "_headers"), contents, "utf8");
+  console.log(`build-site: wrote _headers with X-Robots-Tag: noindex (CONTEXT=${process.env.CONTEXT || "unset"})`);
+}
+
 function build() {
   rmrf(OUT);
   fs.mkdirSync(OUT, { recursive: true });
@@ -116,6 +133,7 @@ function build() {
   // "js" is the only ALLOW_DIRS entry that has ever grown test scaffolding (js/__tests__/,
   // js/package.json) — the filter is a no-op for images/locales, which have never had either.
   ALLOW_DIRS.forEach((name) => copyDir(name, (src) => !isTestScaffolding(src)));
+  writeRobotsHeader();
   const fileCount = ALLOW_FILES.length;
   console.log(`build-site: copied ${fileCount} files + ${ALLOW_DIRS.length} directories into ${path.relative(ROOT, OUT)}/`);
 }
