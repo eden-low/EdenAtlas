@@ -7,6 +7,7 @@
 // any of this ever runs.
 
 const { TOOLS, toolDefsForScopes, ToolValidationError } = require("./tools");
+const { buildAtlasTurnMessage } = require("./atlas-prompt");
 
 const MAX_TOOL_ROUNDS = 3;
 const MAX_TOOL_CALLS_PER_ROUND = 4; // bounded tool results per round, not just per request
@@ -210,8 +211,9 @@ function createProvenanceTracker() {
 // assistant.js, which reads `now` once and passes it here) — every date-resolving tool call
 // during this loop sees the exact same `now`, so a multi-round conversation can never drift
 // between two different ideas of "today" mid-turn.
-async function runAgentLoop({ qwenConfig, systemPrompt, history, userMessage, scopes, db, uid, now, timeZone, fetchImpl }) {
-  const messages = [{ role: "system", content: systemPrompt }, ...history, { role: "user", content: userMessage }];
+async function runAgentLoop({ qwenConfig, systemPrompt, history, userMessage, serializedContext, scopes, db, uid, now, timeZone, fetchImpl }) {
+  const currentTurn = buildAtlasTurnMessage({ userMessage, serializedContext });
+  const messages = [{ role: "system", content: systemPrompt }, ...history, { role: "user", content: currentTurn }];
   const toolDefs = toolDefsForScopes(scopes);
   const registry = createRefRegistry();
   const provenanceTracker = createProvenanceTracker();

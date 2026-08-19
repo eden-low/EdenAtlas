@@ -30,6 +30,8 @@ const { runAgentLoop, QwenError } = require("./lib/qwen");
 const { checkBurst, checkAndIncrementDailyUsage } = require("./lib/rate-limit");
 const { FirebaseConfigError } = require("./lib/firebase-admin");
 const { buildDateContext, DEFAULT_TIME_ZONE } = require("./lib/date-utils");
+const { buildAtlasAutoContext, emptyAtlasAutoContext } = require("./lib/atlas-context");
+const { APPLICATION_CONTEXT_SYSTEM_POLICY } = require("./lib/atlas-prompt");
 
 // Duplicated from firebase-init.js's OWNER_EMAIL on purpose (see that file's own comment) — this
 // Function has no way to import a browser ES module, and re-deriving "who is the Owner" from
@@ -162,12 +164,14 @@ function systemPrompt(scopes, dateContext) {
     // but this instruction is the server-side backstop for any older history that still slips
     // through, and for the reverse direction (a scope that just got turned off). ---
     "The scope list above is the ONLY authoritative statement of what you may use RIGHT NOW — it reflects the Owner's current selection for this exact request, not any earlier one. Any earlier message in this conversation (yours or the Owner's) claiming which scopes were enabled, disabled, or inaccessible may be STALE and must NEVER override the scope list above: if a scope is listed as enabled above, you must use it even if an earlier turn said you had no access to it; if a scope is NOT listed above, you must never use it or claim to have used it, even if an earlier turn in this same conversation did.",
-    "Never invent facts about the Owner's data — only state things a tool result actually returned. If a tool returns no results, say so plainly.",
+    APPLICATION_CONTEXT_SYSTEM_POLICY,
+    "Never invent facts about the Owner's data — only state things returned by a current-turn tool result or present in the current-turn Application Context. If neither contains the fact, say that the available context does not show it.",
     // --- Per-turn tool evidence (trust/provenance pass) — fixes a real production gap: a
     // follow-up like "if June?" was sometimes answered from the previous turn's remembered
     // result instead of a fresh tool call, so no source chip could ever be shown for it. ---
-    "Every fact you state about the Owner's own Memories, Journal, Journey, or Calendar must come from a tool call made in THIS turn — a previous answer earlier in this conversation is never sufficient evidence for a new question, even a closely related one (e.g. \"what about June?\" right after you answered about July). Whenever the Owner asks about a different date range, place, or topic than your most recent tool call actually covered, call the appropriate tool again before answering — never reuse an earlier turn's tool result for a new range or query.",
+    "Every fact you state about the Owner's own Memories, Journal, Journey, or Calendar must come from either a tool call made in THIS turn or the server-provided APPLICATION CONTEXT in THIS turn — a previous answer earlier in this conversation is never sufficient evidence for a new question, even a closely related one (e.g. \"what about June?\" right after you answered about July). Whenever the Owner asks about a different date range, place, or topic than the current Application Context or your most recent tool call actually covers, call the appropriate tool again before answering — never reuse an earlier turn's result for a new range or query.",
     "If you do not call a tool during this turn, never say you \"searched,\" \"checked,\" \"looked through,\" or \"found\" anything in the Owner's records — those words are only true the moment a tool actually ran. In that case, either answer only from what's already visible in this conversation, or ask a short clarifying question instead.",
+    "When Application Context is sufficient and you do not call a tool, describe it as provided app context rather than claiming you searched the Owner's records.",
     "Keep answers concise and cite which Memories/Journal entries/Journey events you used when relevant.",
     // --- Authoritative date context (task A/B) ---
     `Authoritative current date: currentLocalDate=${dateContext.currentLocalDate}, currentYear=${dateContext.currentYear}, currentMonth=${dateContext.currentMonth}, timeZone=${dateContext.timeZone}.`,
@@ -205,6 +209,20 @@ function sanitizeUsage(usage) {
   if (Number.isFinite(usage.completion_tokens)) out.completionTokens = usage.completion_tokens;
   if (Number.isFinite(usage.total_tokens)) out.totalTokens = usage.total_tokens;
   return Object.keys(out).length ? out : null;
+}
+
+function logAutoContextSummary(summary) {
+  const safe = summary && typeof summary === "object" ? summary : {};
+  const sources = Array.isArray(safe.queriedSources) ? safe.queriedSources.join(",") : "";
+  const types = Array.isArray(safe.includedTypes) ? safe.includedTypes.join(",") : "";
+  const errorCodes = Array.isArray(safe.errors)
+    ? safe.errors.map((item) => `${item && item.source || "unknown"}:${item && item.code || "unknown"}`).join(",")
+    : "";
+  console.log(
+    `[assistant] auto-context sources=${sources || "none"} collected=${Number(safe.collectedCount) || 0} ` +
+    `eligible=${Number(safe.eligibleCount) || 0} selected=${Number(safe.selectedCount) || 0} ` +
+    `chars=${Number(safe.approximateChars) || 0} types=${types || "none"} errors=${errorCodes || "none"}`
+  );
 }
 
 // `deps` is fully injectable so this handler is unit-testable without firebase-admin, a real
@@ -363,12 +381,27 @@ function createHandler(deps) {
     // different `new Date()` call) — one authoritative "now" per request, threaded everywhere.
     const timeZone = DEFAULT_TIME_ZONE;
     const dateContext = buildDateContext(now, timeZone);
+
+    // Build bounded Auto Context from the same verified uid + selected scopes the tool layer
+    // uses. Every source fails independently inside buildAtlasAutoContext(); this outer catch is
+    // the final availability boundary — Atlas still answers with its existing tool loop if the
+    // context pipeline itself ever throws unexpectedly.
+    let autoContext;
+    try {
+      const buildContext = deps.buildAtlasAutoContext || buildAtlasAutoContext;
+      autoContext = await buildContext({ db, uid, scopes, userMessage: message, now, timeZone });
+    } catch {
+      autoContext = emptyAtlasAutoContext({ code: "pipeline_failed" });
+    }
+    if (deps.contextDebug) logAutoContextSummary(autoContext.summary);
+
     try {
       const result = await runAgentLoop({
         qwenConfig: { baseUrl: env.QWEN_BASE_URL, apiKey: env.DASHSCOPE_API_KEY, model: env.QWEN_MODEL },
         systemPrompt: systemPrompt(scopes, dateContext),
         history,
         userMessage: message,
+        serializedContext: autoContext.serializedContext,
         scopes,
         now,
         timeZone,
@@ -385,9 +418,19 @@ function createHandler(deps) {
           // Server-generated, non-model-controlled evidence summary (see qwen.js's
           // createProvenanceTracker) — the frontend's evidence row is built from this object
           // only, never from `answer`'s free text.
-          provenance: result.provenance,
+          provenance: {
+            ...result.provenance,
+            autoContext: {
+              used: autoContext.summary.selectedCount > 0,
+              selectedCount: autoContext.summary.selectedCount,
+              includedTypes: autoContext.summary.includedTypes,
+            },
+          },
           usage: sanitizeUsage(result.usage),
           roundsUsed: result.roundsUsed,
+          // Development/Staging-only metadata. Counts, types, sizes and safe error enums only —
+          // never content, document ids, uid, prompt text, tokens, or environment values.
+          ...(deps.contextDebug ? { autoContext: autoContext.summary } : {}),
         },
         baseHeaders
       );
@@ -416,6 +459,7 @@ function buildProductionDeps() {
   const { getFirestore } = require("firebase-admin/firestore");
   const { initializeFirebaseAdmin } = require("./lib/firebase-admin");
   const { readGeneratedBuildContext } = require("./lib/build-context");
+  const buildContext = readGeneratedBuildContext();
   let app = null; // memoized ONLY on success — see ensureApp()'s comment
 
   // Once per warm Function instance: the first successful call caches `app` and every later
@@ -437,7 +481,7 @@ function buildProductionDeps() {
       cert,
       projectId: process.env.FIREBASE_PROJECT_ID,
       serviceAccountRaw: process.env.FIREBASE_SERVICE_ACCOUNT,
-      buildContext: readGeneratedBuildContext(),
+      buildContext,
     });
     return app;
   }
@@ -455,6 +499,7 @@ function buildProductionDeps() {
       return snap.exists ? snap.data() : null;
     },
     getDb: () => getFirestore(ensureApp()),
+    contextDebug: ["dev", "branch-deploy", "deploy-preview"].includes(buildContext.context),
     fetchImpl: undefined, // use global fetch
   };
 }
