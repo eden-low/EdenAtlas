@@ -566,4 +566,6 @@ module.exports = {
   MAX_TEXT_QUERY_LEN,
   DEFAULT_TIME_ZONE,
   fetchOwnerActivePhotos, // exported for direct ownership-merge/trash-exclusion tests
+  fetchOwnerJournals,
+  fetchOwnerLifeEvents,
 };

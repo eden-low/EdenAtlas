@@ -7,6 +7,7 @@
 // any of this ever runs.
 
 const { TOOLS, toolDefsForScopes, ToolValidationError } = require("./tools");
+const { buildAtlasTurnMessage } = require("./atlas-prompt");
 
 const MAX_TOOL_ROUNDS = 3;
 const MAX_TOOL_CALLS_PER_ROUND = 4; // bounded tool results per round, not just per request
@@ -36,6 +37,16 @@ function boundedJson(value, maxChars) {
 // A single, non-retried call to Qwen's OpenAI-compatible /chat/completions endpoint. No
 // automatic retry on failure — the task explicitly requires no retries that could create
 // uncontrolled cost; a failed call surfaces as a QwenError for the caller to report once.
+//
+// `enable_thinking: false` is required, not cosmetic: DashScope's OpenAI-compatible endpoint
+// rejects a non-streaming (`stream` left unset/false — the only mode this client ever uses, no
+// call site here or in discover-ai.js ever sets `stream: true`) request with an HTTP 400 for any
+// Qwen3-generation "hybrid thinking" model (the qwen3-* family, and current qwen-plus/qwen-turbo/
+// qwen-flash snapshots) whose default is thinking-enabled — this is Alibaba's own documented
+// constraint, not a bug in this client. Neither this file nor discover-ai.js's callers ever parse
+// a `reasoning_content` field, so there is no scenario where this app wants thinking mode on;
+// setting this explicitly keeps every call compatible regardless of which exact model snapshot
+// QWEN_MODEL is configured to, rather than depending on a model's own default.
 async function callQwenChatCompletions({ baseUrl, apiKey, model, messages, tools, fetchImpl }) {
   const doFetch = fetchImpl || fetch;
   const controller = new AbortController();
@@ -51,6 +62,7 @@ async function callQwenChatCompletions({ baseUrl, apiKey, model, messages, tools
         ...(tools && tools.length ? { tools, tool_choice: "auto" } : {}),
         max_tokens: MAX_OUTPUT_TOKENS,
         temperature: TEMPERATURE,
+        enable_thinking: false,
       }),
       signal: controller.signal,
     });
@@ -210,9 +222,16 @@ function createProvenanceTracker() {
 // assistant.js, which reads `now` once and passes it here) — every date-resolving tool call
 // during this loop sees the exact same `now`, so a multi-round conversation can never drift
 // between two different ideas of "today" mid-turn.
-async function runAgentLoop({ qwenConfig, systemPrompt, history, userMessage, scopes, db, uid, now, timeZone, fetchImpl }) {
-  const messages = [{ role: "system", content: systemPrompt }, ...history, { role: "user", content: userMessage }];
-  const toolDefs = toolDefsForScopes(scopes);
+async function runAgentLoop({ qwenConfig, systemPrompt, history, userMessage, serializedContext, scopes, db, uid, now, timeZone, fetchImpl, authoritativeRetrievalMatch = false }) {
+  const currentTurn = buildAtlasTurnMessage({ userMessage, serializedContext });
+  const messages = [{ role: "system", content: systemPrompt }, ...history, { role: "user", content: currentTurn }];
+  // A matched retrieval_status means the server has already performed the authorized,
+  // date-aware search and placed its bounded candidates in this turn's Application Context.
+  // Offering Qwen the older text-only tools here lets a later empty tool result contradict that
+  // authoritative match (for example, search_memories cannot express an August date range).
+  // Keep the ordinary/fallback agent loop unchanged; only a proven server-side match is
+  // answered directly from its selected context.
+  const toolDefs = authoritativeRetrievalMatch ? [] : toolDefsForScopes(scopes);
   const registry = createRefRegistry();
   const provenanceTracker = createProvenanceTracker();
   const ctx = {

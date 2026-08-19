@@ -280,6 +280,8 @@ async function run() {
     // this is checked by exact array equality rather than the ordered-subsequence check above.
     assert.deepStrictEqual(functionsCmds, [
       "node netlify/functions/__tests__/assistant.test.js",
+      "node netlify/functions/__tests__/atlas-context.test.js",
+      "node netlify/functions/__tests__/atlas-retrieval.test.js",
       "node netlify/functions/__tests__/weather.test.js",
       "node netlify/functions/__tests__/anilist.test.js",
       "node netlify/functions/__tests__/discover-ai.test.js",
