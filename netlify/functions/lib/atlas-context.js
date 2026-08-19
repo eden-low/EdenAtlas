@@ -22,6 +22,12 @@ const {
   MAX_ATLAS_CONTEXT_CHARS,
   APPLICATION_CONTEXT_FIXED_CHARS,
 } = require("./atlas-prompt");
+const {
+  analyzeRetrievalRequest,
+  rankRetrievalItems,
+  publicDateRange,
+  buildRetrievalStatusLine,
+} = require("./atlas-retrieval");
 
 const MAX_CONTEXT_ITEMS = 10;
 const MAX_CANDIDATES_PER_SOURCE = 40;
@@ -318,11 +324,16 @@ function serializeItemToFit(item, remainingChars) {
   return fitted.length <= remainingChars ? fitted : null;
 }
 
-function applyAtlasContextBudget(rankedItems, { budgetChars = MAX_ATLAS_CONTEXT_CHARS } = {}) {
+function applyAtlasContextBudget(rankedItems, { budgetChars = MAX_ATLAS_CONTEXT_CHARS, leadingLines = [] } = {}) {
   const safeBudget = Number.isFinite(budgetChars) ? Math.max(0, Math.floor(budgetChars)) : MAX_ATLAS_CONTEXT_CHARS;
   const dataBudget = Math.max(0, safeBudget - APPLICATION_CONTEXT_FIXED_CHARS);
   const selectedItems = [];
-  const lines = [];
+  // Retrieval metadata is server-generated, contains no record content/ids, and shares the
+  // exact same application-context budget as the records it describes. It can never bypass the
+  // 6,000-character envelope or consume/truncate the actual user prompt.
+  const lines = (Array.isArray(leadingLines) ? leadingLines : [])
+    .filter((line) => typeof line === "string" && line.length > 0)
+    .filter((line, index, all) => all.slice(0, index).join("\n").length + (index ? 1 : 0) + line.length <= dataBudget);
 
   for (const item of (Array.isArray(rankedItems) ? rankedItems : []).slice(0, MAX_CONTEXT_ITEMS)) {
     const separatorChars = lines.length ? 1 : 0;
@@ -339,21 +350,93 @@ function applyAtlasContextBudget(rankedItems, { budgetChars = MAX_ATLAS_CONTEXT_
   return { selectedItems, serializedContext, approximateChars, budgetChars: safeBudget };
 }
 
-async function buildAtlasAutoContext({ db, uid, scopes, userMessage, now }) {
-  const collected = await collectAtlasContext({ db, uid, scopes });
-  const ranked = rankAndFilterAtlasContext({ items: collected.items, userMessage, now });
-  const budgeted = applyAtlasContextBudget(ranked);
+async function buildAtlasAutoContext({
+  db, uid, scopes, userMessage, now, timeZone,
+  retrievalAnalyzer = analyzeRetrievalRequest,
+  retrievalRanker = rankRetrievalItems,
+}) {
+  let retrievalPlan = null;
+  let retrievalFallback = false;
+  const pipelineErrors = [];
+  try {
+    retrievalPlan = retrievalAnalyzer({ userMessage, now, timeZone });
+  } catch {
+    // Query interpretation is optional. If it ever fails, retain the exact Phase 1 collection,
+    // relevance and budget behavior rather than turning retrieval into a new availability risk.
+    retrievalFallback = true;
+    pipelineErrors.push({ source: "retrieval", code: "interpretation_failed" });
+  }
+
+  const enabledScopes = Array.isArray(scopes) ? scopes : [];
+  const collectionScopes = retrievalPlan && retrievalPlan.intent && retrievalPlan.querySources.length
+    ? enabledScopes.filter((scope) => retrievalPlan.querySources.includes(scope))
+    : enabledScopes;
+  const collected = await collectAtlasContext({ db, uid, scopes: collectionScopes });
+
+  let ranked;
+  let retrievalSummary = retrievalFallback ? { intent: false, status: "fallback" } : { intent: false, status: "not_requested" };
+  let leadingLines = [];
+  let retrievalCandidateCount = 0;
+
+  if (retrievalPlan && retrievalPlan.intent) {
+    try {
+      const sourcePriorities = Object.fromEntries(Object.entries(SOURCE_CONFIG).map(([source, config]) => [source, config.priority]));
+      const retrieval = retrievalRanker({ items: collected.items, plan: retrievalPlan, now, sourcePriorities });
+      ranked = retrieval.items;
+      retrievalCandidateCount = retrieval.totalMatches;
+      const allQueriedFailed = collected.queriedSources.length > 0 && collected.errors.length === collected.queriedSources.length;
+      const status = retrieval.totalMatches > 0
+        ? "matched"
+        : collected.queriedSources.length === 0
+          ? "no_authorized_source"
+          : allQueriedFailed
+            ? "unavailable"
+            : collected.errors.length
+              ? "partial_no_match"
+              : "no_match";
+      const truncated = retrieval.totalMatches > retrieval.items.length;
+      leadingLines = [buildRetrievalStatusLine({
+        plan: retrievalPlan,
+        status,
+        searchedSources: collected.queriedSources,
+        matchCount: retrieval.totalMatches,
+        truncated,
+      })];
+      retrievalSummary = {
+        intent: true,
+        status,
+        reason: retrievalPlan.reason,
+        requestedSources: retrievalPlan.requestedSources,
+        searchedSources: collected.queriedSources,
+        candidateCount: retrieval.totalMatches,
+        selectedCount: 0,
+        truncated,
+        resolvedDateRange: publicDateRange(retrievalPlan.dateRange),
+      };
+    } catch {
+      pipelineErrors.push({ source: "retrieval", code: "ranking_failed" });
+      retrievalSummary = { intent: false, status: "fallback" };
+      ranked = rankAndFilterAtlasContext({ items: collected.items, userMessage, now });
+      leadingLines = [];
+    }
+  } else {
+    ranked = rankAndFilterAtlasContext({ items: collected.items, userMessage, now });
+  }
+
+  const budgeted = applyAtlasContextBudget(ranked, { leadingLines });
+  if (retrievalSummary.intent) retrievalSummary.selectedCount = budgeted.selectedItems.length;
   const summary = {
     queriedSources: collected.queriedSources,
     sourceStats: collected.sourceStats,
     collectedCount: collected.items.length,
     eligibleCount: ranked.length,
     selectedCount: budgeted.selectedItems.length,
-    droppedCount: Math.max(0, ranked.length - budgeted.selectedItems.length),
+    droppedCount: Math.max(0, (retrievalSummary.intent ? retrievalCandidateCount : ranked.length) - budgeted.selectedItems.length),
     approximateChars: budgeted.approximateChars,
     budgetChars: budgeted.budgetChars,
     includedTypes: [...new Set(budgeted.selectedItems.map((item) => item.type))],
-    errors: collected.errors,
+    errors: [...pipelineErrors, ...collected.errors],
+    retrieval: retrievalSummary,
   };
   return { ...budgeted, summary };
 }
@@ -375,6 +458,7 @@ function emptyAtlasAutoContext({ code = null } = {}) {
       budgetChars: MAX_ATLAS_CONTEXT_CHARS,
       includedTypes: [],
       errors: code ? [{ source: "auto_context", code }] : [],
+      retrieval: { intent: false, status: code ? "fallback" : "not_requested" },
     },
   };
 }
