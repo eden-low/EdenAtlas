@@ -29,7 +29,7 @@ async function test(name, fn) {
 }
 
 const {
-  ENV, resolveEnvironment,
+  ENV, resolveEnvironment, selectFirebaseConfig,
 } = await import("../environment.js");
 
 (async () => {
@@ -69,6 +69,36 @@ const {
 
   await test("an unrecognized netlifyContext string never accidentally resolves to PRODUCTION", async () => {
     assert.notStrictEqual(resolveEnvironment({ netlifyContext: "bogus", hostname: "example.com" }), ENV.PRODUCTION);
+  });
+
+  await test("Firebase config mapping isolates Development while preserving Production and pre-production selection", async () => {
+    const configs = {
+      productionConfig: { projectId: "production-project" },
+      stagingConfig: { projectId: "staging-project" },
+      preProductionPlaceholderConfig: { projectId: "preproduction-unconfigured" },
+      developmentPlaceholderConfig: { projectId: "development-unconfigured" },
+    };
+    assert.strictEqual(selectFirebaseConfig({ ...configs, environment: ENV.PRODUCTION }).projectId, "production-project");
+    assert.strictEqual(selectFirebaseConfig({ ...configs, environment: ENV.STAGING }).projectId, "staging-project");
+    assert.strictEqual(selectFirebaseConfig({ ...configs, environment: ENV.DEPLOY_PREVIEW }).projectId, "staging-project");
+    assert.strictEqual(selectFirebaseConfig({ ...configs, environment: ENV.DEV }).projectId, "development-unconfigured");
+    assert.strictEqual(selectFirebaseConfig({ ...configs, environment: ENV.DEVELOPMENT }).projectId, "development-unconfigured");
+    assert.notStrictEqual(
+      selectFirebaseConfig({ ...configs, environment: ENV.DEVELOPMENT }).projectId,
+      configs.productionConfig.projectId
+    );
+  });
+
+  await test("Firebase config mapping fails closed when a pre-production config is missing", async () => {
+    const selected = selectFirebaseConfig({
+      environment: ENV.DEPLOY_PREVIEW,
+      productionConfig: { projectId: "production-project" },
+      stagingConfig: null,
+      preProductionPlaceholderConfig: { projectId: "preproduction-unconfigured" },
+      developmentPlaceholderConfig: { projectId: "development-unconfigured" },
+    });
+    assert.strictEqual(selected.projectId, "preproduction-unconfigured");
+    assert.notStrictEqual(selected.projectId, "production-project");
   });
 
   // ---- getEnvironment()/isStaging()/isProduction()/isNonProduction() wired through a real

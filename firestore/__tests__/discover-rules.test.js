@@ -470,6 +470,64 @@ async function run() {
       assert.strictEqual(await adminExists(badId), false);
     });
 
+    // ---- Public Resume owner identity (public_profiles) ----
+
+    await test("a normal user cannot create or update public_profiles role to owner", async () => {
+      const db = friendCtx().firestore();
+      const ref = doc(db, "public_profiles", FRIEND_UID);
+      await assertFails(setDoc(ref, {
+        uid: FRIEND_UID, displayName: "Friend", role: "owner", careerVisibility: "public",
+      }));
+
+      await assertSucceeds(setDoc(ref, {
+        uid: FRIEND_UID, displayName: "Friend", role: "friend", careerVisibility: "public",
+      }));
+      await assertFails(updateDoc(ref, { role: "owner" }));
+    });
+
+    await test("normal allowed public-profile edits still work", async () => {
+      const db = viewerCtx().firestore();
+      const ref = doc(db, "public_profiles", VIEWER_UID);
+      await assertSucceeds(setDoc(ref, {
+        uid: VIEWER_UID, displayName: "Viewer", role: "viewer", careerVisibility: "public",
+      }));
+      await assertSucceeds(updateDoc(ref, {
+        displayName: "Updated Viewer", username: "updated-viewer", careerVisibility: "connections",
+      }));
+      const snap = await getDoc(ref);
+      assert.strictEqual(snap.data().displayName, "Updated Viewer");
+      assert.strictEqual(snap.data().role, "viewer");
+    });
+
+    await test("the actual Owner can create and update the canonical owner public profile", async () => {
+      const db = ownerCtx().firestore();
+      const ref = doc(db, "public_profiles", OWNER_UID);
+      await assertSucceeds(setDoc(ref, {
+        uid: OWNER_UID, displayName: "Owner", role: "owner", careerVisibility: "public",
+      }));
+      await assertSucceeds(updateDoc(ref, { displayName: "Updated Owner" }));
+      const snap = await getDoc(ref);
+      assert.strictEqual(snap.data().role, "owner");
+      assert.strictEqual(snap.data().displayName, "Updated Owner");
+    });
+
+    await test("signed-out Resume owner resolution query returns only the real Owner profile", async () => {
+      await assertSucceeds(setDoc(doc(ownerCtx().firestore(), "public_profiles", OWNER_UID), {
+        uid: OWNER_UID, displayName: "Owner", role: "owner", careerVisibility: "public",
+      }));
+      await assertSucceeds(setDoc(doc(friendCtx().firestore(), "public_profiles", FRIEND_UID), {
+        uid: FRIEND_UID, displayName: "Friend", role: "friend", careerVisibility: "public",
+      }));
+
+      const publicDb = ctxFor(null).firestore();
+      const snap = await assertSucceeds(getDocs(query(
+        collection(publicDb, "public_profiles"),
+        where("role", "==", "owner")
+      )));
+      assert.strictEqual(snap.size, 1);
+      assert.strictEqual(snap.docs[0].id, OWNER_UID);
+    });
+
     // ---- Phase 4: notifyOnAiring (followed_anime) ----
 
     await test("create WITHOUT notifyOnAiring is rejected (required field, no implicit default)", async () => {

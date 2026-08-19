@@ -36,9 +36,9 @@ const { callAniList, AniListUpstreamError, safeAniListFailureMetadata } = requir
 
 const BATCH_CHUNK_SIZE = 25; // matches lib/anilist-operations.js's own MAX_BATCH_IDS
 
-// Tokens FCM will never accept again — safe to delete the subscription outright. Any other
-// send() failure (a transient network blip, a rate limit) is logged and skipped THIS run; the
-// subscription stays and is retried on the next scheduled invocation.
+// Tokens FCM will never accept again — safe to delete the subscription outright. Other failures
+// are retryable: the subscription stays, and when no sibling token succeeds the due episode also
+// stays pending for the next scheduled invocation.
 const DEAD_TOKEN_CODES = new Set([
   "messaging/registration-token-not-registered",
   "messaging/invalid-registration-token",
@@ -53,6 +53,11 @@ function chunk(arr, size) {
 
 function nowEpochSeconds(now) {
   return Math.floor(now.getTime() / 1000);
+}
+
+function scheduleSnapshot(value) {
+  if (!value || !Number.isFinite(value.episode) || !Number.isFinite(value.airingAt)) return null;
+  return { episode: value.episode, airingAt: value.airingAt };
 }
 
 async function runAiringCheck(deps, options = {}) {
@@ -112,30 +117,37 @@ async function runAiringCheck(deps, options = {}) {
     if (!fetchedIds.has(follow.anilistId)) continue;
 
     const media = mediaById.get(follow.anilistId) || null;
-    const nextEp = media && media.nextAiringEpisode && Number.isFinite(media.nextAiringEpisode.airingAt)
-      ? media.nextAiringEpisode
-      : null;
+    const latestSnapshot = scheduleSnapshot(media && media.nextAiringEpisode);
+    const storedSnapshot = scheduleSnapshot(follow.nextEpisodeSnapshot);
+    const storedDue = storedSnapshot && storedSnapshot.airingAt <= nowSecs;
+    const latestDue = latestSnapshot && latestSnapshot.airingAt <= nowSecs;
+    // AniList may expose episode N+1 before this poll observes that persisted episode N became
+    // due. The persisted snapshot therefore wins until N has been handled successfully.
+    const dueEpisode = storedDue ? storedSnapshot : latestDue ? latestSnapshot : null;
 
-    // Requirement 8/9: store the minimum snapshot, and refresh it every run regardless of
-    // whether anything is actually due to send — this IS the "refreshes due schedules" step.
-    // Dry-run: computed but never written — deps.refreshSnapshot is never called at all.
-    if (!dryRun) {
+    const refreshLatestSnapshot = async () => {
+      if (dryRun) return;
       try {
-        await deps.refreshSnapshot(follow.id, {
-          nextEpisodeSnapshot: nextEp ? { episode: nextEp.episode, airingAt: nextEp.airingAt } : null,
-        });
+        await deps.refreshSnapshot(follow.id, { nextEpisodeSnapshot: latestSnapshot });
         summary.refreshed++;
       } catch (err) {
         summary.errors++;
         console.error(`[airing-check-core] failed to refresh snapshot for ${follow.id}:`, err && err.message);
       }
-    } else {
+    };
+
+    // Requirement 8/9: store the minimum snapshot, and refresh it every run regardless of
+    // whether anything is actually due to send — this IS the "refreshes due schedules" step.
+    // Dry-run: computed but never written — deps.refreshSnapshot is never called at all.
+    if (!dryRun && !storedDue) {
+      await refreshLatestSnapshot();
+    } else if (dryRun) {
       summary.refreshed++; // "would have refreshed" — dry-run still counts it, never writes it
     }
 
-    if (!nextEp || !Number.isFinite(nextEp.episode) || nextEp.airingAt > nowSecs) continue; // not due yet, or unknown
+    if (!dueEpisode) continue;
 
-    const dedupeKey = `${follow.uid}_${follow.anilistId}_${nextEp.episode}`;
+    const dedupeKey = `${follow.uid}_${follow.anilistId}_${dueEpisode.episode}`;
     let alreadyNotified;
     try {
       alreadyNotified = await deps.wasAlreadyNotified(dedupeKey);
@@ -146,6 +158,7 @@ async function runAiringCheck(deps, options = {}) {
     }
     if (alreadyNotified) {
       summary.skippedAlreadyNotified++;
+      if (storedDue) await refreshLatestSnapshot();
       continue;
     }
 
@@ -161,12 +174,13 @@ async function runAiringCheck(deps, options = {}) {
     const title = follow.title || (media && (media.title.english || media.title.romaji)) || "your anime";
     const notificationData = {
       title: "New episode available",
-      body: `Episode ${nextEp.episode} of ${title} just aired.`,
+      body: `Episode ${dueEpisode.episode} of ${title} just aired.`,
       url: "discover.html",
       dedupeKey,
     };
 
     let sentCount = 0;
+    let retryableFailureCount = 0;
     if (!dryRun) {
       for (const sub of subscriptions) {
         try {
@@ -182,6 +196,7 @@ async function runAiringCheck(deps, options = {}) {
               console.error(`[airing-check-core] failed to delete dead subscription ${sub.id}:`, delErr && delErr.message);
             }
           } else {
+            retryableFailureCount++;
             summary.errors++;
             console.error(`[airing-check-core] push send failed for subscription ${sub.id}: code=${code}`);
           }
@@ -191,13 +206,19 @@ async function runAiringCheck(deps, options = {}) {
       sentCount = subscriptions.length; // "would have sent to" — never actually calls deps.sendPush
     }
 
-    // Recorded even when sentCount is 0 (no subscribed device right now) — the episode itself
-    // has been handled; a device subscribing LATER should not get a backlog of stale "just
-    // aired" pings for an episode that aired days ago. Dry-run: never actually written.
+    // Recorded with sentCount 0 only when there was no retryable failure (no subscribed device,
+    // or only permanently-dead tokens); a device subscribing later should not get stale backlog.
+    // A completely failed retryable delivery is still pending: do not write its dedup record or
+    // advance a stored due snapshot. If at least one token succeeded, retain the existing
+    // episode-level success semantics. Zero subscriptions and permanently-dead tokens remain
+    // handled so they do not create a stale backlog or an infinite retry loop.
+    if (!dryRun && sentCount === 0 && retryableFailureCount > 0) continue;
+
     if (!dryRun) {
       try {
-        await deps.recordNotified(dedupeKey, { uid: follow.uid, anilistId: follow.anilistId, episode: nextEp.episode, subscriberCount: sentCount });
+        await deps.recordNotified(dedupeKey, { uid: follow.uid, anilistId: follow.anilistId, episode: dueEpisode.episode, subscriberCount: sentCount });
         summary.notified++;
+        if (storedDue) await refreshLatestSnapshot();
       } catch (err) {
         summary.errors++;
         console.error(`[airing-check-core] failed to record dedup log for ${dedupeKey}:`, err && err.message);

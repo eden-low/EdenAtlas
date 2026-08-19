@@ -15,7 +15,8 @@ const assert = require("node:assert");
 const fs = require("node:fs");
 
 const {
-  generate, OUT_PATH, FCM_CONFIG_OUT_PATH, PRODUCTION_FIREBASE_CONFIG, PREPRODUCTION_PLACEHOLDER_CONFIG,
+  generate, OUT_PATH, FCM_CONFIG_OUT_PATH, PRODUCTION_FIREBASE_CONFIG,
+  PREPRODUCTION_PLACEHOLDER_CONFIG, DEVELOPMENT_PLACEHOLDER_CONFIG,
 } = require("../generate-build-info.js");
 
 let pass = 0;
@@ -79,6 +80,26 @@ const FULL_STAGING_ENV = {
       assert.strictEqual(info.context, "production");
       const fcmConfig = JSON.parse(fs.readFileSync(FCM_CONFIG_OUT_PATH, "utf8").replace(/^.*self\.__EDEN_FCM_CONFIG__\s*=\s*/s, "").replace(/;\s*$/, ""));
       assert.strictEqual(fcmConfig.firebaseConfig.projectId, PRODUCTION_FIREBASE_CONFIG.projectId);
+    });
+  });
+
+  await test("Development/Netlify Dev builds generate an inert FCM project, never Production", () => {
+    for (const context of ["development", "dev"]) {
+      withEnv({ CONTEXT: context, BRANCH: "local" }, () => {
+        generate();
+        const fcmConfig = JSON.parse(fs.readFileSync(FCM_CONFIG_OUT_PATH, "utf8").replace(/^.*self\.__EDEN_FCM_CONFIG__\s*=\s*/s, "").replace(/;\s*$/, ""));
+        assert.strictEqual(fcmConfig.firebaseConfig.projectId, DEVELOPMENT_PLACEHOLDER_CONFIG.projectId);
+        assert.notStrictEqual(fcmConfig.firebaseConfig.projectId, PRODUCTION_FIREBASE_CONFIG.projectId);
+      });
+    }
+  });
+
+  await test("a production context on a non-main branch fails closed as Development", () => {
+    withEnv({ CONTEXT: "production", BRANCH: "staging" }, () => {
+      generate();
+      const fcmConfig = JSON.parse(fs.readFileSync(FCM_CONFIG_OUT_PATH, "utf8").replace(/^.*self\.__EDEN_FCM_CONFIG__\s*=\s*/s, "").replace(/;\s*$/, ""));
+      assert.strictEqual(fcmConfig.firebaseConfig.projectId, DEVELOPMENT_PLACEHOLDER_CONFIG.projectId);
+      assert.notStrictEqual(fcmConfig.firebaseConfig.projectId, PRODUCTION_FIREBASE_CONFIG.projectId);
     });
   });
 
