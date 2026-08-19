@@ -30,7 +30,7 @@ const RECALL_PATTERN =
 const PERSONAL_RECORD_PATTERN =
   /\b(my|i|memory|journal|entry|note|journey|event|trip|visit|visited|wrote|saved|recorded|created|made)\b|我的|我|回忆|日记|日志|笔记|历程|旅程|旅行|记录|写过|保存/iu;
 const RECENCY_PATTERN =
-  /\b(recent|recently|latest|today|yesterday|this\s+month|last\s+month|this\s+year|last\s+year)\b|最近|近期|最新|今天|昨天|本月|这个月|上个月|去年|今年/iu;
+  /\b(recent|recently|latest|today|yesterday|this\s+month|last\s+month|this\s+year|last\s+year)\b|最近|近期|最新|今天|昨天|本月|这个月|上个月|去年|今年|刚刚|刚才|刚(?:上传|保存|创建|记录|写)/iu;
 
 const MONTH_ALIASES = [
   { month: 1, pattern: "january|jan" },
@@ -63,6 +63,10 @@ const CJK_STOP_CHARS = new Set([
   "的", "了", "我", "你", "是", "在", "和", "吗", "呢", "有", "与", "找", "查", "搜", "忘",
   "记", "得", "写", "存", "做", "过", "这", "那", "个", "月", "年", "回", "忆", "日", "志",
   "笔", "旅", "程", "事", "件", "什", "么", "名", "称", "标", "题", "地", "方", "去",
+  // Retrieval-control language and pronouns are not topic text. Without these, a request such
+  // as "帮我找刚刚上传的那个 Memory，我忘记它叫什么了" becomes the fake search terms
+  // 帮/刚/上/传/它/叫 and filters out the very upload it is asking for.
+  "帮", "刚", "上", "传", "它", "叫",
 ]);
 
 function normalizeSearchText(value) {

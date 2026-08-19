@@ -201,6 +201,54 @@ async function run() {
     assert.ok(context.selectedItems.length > 0 && context.selectedItems.length <= 5);
   });
 
+  await test("a just-uploaded Gallery Memory is retrievable from the real upload schema with the original Chinese forgotten-title prompt", async () => {
+    const justUploaded = {
+      id: "new-gallery-upload",
+      data: {
+        // Mirrors gallery.js's postForm submit payload exactly; Storage-only fields remain
+        // present in Firestore but the context normalizer continues to omit them from Qwen.
+        url: "https://private.invalid/new-photo?token=never-prompt",
+        storagePath: `gallery/${OWNER_UID}/private/dailylife/fixture.jpg`,
+        category: "dailylife",
+        visibility: "private",
+        featured: false,
+        caption: "IMG_20260915_135900.jpg",
+        uploadedAt: ts("2026-09-15T05:59:00Z"),
+        uid: OWNER_UID,
+        collectionId: null,
+        tags: [],
+      },
+    };
+    const db = makeMockDb({ ...SEED, photos: [...SEED.photos, justUploaded] });
+    const message = "帮我找刚刚上传的那个 Memory，我忘记它叫什么了。";
+    const plan = analyzeRetrievalRequest({ userMessage: message, now: NOW, timeZone: TIME_ZONE });
+    assert.strictEqual(plan.intent, true);
+    assert.strictEqual(plan.hasRecencyIntent, true);
+    assert.deepStrictEqual(plan.requestedSources, ["memories"]);
+    assert.deepStrictEqual(plan.terms, [], "retrieval-control wording must not become fake topic terms");
+
+    const context = await buildAtlasAutoContext({ db, uid: OWNER_UID, scopes: ["memories"], userMessage: message, now: NOW, timeZone: TIME_ZONE });
+    assert.strictEqual(context.summary.sourceStats.memories.collected, SEED.photos.filter((doc) => doc.data.uid === OWNER_UID).length + 1);
+    assert.strictEqual(context.summary.retrieval.status, "matched");
+    assert.strictEqual(context.selectedItems[0].title, justUploaded.data.caption);
+    assert.ok(!context.serializedContext.includes("storagePath"));
+    assert.ok(!context.serializedContext.includes("private.invalid"));
+  });
+
+  await test("the same just-uploaded Chinese request cannot query Memories when the Memories scope is disabled", async () => {
+    const db = makeMockDb();
+    const context = await buildAtlasAutoContext({
+      db,
+      uid: OWNER_UID,
+      scopes: ["journal"],
+      userMessage: "帮我找刚刚上传的那个 Memory，我忘记它叫什么了。",
+      now: NOW,
+      timeZone: TIME_ZONE,
+    });
+    assert.deepStrictEqual(db.queryLog, []);
+    assert.strictEqual(context.summary.retrieval.status, "no_authorized_source");
+  });
+
   await test("cross-source retrieval ranks matching Memory, Journal and Journey records", async () => {
     const context = await buildAtlasAutoContext({ db: makeMockDb(), uid: OWNER_UID, scopes: ["memories", "journal", "journey"], userMessage: "Find anything about my Alpine trip", now: NOW, timeZone: TIME_ZONE });
     assert.deepStrictEqual(new Set(context.summary.includedTypes), new Set(["memory", "journal", "journey"]));
