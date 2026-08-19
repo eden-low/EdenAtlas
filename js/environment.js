@@ -125,6 +125,22 @@ export function isNonProduction() {
   return getEnvironment() !== ENV.PRODUCTION;
 }
 
+// Pure config selector used by firebase-init.js. Keeping the environment-to-project decision
+// testable here prevents local/unknown contexts from sharing Production by default.
+export function selectFirebaseConfig({
+  environment,
+  productionConfig,
+  stagingConfig,
+  preProductionPlaceholderConfig,
+  developmentPlaceholderConfig,
+}) {
+  if (environment === ENV.PRODUCTION) return productionConfig;
+  if (environment === ENV.STAGING || environment === ENV.DEPLOY_PREVIEW) {
+    return stagingConfig || preProductionPlaceholderConfig;
+  }
+  return developmentPlaceholderConfig;
+}
+
 // Phase 1 safeguard: "Add an obvious non-Production indicator in staging." One shared
 // implementation, called from both auth-guard.js (every protected page) and login.html's own
 // inline module (the one page that intentionally doesn't load auth-guard.js — see that file's

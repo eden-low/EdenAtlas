@@ -123,6 +123,61 @@ function makeAniListFetch(mediaById) {
     assert.deepStrictEqual(store.calls.refreshSnapshot[0].fields.nextEpisodeSnapshot, { episode: 5, airingAt: 1754000000 });
   });
 
+  await test("advanced AniList state: a due stored episode is notified before the snapshot advances", async () => {
+    const store = makeFakeStore({
+      follows: [{
+        id: "u1_100", uid: "u1", anilistId: 100, title: "Test Anime", notifyOnAiring: true,
+        nextEpisodeSnapshot: { episode: 5, airingAt: 1754000000 },
+      }],
+      subscriptions: [{ id: "u1_hashA", uid: "u1", token: "tokenA", platform: "web" }],
+    });
+    const media = { 100: {
+      id: 100, title: { romaji: "Test Anime" }, isAdult: false, genres: [],
+      nextAiringEpisode: { airingAt: 9999999999, timeUntilAiring: 999999, episode: 6 },
+    } };
+    const deps = makeDeps({ store, fetchImpl: makeAniListFetch(media) });
+
+    const result = await runAiringCheck(deps);
+
+    assert.strictEqual(result.notified, 1);
+    assert.strictEqual(store.calls.sendPush.length, 1);
+    assert.strictEqual(store.calls.sendPush[0].data.dedupeKey, "u1_100_5");
+    assert.strictEqual(store.calls.recordNotified[0].key, "u1_100_5");
+    assert.deepStrictEqual(
+      store.followMap.get("u1_100").nextEpisodeSnapshot,
+      { episode: 6, airingAt: 9999999999 }
+    );
+    assert.strictEqual(store.calls.refreshSnapshot.length, 1);
+  });
+
+  await test("advanced AniList state: the handled stored episode is not sent again on the next run", async () => {
+    const store = makeFakeStore({
+      follows: [{
+        id: "u1_100", uid: "u1", anilistId: 100, title: "Test Anime", notifyOnAiring: true,
+        nextEpisodeSnapshot: { episode: 5, airingAt: 1754000000 },
+      }],
+      subscriptions: [{ id: "u1_hashA", uid: "u1", token: "tokenA", platform: "web" }],
+    });
+    const media = { 100: {
+      id: 100, title: { romaji: "Test Anime" }, isAdult: false, genres: [],
+      nextAiringEpisode: { airingAt: 9999999999, timeUntilAiring: 999999, episode: 6 },
+    } };
+    const deps = makeDeps({ store, fetchImpl: makeAniListFetch(media) });
+
+    const first = await runAiringCheck(deps);
+    const second = await runAiringCheck(deps);
+
+    assert.strictEqual(first.notified, 1);
+    assert.strictEqual(second.notified, 0);
+    assert.strictEqual(store.calls.sendPush.length, 1);
+    assert.strictEqual(store.calls.recordNotified.length, 1);
+    assert.strictEqual(store.logSet.has("u1_100_5"), true);
+    assert.deepStrictEqual(
+      store.followMap.get("u1_100").nextEpisodeSnapshot,
+      { episode: 6, airingAt: 9999999999 }
+    );
+  });
+
   await test("Requirement 10: the same episode is never notified twice — already-logged dedup key is skipped", async () => {
     const store = makeFakeStore({
       follows: [{ id: "u1_100", uid: "u1", anilistId: 100, title: "Test Anime", notifyOnAiring: true }],
@@ -165,25 +220,136 @@ function makeAniListFetch(mediaById) {
     const media = { 100: { id: 100, title: { romaji: "Test Anime" }, isAdult: false, genres: [], nextAiringEpisode: { airingAt: 1754000000, timeUntilAiring: -1, episode: 5 } } };
     const deps = makeDeps({ store, fetchImpl: makeAniListFetch(media) });
     const result = await runAiringCheck(deps);
+    const nextRun = await runAiringCheck(deps);
+    assert.strictEqual(result.notified, 1);
+    assert.strictEqual(nextRun.notified, 0);
     assert.strictEqual(result.tokensCleaned, 1);
     assert.strictEqual(store.calls.deleteSubscription.length, 1);
+    assert.strictEqual(store.calls.sendPush.length, 1);
     assert.strictEqual(store.calls.deleteSubscription[0], "u1_hashDead");
     assert.strictEqual(store.subMap.has("u1_hashDead"), false);
     assert.strictEqual(store.calls.recordNotified.length, 1);
     assert.strictEqual(store.calls.recordNotified[0].fields.subscriberCount, 0);
   });
 
-  await test("a non-dead-token send() failure (transient) is logged, subscription NOT deleted, episode still recorded", async () => {
+  await test("stored due + AniList advanced: a transient send failure remains pending and does not advance the snapshot", async () => {
     const store = makeFakeStore({
-      follows: [{ id: "u1_100", uid: "u1", anilistId: 100, title: "Test Anime", notifyOnAiring: true }],
+      follows: [{
+        id: "u1_100", uid: "u1", anilistId: 100, title: "Test Anime", notifyOnAiring: true,
+        nextEpisodeSnapshot: { episode: 5, airingAt: 1754000000 },
+      }],
       subscriptions: [{ id: "u1_hashFlaky", uid: "u1", token: "flakyToken", platform: "web", _failWith: "messaging/internal-error" }],
     });
-    const media = { 100: { id: 100, title: { romaji: "Test Anime" }, isAdult: false, genres: [], nextAiringEpisode: { airingAt: 1754000000, timeUntilAiring: -1, episode: 5 } } };
+    const media = { 100: {
+      id: 100, title: { romaji: "Test Anime" }, isAdult: false, genres: [],
+      nextAiringEpisode: { airingAt: 9999999999, timeUntilAiring: 999999, episode: 6 },
+    } };
     const deps = makeDeps({ store, fetchImpl: makeAniListFetch(media) });
     const result = await runAiringCheck(deps);
+
+    assert.strictEqual(result.notified, 0);
     assert.strictEqual(result.tokensCleaned, 0);
     assert.ok(result.errors >= 1);
     assert.strictEqual(store.subMap.has("u1_hashFlaky"), true);
+    assert.strictEqual(store.calls.recordNotified.length, 0);
+    assert.strictEqual(store.calls.refreshSnapshot.length, 0);
+    assert.strictEqual(store.logSet.has("u1_100_5"), false);
+    assert.deepStrictEqual(
+      store.followMap.get("u1_100").nextEpisodeSnapshot,
+      { episode: 5, airingAt: 1754000000 }
+    );
+  });
+
+  await test("a transiently-failed stored episode retries, succeeds later, then advances and is not resent", async () => {
+    const store = makeFakeStore({
+      follows: [{
+        id: "u1_100", uid: "u1", anilistId: 100, title: "Test Anime", notifyOnAiring: true,
+        nextEpisodeSnapshot: { episode: 5, airingAt: 1754000000 },
+      }],
+      subscriptions: [{ id: "u1_hashFlaky", uid: "u1", token: "flakyToken", platform: "web", _failWith: "messaging/internal-error" }],
+    });
+    const media = { 100: {
+      id: 100, title: { romaji: "Test Anime" }, isAdult: false, genres: [],
+      nextAiringEpisode: { airingAt: 9999999999, timeUntilAiring: 999999, episode: 6 },
+    } };
+    const deps = makeDeps({ store, fetchImpl: makeAniListFetch(media) });
+
+    const failed = await runAiringCheck(deps);
+    delete store.subMap.get("u1_hashFlaky")._failWith;
+    const succeeded = await runAiringCheck(deps);
+    const deduplicated = await runAiringCheck(deps);
+
+    assert.strictEqual(failed.notified, 0);
+    assert.strictEqual(succeeded.notified, 1);
+    assert.strictEqual(deduplicated.notified, 0);
+    assert.strictEqual(store.calls.sendPush.length, 2);
+    assert.strictEqual(store.calls.recordNotified.length, 1);
+    assert.strictEqual(store.calls.recordNotified[0].key, "u1_100_5");
+    assert.deepStrictEqual(
+      store.followMap.get("u1_100").nextEpisodeSnapshot,
+      { episode: 6, airingAt: 9999999999 }
+    );
+  });
+
+  await test("multiple subscriptions retain episode-level success when at least one token delivers", async () => {
+    const store = makeFakeStore({
+      follows: [{
+        id: "u1_100", uid: "u1", anilistId: 100, title: "Test Anime", notifyOnAiring: true,
+        nextEpisodeSnapshot: { episode: 5, airingAt: 1754000000 },
+      }],
+      subscriptions: [
+        { id: "u1_hashGood", uid: "u1", token: "goodToken", platform: "web" },
+        { id: "u1_hashFlaky", uid: "u1", token: "flakyToken", platform: "web", _failWith: "messaging/internal-error" },
+      ],
+    });
+    const media = { 100: {
+      id: 100, title: { romaji: "Test Anime" }, isAdult: false, genres: [],
+      nextAiringEpisode: { airingAt: 9999999999, timeUntilAiring: 999999, episode: 6 },
+    } };
+    const deps = makeDeps({ store, fetchImpl: makeAniListFetch(media) });
+    const result = await runAiringCheck(deps);
+
+    assert.strictEqual(result.notified, 1);
+    assert.strictEqual(store.calls.sendPush.length, 2);
+    assert.strictEqual(store.calls.recordNotified.length, 1);
+    assert.strictEqual(store.calls.recordNotified[0].fields.subscriberCount, 1);
+    assert.deepStrictEqual(
+      store.followMap.get("u1_100").nextEpisodeSnapshot,
+      { episode: 6, airingAt: 9999999999 }
+    );
+  });
+
+  await test("send success + dedup write failure keeps the stored due episode, so a later run may duplicate but cannot lose it", async () => {
+    const store = makeFakeStore({
+      follows: [{
+        id: "u1_100", uid: "u1", anilistId: 100, title: "Test Anime", notifyOnAiring: true,
+        nextEpisodeSnapshot: { episode: 5, airingAt: 1754000000 },
+      }],
+      subscriptions: [{ id: "u1_hashA", uid: "u1", token: "tokenA", platform: "web" }],
+    });
+    const media = { 100: {
+      id: 100, title: { romaji: "Test Anime" }, isAdult: false, genres: [],
+      nextAiringEpisode: { airingAt: 9999999999, timeUntilAiring: 999999, episode: 6 },
+    } };
+    const deps = makeDeps({ store, fetchImpl: makeAniListFetch(media) });
+    deps.recordNotified = async (key, fields) => {
+      store.calls.recordNotified.push({ key, fields });
+      throw new Error("firestore unavailable");
+    };
+
+    const first = await runAiringCheck(deps);
+    const second = await runAiringCheck(deps);
+
+    assert.strictEqual(first.notified, 0);
+    assert.strictEqual(second.notified, 0);
+    assert.strictEqual(store.calls.sendPush.length, 2);
+    assert.strictEqual(store.calls.recordNotified.length, 2);
+    assert.strictEqual(store.calls.refreshSnapshot.length, 0);
+    assert.strictEqual(store.logSet.has("u1_100_5"), false);
+    assert.deepStrictEqual(
+      store.followMap.get("u1_100").nextEpisodeSnapshot,
+      { episode: 5, airingAt: 1754000000 }
+    );
   });
 
   await test("zero subscribed devices: the episode is still recorded as handled (subscriberCount 0), no crash", async () => {
@@ -243,11 +409,17 @@ function makeAniListFetch(mediaById) {
 
   await test("dryRun:true never calls refreshSnapshot/sendPush/recordNotified/deleteSubscription, but still reads AniList and computes the same due episode", async () => {
     const store = makeFakeStore({
-      follows: [{ id: "u1_100", uid: "u1", anilistId: 100, title: "Test Anime", notifyOnAiring: true }],
+      follows: [{
+        id: "u1_100", uid: "u1", anilistId: 100, title: "Test Anime", notifyOnAiring: true,
+        nextEpisodeSnapshot: { episode: 5, airingAt: 1754000000 },
+      }],
       subscriptions: [{ id: "u1_hashA", uid: "u1", token: "tokenA", platform: "web" }],
     });
     let fetchCallCount = 0;
-    const media = { 100: { id: 100, title: { romaji: "Test Anime" }, isAdult: false, genres: [], nextAiringEpisode: { airingAt: 1754000000, timeUntilAiring: -1, episode: 5 } } };
+    const media = { 100: {
+      id: 100, title: { romaji: "Test Anime" }, isAdult: false, genres: [],
+      nextAiringEpisode: { airingAt: 9999999999, timeUntilAiring: 999999, episode: 6 },
+    } };
     const deps = makeDeps({ store, fetchImpl: async (...args) => { fetchCallCount++; return makeAniListFetch(media)(...args); } });
     const result = await runAiringCheck(deps, { dryRun: true });
     assert.strictEqual(result.dryRun, true);
@@ -259,7 +431,10 @@ function makeAniListFetch(mediaById) {
     assert.strictEqual(store.calls.recordNotified.length, 0); // dedup log never actually written
     assert.strictEqual(store.calls.deleteSubscription.length, 0);
     // The real Firestore state is completely untouched.
-    assert.strictEqual(store.followMap.get("u1_100").nextEpisodeSnapshot, undefined);
+    assert.deepStrictEqual(
+      store.followMap.get("u1_100").nextEpisodeSnapshot,
+      { episode: 5, airingAt: 1754000000 }
+    );
     assert.strictEqual(store.logSet.has("u1_100_5"), false);
   });
 

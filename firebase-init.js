@@ -4,7 +4,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/12.15.0/fireba
 import { getAuth, GoogleAuthProvider, setPersistence, browserLocalPersistence } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-auth.js";
 import { getFirestore } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-firestore.js";
 import { getStorage } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-storage.js";
-import { getBuildInfo, isPreProduction } from "./js/environment.js";
+import { getBuildInfo, getEnvironment, isPreProduction, selectFirebaseConfig } from "./js/environment.js";
 
 // authDomain controls where Firebase's OAuth handler page (/__/auth/handler) lives. The default,
 // {project}.firebaseapp.com, is a third-party origin relative to this site — on iOS, a
@@ -61,13 +61,27 @@ const PREPRODUCTION_PLACEHOLDER_CONFIG = {
   appId: "1:0:web:unconfigured",
 };
 
+// Local/unknown builds have no browser-emulator wiring today. Fail closed against a distinct
+// inert project instead of silently initializing the Production SDK while local Functions are
+// intentionally emulator-only.
+const DEVELOPMENT_PLACEHOLDER_CONFIG = {
+  apiKey: "unconfigured-development-build",
+  authDomain: "eden-development-not-configured.firebaseapp.com",
+  projectId: "eden-development-not-configured",
+  storageBucket: "eden-development-not-configured.firebasestorage.app",
+  messagingSenderId: "0",
+  appId: "1:0:web:unconfigured-development",
+};
+
 const buildInfo = getBuildInfo();
 const preProdOverride = isPreProduction() && buildInfo && buildInfo.stagingFirebaseConfig;
-const firebaseConfig = preProdOverride
-  ? preProdOverride
-  : isPreProduction()
-    ? PREPRODUCTION_PLACEHOLDER_CONFIG
-    : productionFirebaseConfig;
+const firebaseConfig = selectFirebaseConfig({
+  environment: getEnvironment(),
+  productionConfig: productionFirebaseConfig,
+  stagingConfig: preProdOverride,
+  preProductionPlaceholderConfig: PREPRODUCTION_PLACEHOLDER_CONFIG,
+  developmentPlaceholderConfig: DEVELOPMENT_PLACEHOLDER_CONFIG,
+});
 
 // Exported so callers (Discover's follow/status/remove/notification writes; any future module
 // that wants the same guard) can decide whether it's safe to write, without each one having to

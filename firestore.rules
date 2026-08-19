@@ -344,7 +344,14 @@ service cloud.firestore {
     // Resume Visibility control) — see CLAUDE.md's "EdenAtlas v3.2.2" bullet.
     match /public_profiles/{uid} {
       allow read: if true;
-      allow write: if request.auth != null && request.auth.uid == uid && request.resource.data.uid == uid;
+      allow write: if request.auth != null
+                   && request.auth.uid == uid
+                   && request.resource.data.uid == uid
+                   && (
+                     !request.resource.data.keys().hasAny(['role'])
+                     || request.resource.data.role in ['friend', 'viewer']
+                     || (request.resource.data.role == 'owner' && isOwner())
+                   );
     }
 
     // Reservation doc per @username, doc ID = the lowercase handle itself — "first writer
