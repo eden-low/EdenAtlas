@@ -2,6 +2,7 @@ import { auth, db, isOwner, OWNER_EMAIL, canParticipate } from "./firebase-init.
 import { getLang, setLang, init as initI18n, t } from "./js/i18n.js";
 import { resolveDisplayName, computeDisplayName, invalidateIdentityCache } from "./js/identity.js";
 import { excludeDeleted } from "./js/memory-filters.js";
+import { expenseTransactionTimestamp } from "./js/expense-model.js";
 import { fetchWeather } from "./js/weather-client.js";
 import { onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-auth.js";
 import {
@@ -530,10 +531,10 @@ async function renderExpenseAnalytics(user) {
   const now = new Date();
 
   const monthTotal = expenses
-    .filter((e) => { const d = e.createdAt?.toDate?.(); return d && d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear(); })
+    .filter((e) => { const d = expenseTransactionTimestamp(e)?.toDate?.(); return d && d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear(); })
     .reduce((sum, e) => sum + Number(e.amount), 0);
   const yearTotal = expenses
-    .filter((e) => { const d = e.createdAt?.toDate?.(); return d && d.getFullYear() === now.getFullYear(); })
+    .filter((e) => { const d = expenseTransactionTimestamp(e)?.toDate?.(); return d && d.getFullYear() === now.getFullYear(); })
     .reduce((sum, e) => sum + Number(e.amount), 0);
   const avgDaily = monthTotal / now.getDate();
 
@@ -548,7 +549,7 @@ async function renderExpenseAnalytics(user) {
 
   const monthlyTotals = new Map();
   expenses.forEach((e) => {
-    const d = e.createdAt?.toDate?.();
+    const d = expenseTransactionTimestamp(e)?.toDate?.();
     if (!d) return;
     const key = d.toLocaleDateString(undefined, { month: "short", year: "2-digit" });
     monthlyTotals.set(key, (monthlyTotals.get(key) || 0) + Number(e.amount));
@@ -573,7 +574,7 @@ async function renderExpenseAnalytics(user) {
 
   const weeklyTotals = new Map();
   expenses.forEach((e) => {
-    const d = e.createdAt?.toDate?.();
+    const d = expenseTransactionTimestamp(e)?.toDate?.();
     if (!d) return;
     const key = isoWeekKey(d);
     weeklyTotals.set(key, (weeklyTotals.get(key) || 0) + Number(e.amount));

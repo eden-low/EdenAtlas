@@ -318,13 +318,14 @@
     <script type="module">
         import { auth, db, storage, canParticipate, isOwner, getUserMode } from "./firebase-init.js";
         import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-auth.js";
-        import { collection, query, where, limit, getDocs, getDoc, doc, setDoc, addDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-firestore.js";
+        import { collection, query, where, limit, getDocs, getDoc, doc, setDoc, addDoc, serverTimestamp, Timestamp } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-firestore.js";
         import { ref, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-storage.js";
         import { t } from "./js/i18n.js";
         import { resolveDisplayName } from "./js/identity.js";
         import { excludeDeleted } from "./js/memory-filters.js";
         import { reflectionDateKey, reflectionDocId, buildReflectionSavePayload } from "./js/reflection.js";
         import { fetchWeather } from "./js/weather-client.js";
+        import { buildExpenseCreatePayload, expenseTransactionTimestamp } from "./js/expense-model.js";
 
         // Untrusted stored content (habit titles, photo captions, journal titles, event titles —
         // all interpolated into innerHTML further below) must never be assigned raw, even though
@@ -478,7 +479,7 @@
             if (user && isOwnerRole(user)) {
                 spendingRow.classList.remove("hidden");
                 const todaySpend = data.expenses
-                    .filter((e) => e.createdAt?.toDate && isSameDay(e.createdAt.toDate(), today))
+                    .filter((e) => expenseTransactionTimestamp(e)?.toDate && isSameDay(expenseTransactionTimestamp(e).toDate(), today))
                     .reduce((sum, e) => sum + (e.amount || 0), 0);
                 document.getElementById("today-spending").textContent = `RM ${todaySpend.toFixed(2)}`;
             } else {
@@ -620,7 +621,7 @@
                 document.getElementById("stat-expenses").classList.remove("hidden");
                 document.getElementById("stat-connections").classList.add("hidden");
                 const monthExpenses = data.expenses
-                    .filter((e) => e.createdAt?.toDate && isThisMonth(e.createdAt.toDate(), now))
+                    .filter((e) => expenseTransactionTimestamp(e)?.toDate && isThisMonth(expenseTransactionTimestamp(e).toDate(), now))
                     .reduce((sum, e) => sum + (e.amount || 0), 0);
                 document.getElementById("month-expenses").textContent = `RM ${monthExpenses.toFixed(2)}`;
             } else {
@@ -693,13 +694,19 @@
             const statusEl = document.getElementById("qa-expense-status");
             statusEl.textContent = t("common.saving");
             try {
-                await addDoc(collection(db, "expenses"), {
-                    amount: parseFloat(document.getElementById("qa-expense-amount").value) || 0,
+                const payload = buildExpenseCreatePayload({
+                    amount: document.getElementById("qa-expense-amount").value,
+                    currency: "MYR",
                     category: document.getElementById("qa-expense-category").value,
-                    note: document.getElementById("qa-expense-note").value.trim(),
-                    createdAt: serverTimestamp(),
-                    uid: user.uid,
-                });
+                    note: document.getElementById("qa-expense-note").value,
+                    date: toDateKey(new Date()),
+                    collectionId: null,
+                    tags: [],
+                    locationName: null,
+                    latitude: null,
+                    longitude: null,
+                }, { uid: user.uid, createdAt: serverTimestamp(), dateToTimestamp: Timestamp.fromDate });
+                await addDoc(collection(db, "expenses"), payload);
                 statusEl.textContent = t("common.saved");
                 event.target.reset();
                 setTimeout(() => document.getElementById("qa-expense-modal").classList.add("hidden"), 500);

@@ -3,6 +3,7 @@ import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.15.0/f
 import { collection, query, where, getDocs } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-firestore.js";
 import { t, getLang } from "./js/i18n.js";
 import { excludeDeleted } from "./js/memory-filters.js";
+import { expenseTransactionTimestamp } from "./js/expense-model.js";
 
 function downloadFile(filename, content, mimeType) {
   const blob = new Blob([content], { type: mimeType });
@@ -64,7 +65,7 @@ async function renderReport() {
     fetchMine("journals"),
   ]);
 
-  const monthExpenses = expenses.filter((e) => isThisMonth(e.createdAt, now));
+  const monthExpenses = expenses.filter((e) => isThisMonth(expenseTransactionTimestamp(e), now));
   const monthPhotos = photos.filter((p) => isThisMonth(p.uploadedAt, now));
   const monthJournals = journals.filter((j) => isThisMonth(j.createdAt, now));
 
@@ -105,7 +106,7 @@ async function renderReport() {
   // since a month always has more weekdays than weekend days.
   let weekdayTotal = 0, weekendTotal = 0, weekdayDays = new Set(), weekendDays = new Set();
   monthExpenses.forEach((e) => {
-    const d = e.createdAt?.toDate?.();
+    const d = expenseTransactionTimestamp(e)?.toDate?.();
     if (!d) return;
     const isWeekend = d.getDay() === 0 || d.getDay() === 6;
     if (isWeekend) {
@@ -239,7 +240,10 @@ function statTile(label, value) {
 function computeMonthlyStats(year, month) {
   const memories = inMonth("uploadedAt", allData.photos, year, month);
   const journals = inMonth("createdAt", allData.journals, year, month);
-  const expenses = inMonth("createdAt", allData.expenses, year, month);
+  const expenses = allData.expenses.filter((item) => {
+    const d = expenseTransactionTimestamp(item)?.toDate?.();
+    return d && d.getFullYear() === year && d.getMonth() === month;
+  });
   const collectionsUpdated = allData.collections.filter((c) => {
     const d = (c.updatedAt || c.createdAt)?.toDate?.();
     return d && d.getFullYear() === year && d.getMonth() === month;
@@ -334,7 +338,7 @@ let reviewYear = new Date().getFullYear();
 function computeYearStats(year) {
   const memories = inYear("uploadedAt", allData.photos, year);
   const journals = inYear("createdAt", allData.journals, year);
-  const expenses = inYear("createdAt", allData.expenses, year);
+  const expenses = allData.expenses.filter((item) => expenseTransactionTimestamp(item)?.toDate?.()?.getFullYear() === year);
   const projects = inYear("createdAt", allData.careerProjects, year);
   const capsulesCreated = inYear("createdAt", allData.capsules, year);
   const capsulesOpened = allData.capsules.filter((c) => c.status === "opened" && c.updatedAt?.toDate?.()?.getFullYear() === year);
@@ -351,8 +355,13 @@ function computeYearStats(year) {
   const topCollections = inYear("createdAt", allData.collections, year).slice(0, 3).map(collectionLabel).filter(Boolean);
 
   const monthTotals = Array(12).fill(0);
-  [...memories, ...journals, ...expenses].forEach((item) => {
-    const d = (item.uploadedAt || item.createdAt)?.toDate?.();
+  const datedActivity = [
+    ...memories.map((item) => ({ item, timestamp: item.uploadedAt })),
+    ...journals.map((item) => ({ item, timestamp: item.createdAt })),
+    ...expenses.map((item) => ({ item, timestamp: expenseTransactionTimestamp(item) })),
+  ];
+  datedActivity.forEach(({ timestamp }) => {
+    const d = timestamp?.toDate?.();
     if (d) monthTotals[d.getMonth()]++;
   });
   const mostActiveMonthIdx = monthTotals.indexOf(Math.max(...monthTotals));

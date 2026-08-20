@@ -19,6 +19,7 @@ const path = require("node:path");
 const ROOT = path.resolve(__dirname, "..", "..", "..");
 const FUNCTIONS_WITH_ADMIN = [
   "anilist.js", "discover-ai.js", "assistant.js", "weather.js", "anime-airing-check.js",
+  "expense-receipt-ai.js",
 ];
 
 let pass = 0;
