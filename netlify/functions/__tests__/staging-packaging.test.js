@@ -40,6 +40,7 @@ const ROOT = path.resolve(__dirname, "..", "..", "..");
 const BUILD_CONTEXT_PATH = path.join(ROOT, "netlify", "functions", "lib", "build-context.generated.json");
 const DEPLOY_ORIGIN_PATH = path.join(ROOT, "netlify", "functions", "lib", "deploy-origin.generated.json");
 const ANILIST_SRC = path.join(ROOT, "netlify", "functions", "anilist.js");
+const GOOGLE_CALENDAR_STATUS_SRC = path.join(ROOT, "netlify", "functions", "google-calendar-status.js");
 
 const STAGING_PROJECT_ID = "edenatlas-staging"; // sourced the same way it always is: a value the
 // caller (this test, matching the task's own requested env) supplies via STAGING_FIREBASE_PROJECT_ID
@@ -120,12 +121,12 @@ function restoreFile(p, backup) {
 // return the extracted directory's absolute path. Every call gets its own fresh temp dirs, so
 // there is no cross-call module-cache concern the way an in-process require() would have — each
 // packaged bundle is a physically distinct file on disk. ----
-async function packageAndExtractAnilist() {
+async function packageAndExtractFunction(sourcePath, entryFileName) {
   const { zipFunction } = require("@netlify/zip-it-and-ship-it");
   const AdmZip = require("adm-zip");
 
   const zipDestDir = fs.mkdtempSync(path.join(os.tmpdir(), "eden-staging-pkg-zip-"));
-  const result = await zipFunction(ANILIST_SRC, zipDestDir, {
+  const result = await zipFunction(sourcePath, zipDestDir, {
     basePath: ROOT,
     config: { "*": { nodeBundler: readConfiguredNodeBundler() } },
   });
@@ -133,8 +134,60 @@ async function packageAndExtractAnilist() {
 
   const extractDir = fs.mkdtempSync(path.join(os.tmpdir(), "eden-staging-pkg-extract-"));
   new AdmZip(result.path).extractAllTo(extractDir, true);
-  assert.ok(fs.existsSync(path.join(extractDir, "anilist.js")), "extracted package is missing its anilist.js entry point");
+  assert.ok(
+    fs.existsSync(path.join(extractDir, entryFileName)),
+    `extracted package is missing its ${entryFileName} entry point`
+  );
   return extractDir;
+}
+
+async function packageAndExtractAnilist() {
+  return packageAndExtractFunction(ANILIST_SRC, "anilist.js");
+}
+
+async function invokePackagedGoogleCalendarStatus(extractDir) {
+  const modPath = require.resolve(path.join(extractDir, "google-calendar-status.js"));
+  delete require.cache[modPath];
+  try {
+    const mod = require(modPath);
+    const handler = mod.createHandler({
+      env: { ALLOWED_ORIGIN: "https://staging--edenatlas.netlify.app" },
+      getOAuthConfig: () => ({}),
+      ensureFirebaseAdmin: async () => {},
+      verifyIdToken: async () => ({ uid: "packaged-status-test-uid" }),
+      getDb: () => ({
+        collection: () => ({
+          doc: () => ({
+            get: async () => ({
+              exists: true,
+              data: () => ({
+                status: "connected",
+                grantedScopes: ["https://www.googleapis.com/auth/calendar.events.readonly"],
+                encryptedRefreshToken: {
+                  version: 1,
+                  algorithm: "A256GCM",
+                  iv: Buffer.alloc(12).toString("base64"),
+                  ciphertext: Buffer.from("packaged-status-ciphertext").toString("base64"),
+                  authTag: Buffer.alloc(16).toString("base64"),
+                },
+                reconnectRequired: false,
+              }),
+            }),
+          }),
+        }),
+      }),
+    });
+    return handler({
+      httpMethod: "POST",
+      headers: {
+        origin: "https://staging--edenatlas.netlify.app",
+        authorization: "Bearer packaged-status-test-token",
+      },
+      body: "{}",
+    });
+  } finally {
+    delete require.cache[modPath];
+  }
 }
 
 // ---- Execute the packaged handler exactly as AWS Lambda / Netlify would invoke it, with fake
@@ -231,6 +284,28 @@ function optionsEvent(origin) {
           event: optionsEvent("https://not-a-real-deploy.example.com"),
         });
         assert.strictEqual(response.statusCode, 403);
+      });
+    }
+
+    let statusExtractDir;
+    await test("packaging the real google-calendar-status.js Function succeeds with the repo-configured bundler", async () => {
+      statusExtractDir = await packageAndExtractFunction(
+        GOOGLE_CALENDAR_STATUS_SRC,
+        "google-calendar-status.js"
+      );
+    });
+
+    if (statusExtractDir) {
+      await test("the packaged Google Calendar status response preserves the canonical connectionStatus contract", async () => {
+        const response = await invokePackagedGoogleCalendarStatus(statusExtractDir);
+        const body = JSON.parse(response.body);
+        assert.strictEqual(response.statusCode, 200);
+        assert.strictEqual(body.ok, true);
+        assert.strictEqual(body.connectionStatus, "connected");
+        assert.ok(!Object.prototype.hasOwnProperty.call(body, "status"));
+        assert.deepStrictEqual(body.grantedScopes, ["https://www.googleapis.com/auth/calendar.events.readonly"]);
+        assert.ok(!response.body.includes("encryptedRefreshToken"));
+        assert.ok(!response.body.includes("packaged-status-ciphertext"));
       });
     }
 

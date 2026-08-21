@@ -286,10 +286,12 @@ async function run() {
     const override = await handler(postEvent({ body: JSON.stringify({ uid: "attacker" }) }));
     assert.strictEqual(override.statusCode, 400);
     const response = await handler(postEvent());
+    const body = bodyOf(response);
     assert.strictEqual(response.statusCode, 200);
     assert.strictEqual(observed.collection, GOOGLE_CALENDAR_CONNECTIONS_COLLECTION);
     assert.strictEqual(observed.uid, VERIFIED_UID);
-    assert.strictEqual(bodyOf(response).connectionStatus, "connected");
+    assert.strictEqual(body.connectionStatus, "connected");
+    assert.ok(!Object.prototype.hasOwnProperty.call(body, "status"));
     assert.ok(!response.body.includes(encryptedRefreshToken.ciphertext));
     assert.ok(!response.body.includes("encryptedRefreshToken"));
   });
