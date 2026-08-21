@@ -41,6 +41,7 @@ const BUILD_CONTEXT_PATH = path.join(ROOT, "netlify", "functions", "lib", "build
 const DEPLOY_ORIGIN_PATH = path.join(ROOT, "netlify", "functions", "lib", "deploy-origin.generated.json");
 const ANILIST_SRC = path.join(ROOT, "netlify", "functions", "anilist.js");
 const GOOGLE_CALENDAR_STATUS_SRC = path.join(ROOT, "netlify", "functions", "google-calendar-status.js");
+const GOOGLE_CALENDAR_EVENTS_SRC = path.join(ROOT, "netlify", "functions", "google-calendar-events.js");
 
 const STAGING_PROJECT_ID = "edenatlas-staging"; // sourced the same way it always is: a value the
 // caller (this test, matching the task's own requested env) supplies via STAGING_FIREBASE_PROJECT_ID
@@ -190,6 +191,84 @@ async function invokePackagedGoogleCalendarStatus(extractDir) {
   }
 }
 
+async function invokePackagedGoogleCalendarEvents(extractDir) {
+  const modPath = require.resolve(path.join(extractDir, "google-calendar-events.js"));
+  delete require.cache[modPath];
+  const uid = "packaged-events-test-uid";
+  const masterKeyRaw = Buffer.alloc(32, 29).toString("base64");
+  const refreshToken = "packaged-refresh-token-must-not-return";
+  const accessToken = "packaged-access-token-must-not-return";
+  const { encryptRefreshToken } = require("../lib/google-calendar-oauth");
+  const encryptedRefreshToken = encryptRefreshToken({
+    refreshToken,
+    uid,
+    masterKeyRaw,
+    randomBytesImpl: () => Buffer.alloc(12, 4),
+  });
+  try {
+    const mod = require(modPath);
+    const handler = mod.createHandler({
+      env: { ALLOWED_ORIGIN: "https://staging--edenatlas.netlify.app" },
+      getOAuthConfig: () => ({
+        clientId: "packaged-client-id",
+        clientSecret: "packaged-client-secret-must-not-return",
+        masterKeyRaw,
+        environment: "staging",
+      }),
+      ensureFirebaseAdmin: async () => {},
+      verifyIdToken: async () => ({ uid }),
+      getDb: () => ({
+        collection: () => ({
+          doc: () => ({
+            get: async () => ({
+              exists: true,
+              data: () => ({
+                status: "connected",
+                reconnectRequired: false,
+                grantedScopes: ["https://www.googleapis.com/auth/calendar.events.readonly"],
+                encryptedRefreshToken,
+              }),
+            }),
+            set: async () => {},
+          }),
+        }),
+      }),
+      checkBurst: () => ({ allowed: true }),
+      now: () => new Date("2026-08-22T00:00:00Z"),
+      fetchImpl: async (url) => {
+        const payload = url === "https://oauth2.googleapis.com/token"
+          ? { access_token: accessToken, token_type: "Bearer", scope: "https://www.googleapis.com/auth/calendar.events.readonly" }
+          : {
+            items: [{
+              id: "packaged-event-1",
+              summary: "Packaged event",
+              start: { dateTime: "2026-08-04T09:00:00+08:00", timeZone: "Asia/Kuala_Lumpur" },
+              end: { dateTime: "2026-08-04T10:00:00+08:00", timeZone: "Asia/Kuala_Lumpur" },
+              status: "confirmed",
+              attendees: [{ email: "must-not-return@example.com" }],
+            }],
+          };
+        return {
+          ok: true,
+          status: 200,
+          headers: { get: () => null },
+          text: async () => JSON.stringify(payload),
+        };
+      },
+    });
+    return handler({
+      httpMethod: "POST",
+      headers: {
+        origin: "https://staging--edenatlas.netlify.app",
+        authorization: "Bearer packaged-events-firebase-token",
+      },
+      body: JSON.stringify({ start: "2026-08-01T00:00:00Z", end: "2026-09-01T00:00:00Z" }),
+    });
+  } finally {
+    delete require.cache[modPath];
+  }
+}
+
 // ---- Execute the packaged handler exactly as AWS Lambda / Netlify would invoke it, with fake
 // (never real) env vars just sufficient to get past the REQUIRED_ENV check — no network call is
 // ever reachable from this test: enforceDeployContextPolicy() runs and can reject the request
@@ -306,6 +385,34 @@ function optionsEvent(origin) {
         assert.deepStrictEqual(body.grantedScopes, ["https://www.googleapis.com/auth/calendar.events.readonly"]);
         assert.ok(!response.body.includes("encryptedRefreshToken"));
         assert.ok(!response.body.includes("packaged-status-ciphertext"));
+      });
+    }
+
+    let eventsExtractDir;
+    await test("packaging the real google-calendar-events.js Function succeeds with the repo-configured bundler", async () => {
+      eventsExtractDir = await packageAndExtractFunction(
+        GOOGLE_CALENDAR_EVENTS_SRC,
+        "google-calendar-events.js"
+      );
+    });
+
+    if (eventsExtractDir) {
+      await test("the packaged Google Calendar read Function keeps the primary-only normalized contract", async () => {
+        const response = await invokePackagedGoogleCalendarEvents(eventsExtractDir);
+        const body = JSON.parse(response.body);
+        assert.strictEqual(response.statusCode, 200);
+        assert.strictEqual(body.ok, true);
+        assert.strictEqual(body.connectionStatus, "connected");
+        assert.strictEqual(body.events.length, 1);
+        assert.deepStrictEqual(Object.keys(body.events[0]).sort(), ["allDay", "end", "id", "start", "status", "summary"]);
+        assert.strictEqual(body.events[0].summary, "Packaged event");
+        for (const forbidden of [
+          "packaged-refresh-token-must-not-return",
+          "packaged-access-token-must-not-return",
+          "packaged-client-secret-must-not-return",
+          "must-not-return@example.com",
+          "encryptedRefreshToken",
+        ]) assert.ok(!response.body.includes(forbidden));
       });
     }
 

@@ -290,6 +290,7 @@ async function run() {
       "node netlify/functions/__tests__/expense-receipt-ai.test.js",
       "node netlify/functions/__tests__/google-calendar-oauth.test.js",
       "node netlify/functions/__tests__/google-calendar-functions.test.js",
+      "node netlify/functions/__tests__/google-calendar-events.test.js",
       "node netlify/functions/__tests__/airing-check-core.test.js",
       "node netlify/functions/__tests__/anime-airing-check.test.js",
       "node netlify/functions/__tests__/staging-isolation-wiring.test.js",

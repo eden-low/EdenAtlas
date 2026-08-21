@@ -15,9 +15,12 @@ const googleCalendarAction = document.getElementById("google-calendar-action");
 
 const GOOGLE_CALENDAR_START_ENDPOINT = "/.netlify/functions/google-calendar-oauth-start";
 const GOOGLE_CALENDAR_STATUS_ENDPOINT = "/.netlify/functions/google-calendar-status";
+const GOOGLE_CALENDAR_EVENTS_ENDPOINT = "/.netlify/functions/google-calendar-events";
 
 let viewDate = new Date();
 viewDate.setDate(1);
+let googleConnectionStatus = "disconnected";
+let monthLoadVersion = 0;
 
 function readAndClearGoogleCalendarReturn() {
   const url = new URL(window.location.href);
@@ -38,17 +41,17 @@ function setGoogleCalendarUi({ message, actionLabel = null, disabled = false }) 
   googleCalendarAction.classList.toggle("hidden", !actionLabel);
 }
 
-async function callGoogleCalendarFunction(endpoint, user, forceRefresh = false) {
+async function callGoogleCalendarFunction(endpoint, user, payload = {}, forceRefresh = false) {
   const response = await fetch(endpoint, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
       Authorization: `Bearer ${await user.getIdToken(forceRefresh)}`,
     },
-    body: "{}",
+    body: JSON.stringify(payload),
     cache: "no-store",
   });
-  if (response.status === 401 && !forceRefresh) return callGoogleCalendarFunction(endpoint, user, true);
+  if (response.status === 401 && !forceRefresh) return callGoogleCalendarFunction(endpoint, user, payload, true);
   let body = null;
   try {
     body = await response.json();
@@ -76,16 +79,19 @@ async function loadGoogleCalendarStatus(user) {
   }
   try {
     const status = await callGoogleCalendarFunction(GOOGLE_CALENDAR_STATUS_ENDPOINT, user);
+    googleConnectionStatus = status.connectionStatus;
     if (status.connectionStatus === "connected") {
-      setGoogleCalendarUi({ message: "Connected with read-only permission. Event access is not enabled in this checkpoint." });
+      setGoogleCalendarUi({ message: "Connected with read-only permission. Loading Google Calendar eventsâ€¦" });
       return;
     }
     if (status.connectionStatus === "reconnect_required" || googleCalendarReturn) {
       setGoogleCalendarUi({ message: "Google Calendar needs to be connected again.", actionLabel: "Reconnect Google Calendar" });
       return;
     }
+    googleConnectionStatus = "disconnected";
     setGoogleCalendarUi({ message: "Not connected. EdenAtlas will request read-only event permission.", actionLabel: "Connect Google Calendar" });
   } catch (err) {
+    googleConnectionStatus = "unavailable";
     const notConfigured = err && err.code === "google_calendar_not_configured";
     setGoogleCalendarUi({
       message: notConfigured
@@ -94,6 +100,17 @@ async function loadGoogleCalendarStatus(user) {
       actionLabel: notConfigured ? null : "Retry connection",
     });
   }
+}
+
+function monthRange(date) {
+  const start = new Date(date.getFullYear(), date.getMonth(), 1);
+  const end = new Date(date.getFullYear(), date.getMonth() + 1, 1);
+  return { start: start.toISOString(), end: end.toISOString() };
+}
+
+async function fetchGoogleCalendarMonth(user, date) {
+  if (googleConnectionStatus !== "connected") return null;
+  return callGoogleCalendarFunction(GOOGLE_CALENDAR_EVENTS_ENDPOINT, user, monthRange(date));
 }
 
 async function startGoogleCalendarConnection() {
@@ -157,15 +174,45 @@ async function fetchMine(collectionName) {
   }
 }
 
-let cachedMonthData = { expenses: [], photos: [], journals: [] };
+let cachedMonthData = { expenses: [], photos: [], journals: [], googleEvents: [] };
 
-async function loadMonth() {
-  const [expenses, photos, journals] = await Promise.all([
+async function loadMonth(user = auth.currentUser) {
+  const requestedView = new Date(viewDate.getFullYear(), viewDate.getMonth(), 1);
+  const loadVersion = ++monthLoadVersion;
+  const googleRequest = user && googleConnectionStatus === "connected"
+    ? fetchGoogleCalendarMonth(user, requestedView)
+      .then((result) => ({ result, error: null }))
+      .catch((error) => ({ result: null, error }))
+    : Promise.resolve({ result: null, error: null });
+  const [expenses, photos, journals, googleResult] = await Promise.all([
     fetchMine("expenses"),
     fetchMine("photos"),
     fetchMine("journals"),
+    googleRequest,
   ]);
-  cachedMonthData = { expenses, photos, journals };
+  if (loadVersion !== monthLoadVersion) return;
+
+  let googleEvents = [];
+  if (googleResult.error) {
+    setGoogleCalendarUi({ message: "Connected, but Google Calendar events are temporarily unavailable." });
+  } else if (googleResult.result) {
+    if (googleResult.result.connectionStatus === "connected") {
+      googleEvents = Array.isArray(googleResult.result.events) ? googleResult.result.events : [];
+      setGoogleCalendarUi({
+        message: googleResult.result.truncated
+          ? "Connected. Showing the first 200 Google Calendar events for this month."
+          : "Connected. Google Calendar events are shown below.",
+      });
+    } else if (googleResult.result.connectionStatus === "reconnect_required") {
+      googleConnectionStatus = "reconnect_required";
+      setGoogleCalendarUi({ message: "Google Calendar needs to be connected again.", actionLabel: "Reconnect Google Calendar" });
+    } else {
+      googleConnectionStatus = "disconnected";
+      setGoogleCalendarUi({ message: "Not connected. EdenAtlas will request read-only event permission.", actionLabel: "Connect Google Calendar" });
+    }
+  }
+
+  cachedMonthData = { expenses, photos, journals, googleEvents };
   renderMonth();
 }
 
@@ -175,14 +222,17 @@ function renderMonth() {
   monthLabel.textContent = viewDate.toLocaleDateString(dateLocale(), { month: "long", year: "numeric" });
   renderWeekdayHeaders();
 
-  const { expenses, photos, journals } = cachedMonthData;
+  const { expenses, photos, journals, googleEvents } = cachedMonthData;
   const byDay = new Map();
+  function addRenderedItem(key, html, source = "internal") {
+    if (!byDay.has(key)) byDay.set(key, []);
+    byDay.get(key).push({ html, source });
+  }
   function addItem(dateField, item, render) {
     const d = item[dateField]?.toDate?.();
     if (!d || d.getFullYear() !== viewDate.getFullYear() || d.getMonth() !== viewDate.getMonth()) return;
     const key = toDateKey(d);
-    if (!byDay.has(key)) byDay.set(key, []);
-    byDay.get(key).push(render(item));
+    addRenderedItem(key, render(item));
   }
 
   expenses.forEach((e) => {
@@ -192,6 +242,13 @@ function renderMonth() {
   });
   photos.forEach((p) => addItem("uploadedAt", p, () => `📷 Photo`));
   journals.forEach((j) => addItem("createdAt", j, (item) => `📝 ${esc(item.title || "Entry")}`));
+  googleEvents.forEach((event) => {
+    const rawStart = event && event.start && (event.start.date || event.start.dateTime);
+    const key = typeof rawStart === "string" && /^\d{4}-\d{2}-\d{2}/.test(rawStart) ? rawStart.slice(0, 10) : null;
+    const monthPrefix = `${viewDate.getFullYear()}-${String(viewDate.getMonth() + 1).padStart(2, "0")}-`;
+    if (!key || !key.startsWith(monthPrefix)) return;
+    addRenderedItem(key, `Google Calendar · ${esc(event.summary || "Untitled event")}`, "google");
+  });
 
   const year = viewDate.getFullYear();
   const month = viewDate.getMonth();
@@ -210,7 +267,7 @@ function renderMonth() {
     cells.push(`
       <div class="min-h-[90px] rounded-lg border ${isToday ? "border-neonPurple/60 bg-neonPurple/5" : "border-borderNeon/60 bg-darkBg/30"} p-1.5 flex flex-col gap-0.5 overflow-hidden">
         <span class="text-[10px] font-code ${isToday ? "text-neonPurple font-bold" : "text-textGray"}">${day}</span>
-        ${items.slice(0, 3).map((t) => `<span class="text-[9px] text-white leading-tight truncate">${t}</span>`).join("")}
+        ${items.slice(0, 3).map((item) => `<span class="text-[9px] ${item.source === "google" ? "text-neonPurple" : "text-white"} leading-tight truncate">${item.html}</span>`).join("")}
         ${items.length > 3 ? `<span class="text-[9px] text-textGray">+${items.length - 3} more</span>` : ""}
       </div>`);
   }
@@ -227,10 +284,10 @@ nextBtn.addEventListener("click", () => {
   loadMonth();
 });
 
-onAuthStateChanged(auth, (user) => {
+onAuthStateChanged(auth, async (user) => {
   if (!user) return;
-  loadMonth();
-  loadGoogleCalendarStatus(user);
+  await loadGoogleCalendarStatus(user);
+  await loadMonth(user);
 });
 
 if (googleCalendarAction) googleCalendarAction.addEventListener("click", startGoogleCalendarConnection);
