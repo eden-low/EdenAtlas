@@ -95,19 +95,33 @@
   <!-- Add Expense modal -->
   <div id="expense-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4">
     <div id="expense-modal-backdrop" class="absolute inset-0 bg-darkBg/80 backdrop-blur-sm"></div>
-    <div class="relative w-full max-w-md bg-cardBg neon-border-purple rounded-2xl p-6">
+    <div class="relative w-full max-w-md max-h-[90vh] overflow-y-auto bg-cardBg neon-border-purple rounded-2xl p-6">
       <div class="flex items-center justify-between mb-4">
         <h2 class="font-cyber font-semibold text-lg" data-i18n="finance.add_expense">Add Expense</h2>
         <button id="expense-modal-close" class="text-textGray hover:text-white text-xl leading-none">&times;</button>
       </div>
       <form id="expense-form" class="space-y-4">
+        <section class="rounded-xl border border-borderNeon bg-darkBg/30 p-3 space-y-3" aria-labelledby="expense-receipt-ai-title">
+          <div>
+            <h3 id="expense-receipt-ai-title" class="text-xs font-cyber font-semibold text-white" data-i18n="finance.receipt_ai_title">Receipt Screenshot AI</h3>
+            <p class="text-[10px] font-code text-textGray mt-1" data-i18n="finance.receipt_ai_notice">Your image is sent temporarily to Qwen for extraction and is not stored. Review every suggestion before saving.</p>
+          </div>
+          <label for="expense-receipt-file" class="block text-[11px] font-code text-textGray" data-i18n="finance.receipt_ai_choose">Choose one JPEG, PNG, or WebP receipt screenshot</label>
+          <input id="expense-receipt-file" type="file" accept="image/jpeg,image/png,image/webp" class="block w-full text-[11px] text-textGray file:mr-3 file:rounded-lg file:border-0 file:bg-neonPurple/15 file:px-3 file:py-2 file:text-[11px] file:font-code file:text-neonPurple">
+          <div id="expense-receipt-preview-wrap" class="hidden">
+            <img id="expense-receipt-preview" alt="Receipt screenshot preview" class="w-full max-h-48 object-contain rounded-lg border border-borderNeon bg-darkBg/60">
+          </div>
+          <button id="expense-receipt-extract" type="button" disabled class="w-full px-4 py-2 rounded-lg border border-neonPurple/40 text-xs font-code text-neonPurple hover:bg-neonPurple/10 disabled:opacity-40 disabled:cursor-not-allowed" data-i18n="finance.receipt_ai_extract">Extract suggestions with AI</button>
+          <p id="expense-receipt-status" class="text-[11px] font-code text-textGray" aria-live="polite"></p>
+          <div id="expense-receipt-warnings" class="hidden text-[10px] font-code text-amber-300 space-y-1" aria-live="polite"></div>
+        </section>
         <div>
           <label class="block text-xs font-code text-textGray mb-1.5" for="expense-amount">Amount (RM)</label>
-          <input id="expense-amount" type="number" step="0.01" min="0" required placeholder="0.00" class="w-full bg-darkBg/60 border border-borderNeon rounded-lg px-3 py-2 text-sm text-white placeholder:text-textGray/60">
+          <input id="expense-amount" type="number" step="0.01" min="0.01" max="100000000" required placeholder="0.00" class="w-full bg-darkBg/60 border border-borderNeon rounded-lg px-3 py-2 text-sm text-white placeholder:text-textGray/60">
         </div>
         <div>
           <label class="block text-xs font-code text-textGray mb-1.5" for="expense-note">Note</label>
-          <input id="expense-note" type="text" placeholder="What was this for?" class="w-full bg-darkBg/60 border border-borderNeon rounded-lg px-3 py-2 text-sm text-white placeholder:text-textGray/60">
+          <input id="expense-note" type="text" maxlength="240" placeholder="What was this for?" class="w-full bg-darkBg/60 border border-borderNeon rounded-lg px-3 py-2 text-sm text-white placeholder:text-textGray/60">
         </div>
         <div class="flex items-center gap-4">
           <div class="flex-1">
@@ -122,7 +136,7 @@
           </div>
           <div class="flex-1">
             <label class="block text-xs font-code text-textGray mb-1.5" for="expense-date">Date</label>
-            <input id="expense-date" type="date" class="w-full bg-darkBg/60 border border-borderNeon rounded-lg px-3 py-2 text-xs text-white">
+            <input id="expense-date" type="date" required class="w-full bg-darkBg/60 border border-borderNeon rounded-lg px-3 py-2 text-xs text-white">
           </div>
         </div>
         <div>
@@ -135,8 +149,8 @@
           <label class="block text-xs font-code text-textGray mb-1.5" for="expense-tags" data-i18n="common.tags">Tags</label>
           <input id="expense-tags" type="text" placeholder="comma, separated, tags" class="w-full bg-darkBg/60 border border-borderNeon rounded-lg px-3 py-2 text-xs text-white placeholder:text-textGray/60">
         </div>
-        <button type="submit" class="w-full px-5 py-2.5 bg-gradient-to-r from-neonViolet to-neonPurple rounded-xl text-xs font-cyber font-bold tracking-wider text-white hover:scale-105 transition-all">
-          SAVE
+        <button id="expense-save-btn" type="submit" class="w-full px-5 py-2.5 bg-gradient-to-r from-neonViolet to-neonPurple rounded-xl text-xs font-cyber font-bold tracking-wider text-white hover:scale-105 transition-all" data-i18n="common.save">
+          Save
         </button>
         <p id="expense-status" class="text-xs font-code text-textGray text-center"></p>
       </form>
@@ -155,11 +169,11 @@
         <input type="hidden" id="expense-edit-id">
         <div>
           <label class="block text-xs font-code text-textGray mb-1.5" for="expense-edit-amount">Amount (RM)</label>
-          <input id="expense-edit-amount" type="number" step="0.01" min="0" required class="w-full bg-darkBg/60 border border-borderNeon rounded-lg px-3 py-2 text-sm text-white">
+          <input id="expense-edit-amount" type="number" step="0.01" min="0.01" max="100000000" required class="w-full bg-darkBg/60 border border-borderNeon rounded-lg px-3 py-2 text-sm text-white">
         </div>
         <div>
           <label class="block text-xs font-code text-textGray mb-1.5" for="expense-edit-note">Note</label>
-          <input id="expense-edit-note" type="text" class="w-full bg-darkBg/60 border border-borderNeon rounded-lg px-3 py-2 text-sm text-white">
+          <input id="expense-edit-note" type="text" maxlength="240" class="w-full bg-darkBg/60 border border-borderNeon rounded-lg px-3 py-2 text-sm text-white">
         </div>
         <div class="flex items-center gap-4">
           <div class="flex-1">
@@ -174,7 +188,7 @@
           </div>
           <div class="flex-1">
             <label class="block text-xs font-code text-textGray mb-1.5" for="expense-edit-date">Date</label>
-            <input id="expense-edit-date" type="date" class="w-full bg-darkBg/60 border border-borderNeon rounded-lg px-3 py-2 text-xs text-white">
+            <input id="expense-edit-date" type="date" required class="w-full bg-darkBg/60 border border-borderNeon rounded-lg px-3 py-2 text-xs text-white">
           </div>
         </div>
         <div>

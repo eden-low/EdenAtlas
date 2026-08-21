@@ -2,6 +2,19 @@ import { auth, googleProvider, db, canParticipate } from "./firebase-init.js";
 import { t as i18nT, getLang } from "./js/i18n.js";
 import { resolveDisplayName } from "./js/identity.js";
 import {
+  buildExpenseCreatePayload,
+  expenseCurrency,
+  expenseTransactionTimestamp,
+  normalizeExpenseInput,
+} from "./js/expense-model.js";
+import { createExpenseRowElement } from "./js/expense-render.js";
+import {
+  ReceiptClientError,
+  normalizeReceiptSuggestions,
+  prepareReceiptImage,
+  receiptSuggestionToExpenseDraft,
+} from "./js/expense-receipt-client.js";
+import {
   onAuthStateChanged,
   signInWithPopup,
   signOut,
@@ -47,6 +60,16 @@ let cachedExpenses = [];
 let activeFilter = "all";
 let dailyChart = null;
 let categoryChart = null;
+const RECEIPT_AI_ENDPOINT = "/.netlify/functions/expense-receipt-ai";
+const receiptFileInput = document.getElementById("expense-receipt-file");
+const receiptPreviewWrap = document.getElementById("expense-receipt-preview-wrap");
+const receiptPreview = document.getElementById("expense-receipt-preview");
+const receiptExtractBtn = document.getElementById("expense-receipt-extract");
+const receiptStatus = document.getElementById("expense-receipt-status");
+const receiptWarnings = document.getElementById("expense-receipt-warnings");
+let preparedReceipt = null;
+let receiptAiController = null;
+let receiptPreparationId = 0;
 
 function dateInputValue(d = new Date()) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
@@ -74,8 +97,16 @@ function collectionLabel(c) {
 
 async function populateCollectionSelect(selectEl, selectedId) {
   const cols = await loadMyCollectionOptions();
-  selectEl.innerHTML = `<option value="">${i18nT("common.uncategorized")}</option>` +
-    cols.map((c) => `<option value="${c.id}">${collectionLabel(c)}</option>`).join("");
+  const uncategorized = document.createElement("option");
+  uncategorized.value = "";
+  uncategorized.textContent = i18nT("common.uncategorized");
+  const options = cols.map((c) => {
+    const option = document.createElement("option");
+    option.value = c.id;
+    option.textContent = collectionLabel(c);
+    return option;
+  });
+  selectEl.replaceChildren(uncategorized, ...options);
   selectEl.value = selectedId || "";
 }
 
@@ -103,7 +134,7 @@ async function checkExpenseAlert(expenses) {
 
   const thisMonth = monthKey();
   const monthTotal = expenses.reduce((sum, e) => {
-    const d = e.createdAt?.toDate?.();
+    const d = expenseTransactionTimestamp(e)?.toDate?.();
     if (!d || monthKey(d) !== thisMonth) return sum;
     return sum + Number(e.amount || 0);
   }, 0);
@@ -130,22 +161,15 @@ async function checkExpenseAlert(expenses) {
 function expenseRow(expense) {
   const meta = CATEGORY_META[expense.category] || CATEGORY_META.other;
   const label = i18nT(meta.i18nKey);
-
-  const row = document.createElement("article");
-  row.className = "is-visible bg-cardBg/90 neon-border-purple rounded-2xl p-4 flex items-center justify-between gap-4";
-  row.innerHTML = `
-    <div class="flex items-center gap-3 min-w-0">
-      <div class="w-9 h-9 rounded-lg ${meta.bg} ${meta.text} flex items-center justify-center text-xs font-code font-bold flex-shrink-0 border ${meta.border}">${label.slice(0, 2).toUpperCase()}</div>
-      <div class="min-w-0">
-        <p class="text-sm font-medium truncate">${expense.note || label}</p>
-        <p class="text-[11px] text-textGray mt-0.5 font-code">${formatTimestamp(expense.date || expense.createdAt)}</p>
-        ${(expense.tags || []).length ? `<div class="flex flex-wrap gap-1 mt-1">${expense.tags.map((t) => `<span class="text-[10px] font-code px-1.5 py-0.5 rounded-full border border-borderNeon text-textGray">#${t}</span>`).join("")}</div>` : ""}
-      </div>
-    </div>
-    <div class="flex items-center gap-2 flex-shrink-0">
-      <span class="font-code font-semibold text-sm tabular-nums">RM ${Number(expense.amount).toFixed(2)}</span>
-      <button class="edit-expense-btn text-textGray hover:text-neonPurple transition-colors" title="${i18nT("common.edit_metadata")}"><i class="fa-solid fa-pen text-xs"></i></button>
-    </div>`;
+  const currency = expenseCurrency(expense);
+  const row = createExpenseRowElement(document, {
+    expense,
+    categoryMeta: meta,
+    categoryLabel: label,
+    formattedDate: formatTimestamp(expenseTransactionTimestamp(expense)),
+    amountLabel: `${currency === "MYR" ? "RM" : currency} ${Number(expense.amount).toFixed(2)}`,
+    editTitle: i18nT("common.edit_metadata"),
+  });
   row.querySelector(".edit-expense-btn").addEventListener("click", () => openEditModal(expense));
   return row;
 }
@@ -162,7 +186,7 @@ function renderList() {
 function renderCharts() {
   const dailyTotals = new Map();
   cachedExpenses.forEach((e) => {
-    const key = dayKey(e.createdAt);
+    const key = dayKey(expenseTransactionTimestamp(e));
     if (!key) return;
     dailyTotals.set(key, (dailyTotals.get(key) || 0) + Number(e.amount));
   });
@@ -248,7 +272,9 @@ async function fetchMyExpenses() {
     }
   }
 
-  expenses.sort((a, b) => (b.createdAt?.toMillis?.() || 0) - (a.createdAt?.toMillis?.() || 0));
+  // The list is transaction-facing, so back-dated purchases belong at their purchase date.
+  // createdAt remains only the fallback for legacy documents that predate the date field.
+  expenses.sort((a, b) => (expenseTransactionTimestamp(b)?.toMillis?.() || 0) - (expenseTransactionTimestamp(a)?.toMillis?.() || 0));
   cachedExpenses = expenses;
   renderList();
   renderCharts();
@@ -302,9 +328,13 @@ onAuthStateChanged(auth, (user) => {
 });
 
 function openModal() {
+  const dateInput = document.getElementById("expense-date");
+  if (!dateInput.value) dateInput.value = dateInputValue();
+  populateCollectionSelect(document.getElementById("expense-collection"));
   expenseModal.classList.remove("hidden");
 }
 function closeModal() {
+  resetReceiptAi();
   expenseModal.classList.add("hidden");
   expenseForm.reset();
   expenseStatus.textContent = "";
@@ -312,46 +342,197 @@ function closeModal() {
 
 newExpenseBtn.addEventListener("click", () => {
   document.getElementById("expense-date").value = dateInputValue();
-  populateCollectionSelect(document.getElementById("expense-collection"));
 });
 newExpenseBtn.addEventListener("click", openModal);
 expenseModalClose.addEventListener("click", closeModal);
 expenseModalBackdrop.addEventListener("click", closeModal);
 
-function parseDateInput(value) {
-  if (!value) return Timestamp.fromDate(new Date());
-  const [y, m, d] = value.split("-").map(Number);
-  return Timestamp.fromDate(new Date(y, m - 1, d));
+function setReceiptStatus(key, fallback, tone = "neutral") {
+  const translated = i18nT(key);
+  receiptStatus.textContent = translated === key ? fallback : translated;
+  receiptStatus.classList.toggle("text-rose-300", tone === "error");
+  receiptStatus.classList.toggle("text-emerald-300", tone === "success");
+  receiptStatus.classList.toggle("text-textGray", tone === "neutral");
 }
+
+function clearReceiptConfidence() {
+  document.querySelectorAll("[data-ai-confidence]").forEach((node) => node.remove());
+  ["expense-amount", "expense-note", "expense-category", "expense-date"].forEach((id) => {
+    document.getElementById(id).classList.remove("ring-1", "ring-amber-400/60", "ring-rose-400/60");
+  });
+}
+
+function confidenceLabel(level) {
+  const key = `finance.receipt_ai_confidence_${level}`;
+  const translated = i18nT(key);
+  return translated === key ? `${level} confidence` : translated;
+}
+
+function markReceiptConfidence(inputId, level) {
+  if (level !== "medium" && level !== "low") return;
+  const input = document.getElementById(inputId);
+  const label = document.querySelector(`label[for="${inputId}"]`);
+  if (!input || !label) return;
+  const marker = document.createElement("span");
+  marker.dataset.aiConfidence = "true";
+  marker.className = `ml-2 text-[10px] ${level === "low" ? "text-rose-300" : "text-amber-300"}`;
+  marker.textContent = `AI: ${confidenceLabel(level)}`;
+  label.append(marker);
+  input.classList.add("ring-1", level === "low" ? "ring-rose-400/60" : "ring-amber-400/60");
+}
+
+function leastConfidence(...levels) {
+  const rank = { high: 0, medium: 1, low: 2 };
+  return levels.filter(Boolean).sort((a, b) => rank[b] - rank[a])[0] || null;
+}
+
+function renderReceiptWarnings(warnings) {
+  const items = warnings.map((code) => {
+    const line = document.createElement("p");
+    const key = `finance.receipt_ai_warning_${code}`;
+    const translated = i18nT(key);
+    line.textContent = `Warning: ${translated === key ? code.replaceAll("_", " ") : translated}`;
+    return line;
+  });
+  receiptWarnings.replaceChildren(...items);
+  receiptWarnings.classList.toggle("hidden", items.length === 0);
+}
+
+function resetReceiptAi({ preserveFile = false } = {}) {
+  receiptAiController?.abort();
+  receiptAiController = null;
+  receiptPreparationId++;
+  preparedReceipt = null;
+  receiptExtractBtn.disabled = true;
+  receiptExtractBtn.removeAttribute("aria-busy");
+  receiptPreview.removeAttribute("src");
+  receiptPreviewWrap.classList.add("hidden");
+  receiptStatus.textContent = "";
+  receiptWarnings.replaceChildren();
+  receiptWarnings.classList.add("hidden");
+  clearReceiptConfidence();
+  if (!preserveFile) receiptFileInput.value = "";
+}
+
+function receiptErrorMessage(code) {
+  const map = {
+    unsupported_image_type: "finance.receipt_ai_error_type",
+    source_image_too_large: "finance.receipt_ai_error_size",
+    invalid_image_dimensions: "finance.receipt_ai_error_image",
+    image_processing_failed: "finance.receipt_ai_error_image",
+    invalid_ai_response: "finance.receipt_ai_error_response",
+    rate_limited: "finance.receipt_ai_error_rate",
+    owner_only: "finance.receipt_ai_error_owner",
+  };
+  return map[code] || "finance.receipt_ai_error_generic";
+}
+
+receiptFileInput.addEventListener("change", async () => {
+  resetReceiptAi({ preserveFile: true });
+  const file = receiptFileInput.files?.[0];
+  if (!file) return;
+  const preparationId = ++receiptPreparationId;
+  setReceiptStatus("finance.receipt_ai_preparing", "Preparing image…");
+  try {
+    const prepared = await prepareReceiptImage(file);
+    if (preparationId !== receiptPreparationId) return;
+    preparedReceipt = prepared;
+    receiptPreview.src = prepared.dataUrl;
+    receiptPreviewWrap.classList.remove("hidden");
+    receiptExtractBtn.disabled = false;
+    setReceiptStatus("finance.receipt_ai_ready", "Image ready. Extract when you are ready.");
+  } catch (err) {
+    if (preparationId !== receiptPreparationId) return;
+    const code = err instanceof ReceiptClientError ? err.code : "image_processing_failed";
+    setReceiptStatus(receiptErrorMessage(code), "Couldn't prepare this image.", "error");
+  }
+});
+
+async function withOneRetryOn401(attempt) {
+  let response = await attempt(false);
+  if (response.status === 401) response = await attempt(true);
+  return response;
+}
+
+function applyReceiptSuggestions(suggestions) {
+  const draft = receiptSuggestionToExpenseDraft(suggestions);
+  if (draft.amount != null) document.getElementById("expense-amount").value = draft.amount.toFixed(2);
+  if (draft.note != null) document.getElementById("expense-note").value = draft.note;
+  if (draft.category != null) document.getElementById("expense-category").value = draft.category;
+  if (draft.date != null) document.getElementById("expense-date").value = draft.date;
+
+  clearReceiptConfidence();
+  if (draft.amount != null) markReceiptConfidence("expense-amount", leastConfidence(suggestions.confidence.totalAmount, suggestions.confidence.currencyCode));
+  if (draft.note != null) markReceiptConfidence("expense-note", suggestions.confidence.merchantName);
+  if (draft.category != null) markReceiptConfidence("expense-category", suggestions.confidence.suggestedCategory);
+  if (draft.date != null) markReceiptConfidence("expense-date", suggestions.confidence.transactionDate);
+  renderReceiptWarnings(suggestions.warnings);
+}
+
+receiptExtractBtn.addEventListener("click", async () => {
+  const user = auth.currentUser;
+  if (!user || !preparedReceipt || receiptAiController) return;
+  receiptAiController = new AbortController();
+  const controller = receiptAiController;
+  receiptExtractBtn.disabled = true;
+  receiptExtractBtn.setAttribute("aria-busy", "true");
+  setReceiptStatus("finance.receipt_ai_extracting", "Extracting suggestions…");
+  try {
+    const response = await withOneRetryOn401(async (forceRefresh) => fetch(RECEIPT_AI_ENDPOINT, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${await user.getIdToken(forceRefresh)}`,
+      },
+      body: JSON.stringify({ imageDataUrl: preparedReceipt.dataUrl }),
+      signal: controller.signal,
+    }));
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok || !data.ok) throw new ReceiptClientError(data.error || `http_${response.status}`);
+    const suggestions = normalizeReceiptSuggestions(data.suggestions);
+    applyReceiptSuggestions(suggestions);
+    setReceiptStatus("finance.receipt_ai_review", "Suggestions filled. Review and edit, then press Save.", "success");
+  } catch (err) {
+    if (err?.name !== "AbortError") {
+      const code = err instanceof ReceiptClientError ? err.code : "network_error";
+      setReceiptStatus(receiptErrorMessage(code), "Extraction failed. Please try again.", "error");
+    }
+  } finally {
+    if (receiptAiController === controller) {
+      receiptAiController = null;
+      receiptExtractBtn.disabled = !preparedReceipt;
+      receiptExtractBtn.removeAttribute("aria-busy");
+    }
+  }
+});
 
 expenseForm.addEventListener("submit", async (event) => {
   event.preventDefault();
   const user = auth.currentUser;
   if (!user || !canParticipate()) return;
 
-  const amount = parseFloat(document.getElementById("expense-amount").value);
-  const note = document.getElementById("expense-note").value.trim();
-  const category = document.getElementById("expense-category").value;
-  const date = parseDateInput(document.getElementById("expense-date").value);
-  const collectionId = document.getElementById("expense-collection").value || null;
-  const tags = document.getElementById("expense-tags").value.split(",").map((t) => t.trim()).filter(Boolean);
-  if (!amount || amount <= 0) return;
-
-  expenseStatus.textContent = i18nT("common.saving");
+  let payload;
   try {
-    await addDoc(collection(db, "expenses"), {
-      amount,
-      category,
-      note,
-      date,
-      createdAt: serverTimestamp(),
-      uid: user.uid,
-      collectionId,
-      tags,
+    payload = buildExpenseCreatePayload({
+      amount: document.getElementById("expense-amount").value,
+      currency: "MYR",
+      note: document.getElementById("expense-note").value,
+      category: document.getElementById("expense-category").value,
+      date: document.getElementById("expense-date").value,
+      collectionId: document.getElementById("expense-collection").value || null,
+      tags: document.getElementById("expense-tags").value.split(",").map((t) => t.trim()).filter(Boolean),
       locationName: null,
       latitude: null,
       longitude: null,
-    });
+    }, { uid: user.uid, createdAt: serverTimestamp(), dateToTimestamp: Timestamp.fromDate });
+  } catch {
+    expenseStatus.textContent = i18nT("common.couldnt_save");
+    return;
+  }
+
+  expenseStatus.textContent = i18nT("common.saving");
+  try {
+    await addDoc(collection(db, "expenses"), payload);
 
     expenseStatus.textContent = i18nT("common.saved");
     await fetchMyExpenses();
@@ -392,16 +573,34 @@ expenseEditForm.addEventListener("submit", async (event) => {
   const expense = cachedExpenses.find((e) => e.id === id);
   if (!expense || expense.uid !== user.uid) return;
 
+  let normalized;
+  try {
+    normalized = normalizeExpenseInput({
+      amount: document.getElementById("expense-edit-amount").value,
+      currency: expenseCurrency(expense),
+      note: document.getElementById("expense-edit-note").value,
+      category: document.getElementById("expense-edit-category").value,
+      date: document.getElementById("expense-edit-date").value,
+      collectionId: document.getElementById("expense-edit-collection").value || null,
+      tags: document.getElementById("expense-edit-tags").value.split(",").map((t) => t.trim()).filter(Boolean),
+      locationName: expense.locationName ?? null,
+      latitude: expense.latitude ?? null,
+      longitude: expense.longitude ?? null,
+    });
+  } catch {
+    expenseEditStatus.textContent = i18nT("common.couldnt_save");
+    return;
+  }
   const payload = {
-    amount: parseFloat(document.getElementById("expense-edit-amount").value),
-    note: document.getElementById("expense-edit-note").value.trim(),
-    category: document.getElementById("expense-edit-category").value,
-    date: parseDateInput(document.getElementById("expense-edit-date").value),
-    collectionId: document.getElementById("expense-edit-collection").value || null,
-    tags: document.getElementById("expense-edit-tags").value.split(",").map((t) => t.trim()).filter(Boolean),
+    amount: normalized.amount,
+    currency: normalized.currency,
+    note: normalized.note,
+    category: normalized.category,
+    date: Timestamp.fromDate(normalized.date),
+    collectionId: normalized.collectionId,
+    tags: normalized.tags,
     updatedAt: serverTimestamp(),
   };
-  if (!payload.amount || payload.amount <= 0) return;
   try {
     await updateDoc(doc(db, "expenses", id), payload);
     expenseEditStatus.textContent = i18nT("common.saved");

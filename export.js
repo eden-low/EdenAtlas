@@ -1,5 +1,6 @@
 ﻿import { auth, db } from "./firebase-init.js";
 import { collection, query, where, getDocs } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-firestore.js";
+import { expenseCurrency, expenseTransactionTimestamp } from "./js/expense-model.js";
 
 // Available to any signed-in user now (everyone has their own private space) — exports
 // always mean "my own docs", never anyone else's, even their public ones.
@@ -49,13 +50,14 @@ function csvEscape(value) {
 async function exportExpensesCsv() {
   setStatus("Exporting expenses...");
   const expenses = await fetchMyCollection("expenses");
-  const rows = [["date", "amount", "category", "note"]];
+  const rows = [["date", "amount", "currency", "category", "note"]];
   expenses
-    .sort((a, b) => (a.createdAt?.toMillis?.() || 0) - (b.createdAt?.toMillis?.() || 0))
+    .sort((a, b) => (expenseTransactionTimestamp(a)?.toMillis?.() || 0) - (expenseTransactionTimestamp(b)?.toMillis?.() || 0))
     .forEach((e) => {
       rows.push([
-        e.createdAt?.toDate?.().toISOString().slice(0, 10) || "",
+        expenseTransactionTimestamp(e)?.toDate?.().toISOString().slice(0, 10) || "",
         Number(e.amount || 0).toFixed(2),
+        expenseCurrency(e),
         e.category || "",
         e.note || "",
       ]);
@@ -123,7 +125,7 @@ async function exportFullBackup() {
       lastSignInTime: user.metadata?.lastSignInTime || null,
     },
     settings,
-    expenses: expenses.map((e) => ({ ...e, createdAt: isoDate(e.createdAt) })),
+    expenses: expenses.map((e) => ({ ...e, currency: expenseCurrency(e), date: isoDate(expenseTransactionTimestamp(e)), createdAt: isoDate(e.createdAt) })),
     journals: journals.map((j) => ({ ...j, createdAt: isoDate(j.createdAt) })),
     timeline: timeline.map((t) => ({ ...t, date: isoDate(t.date) })),
     gallery_metadata: photos.map((p) => ({ ...p, uploadedAt: isoDate(p.uploadedAt) })),

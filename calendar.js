@@ -3,6 +3,7 @@ import { getLang } from "./js/i18n.js";
 import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-auth.js";
 import { collection, query, where, getDocs } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-firestore.js";
 import { excludeDeleted } from "./js/memory-filters.js";
+import { expenseCurrency, expenseTransactionTimestamp } from "./js/expense-model.js";
 
 const monthLabel = document.getElementById("cal-month-label");
 const calGrid = document.getElementById("cal-grid");
@@ -88,7 +89,11 @@ function renderMonth() {
     byDay.get(key).push(render(item));
   }
 
-  expenses.forEach((e) => addItem("createdAt", e, (item) => `💰 RM ${Number(item.amount || 0).toFixed(0)}`));
+  expenses.forEach((e) => {
+    const transactionDate = expenseTransactionTimestamp(e);
+    if (!transactionDate) return;
+    addItem("transactionDate", { ...e, transactionDate }, (item) => `💰 ${expenseCurrency(item) === "MYR" ? "RM" : expenseCurrency(item)} ${Number(item.amount || 0).toFixed(0)}`);
+  });
   photos.forEach((p) => addItem("uploadedAt", p, () => `📷 Photo`));
   journals.forEach((j) => addItem("createdAt", j, (item) => `📝 ${esc(item.title || "Entry")}`));
 

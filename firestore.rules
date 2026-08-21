@@ -40,15 +40,93 @@ service cloud.firestore {
       return isPhotoMineOrPublic(post);
     }
 
+    // Canonical Expense validation. Creates are strict and exact; updates validate the resulting
+    // canonical fields but use diff().affectedKeys() so an unchanged, unknown field on a genuine
+    // legacy document does not make that document permanently uneditable.
+    function validExpenseAmount(data) {
+      return data.amount is number && data.amount > 0 && data.amount <= 100000000;
+    }
+    function validExpenseCategory(data) {
+      return data.category in ['food', 'transport', 'shopping', 'bills', 'other'];
+    }
+    function validExpenseText(data) {
+      return data.note is string && data.note.size() <= 240
+        && (!('locationName' in data) || data.locationName == null
+            || (data.locationName is string && data.locationName.size() <= 200));
+    }
+    function validExpenseCollection(data) {
+      return !('collectionId' in data) || data.collectionId == null
+        || (data.collectionId is string && data.collectionId.size() > 0
+            && data.collectionId.size() <= 128);
+    }
+    function validExpenseTags(data) {
+      return !('tags' in data) || (
+        data.tags is list && data.tags.size() <= 10
+        && (data.tags.size() <= 0 || (data.tags[0] is string && data.tags[0].size() > 0 && data.tags[0].size() <= 40))
+        && (data.tags.size() <= 1 || (data.tags[1] is string && data.tags[1].size() > 0 && data.tags[1].size() <= 40))
+        && (data.tags.size() <= 2 || (data.tags[2] is string && data.tags[2].size() > 0 && data.tags[2].size() <= 40))
+        && (data.tags.size() <= 3 || (data.tags[3] is string && data.tags[3].size() > 0 && data.tags[3].size() <= 40))
+        && (data.tags.size() <= 4 || (data.tags[4] is string && data.tags[4].size() > 0 && data.tags[4].size() <= 40))
+        && (data.tags.size() <= 5 || (data.tags[5] is string && data.tags[5].size() > 0 && data.tags[5].size() <= 40))
+        && (data.tags.size() <= 6 || (data.tags[6] is string && data.tags[6].size() > 0 && data.tags[6].size() <= 40))
+        && (data.tags.size() <= 7 || (data.tags[7] is string && data.tags[7].size() > 0 && data.tags[7].size() <= 40))
+        && (data.tags.size() <= 8 || (data.tags[8] is string && data.tags[8].size() > 0 && data.tags[8].size() <= 40))
+        && (data.tags.size() <= 9 || (data.tags[9] is string && data.tags[9].size() > 0 && data.tags[9].size() <= 40))
+      );
+    }
+    function validExpenseLocation(data) {
+      return (!('latitude' in data) && !('longitude' in data))
+        || (data.latitude == null && data.longitude == null)
+        || (data.latitude is number && data.longitude is number
+            && data.latitude >= -90 && data.latitude <= 90
+            && data.longitude >= -180 && data.longitude <= 180);
+    }
+    function validExpenseCanonicalFields(data) {
+      return data.keys().hasAll(['uid', 'amount', 'currency', 'category', 'note', 'date', 'createdAt'])
+        && data.uid is string && data.uid.size() > 0 && data.uid.size() <= 128
+        && validExpenseAmount(data)
+        && data.currency == 'MYR'
+        && validExpenseCategory(data)
+        && data.date is timestamp
+        && data.createdAt is timestamp
+        && validExpenseText(data)
+        && validExpenseCollection(data)
+        && validExpenseTags(data)
+        && validExpenseLocation(data);
+    }
+
     // Always-private: financial data has no "public" story.
     match /expenses/{expenseId} {
-      allow read, update, delete: if request.auth != null && resource.data.uid == request.auth.uid;
+      allow read, delete: if request.auth != null && resource.data.uid == request.auth.uid;
       // v3.3 "Friend Spaces": Finance is one of three modules (with Time Capsule/Daily
       // Reflection) that stay Owner-only even though Friends now get their own space for
       // Memories/Journal/Journey/Habits — create is isOwner(), not canParticipate(). read/
       // update/delete stay a bare ownership check so any expense docs a Friend created before
       // this pass remain theirs to view/edit — only new Finance writes are cut off going forward.
-      allow create: if isOwner() && request.resource.data.uid == request.auth.uid;
+      allow create: if isOwner()
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.keys().hasOnly([
+          'uid', 'amount', 'currency', 'category', 'note', 'date', 'createdAt',
+          'collectionId', 'tags', 'locationName', 'latitude', 'longitude'
+        ])
+        && request.resource.data.keys().hasAll([
+          'uid', 'amount', 'currency', 'category', 'note', 'date', 'createdAt',
+          'collectionId', 'tags', 'locationName', 'latitude', 'longitude'
+        ])
+        && validExpenseCanonicalFields(request.resource.data)
+        && request.resource.data.createdAt == request.time;
+
+      allow update: if request.auth != null
+        && resource.data.uid == request.auth.uid
+        && request.resource.data.uid == resource.data.uid
+        && request.resource.data.createdAt == resource.data.createdAt
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'amount', 'currency', 'category', 'note', 'date', 'collectionId', 'tags',
+          'locationName', 'latitude', 'longitude', 'updatedAt'
+        ])
+        && request.resource.data.keys().hasAll(['updatedAt'])
+        && request.resource.data.updatedAt == request.time
+        && validExpenseCanonicalFields(request.resource.data);
     }
 
     // Always-private: personal targets have no "public" story, same shape as expenses. Not one of

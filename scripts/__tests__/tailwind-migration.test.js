@@ -285,6 +285,9 @@ async function run() {
       "node netlify/functions/__tests__/weather.test.js",
       "node netlify/functions/__tests__/anilist.test.js",
       "node netlify/functions/__tests__/discover-ai.test.js",
+      "node netlify/functions/__tests__/expense-receipt-validation.test.js",
+      "node netlify/functions/__tests__/qwen-vision.test.js",
+      "node netlify/functions/__tests__/expense-receipt-ai.test.js",
       "node netlify/functions/__tests__/airing-check-core.test.js",
       "node netlify/functions/__tests__/anime-airing-check.test.js",
       "node netlify/functions/__tests__/staging-isolation-wiring.test.js",
@@ -331,7 +334,12 @@ async function run() {
     // height project cover placeholder) are the newest additions on top — never a silent removal
     // disguised as a reorder.
     assert.deepStrictEqual(frontendCmds, [
-      ...priorFrontendCmds,
+      "node js/__tests__/date-utils.test.js",
+      "node js/__tests__/expense-model.test.js",
+      "node js/__tests__/expense-render.test.js",
+      "node js/__tests__/expense-receipt-client.test.js",
+      "node js/__tests__/expense-receipt-ui.test.js",
+      ...priorFrontendCmds.slice(1),
       "node js/__tests__/discover-card-actions-layout.test.js",
       "node js/__tests__/resume-experience-dates.test.js",
       "node js/__tests__/resume-print-stylesheet.test.js",

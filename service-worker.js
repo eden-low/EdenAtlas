@@ -1,6 +1,9 @@
 // Minimal network-first service worker for offline shell caching.
 // Deliberately bypasses Firebase/CDN/weather hosts so it never interferes with
 // the auth flow, live Firestore/Storage reads, or third-party API calls.
+// v41 (Expense Screenshot AI MVP): Finance's existing Add Expense modal gained local image
+// preparation and a suggestions-only authenticated Function call. The three Expense browser
+// helpers are precached; Function requests remain covered by the generic network-only bypass.
 // v38 (Staging/Production Firebase isolation follow-up, Gap 2 fix): the hardcoded PRODUCTION
 // Firebase Web config this file's v37 pass shipped (see that entry below, and its own "KNOWN
 // LIMITATION" note) is gone — replaced with an importScripts()-loaded js/fcm-config.generated.js,
@@ -153,7 +156,7 @@
 // change — index.html is now the public recruiter Portfolio, home.html is the private app
 // landing page), v21 (Trash privacy fix), v20 (Memory Trash + location-edit fix), v19 (canonical
 // location pipeline fix).
-const CACHE = "eden-shell-v40";
+const CACHE = "eden-shell-v41";
 
 const PRECACHE = [
   "index.html", "home.html", "resume.html", "gallery.html", "journal.html", "expenses.html",
@@ -167,6 +170,7 @@ const PRECACHE = [
   "js/i18n.js", "js/mobile-nav.js", "js/sidebar.js", "js/splash.js", "js/location-search.js",
   "js/location-fields.js", "js/memory-filters.js", "js/resume-data.js",
   "js/date-utils.js", "js/reflection.js", "js/weather-client.js",
+  "js/expense-model.js", "js/expense-render.js", "js/expense-receipt-client.js",
   "js/environment.js", "js/push-notifications.js", "js/build-info.generated.js",
   "locales/en.json", "locales/zh-CN.json",
   "manifest.json", "images/icon-192.png", "images/icon-512.png", "images/logo-mark.png",
