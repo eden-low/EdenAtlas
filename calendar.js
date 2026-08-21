@@ -10,9 +10,105 @@ const calGrid = document.getElementById("cal-grid");
 const calWeekdays = document.getElementById("cal-weekdays");
 const prevBtn = document.getElementById("cal-prev");
 const nextBtn = document.getElementById("cal-next");
+const googleCalendarStatus = document.getElementById("google-calendar-status");
+const googleCalendarAction = document.getElementById("google-calendar-action");
+
+const GOOGLE_CALENDAR_START_ENDPOINT = "/.netlify/functions/google-calendar-oauth-start";
+const GOOGLE_CALENDAR_STATUS_ENDPOINT = "/.netlify/functions/google-calendar-status";
 
 let viewDate = new Date();
 viewDate.setDate(1);
+
+function readAndClearGoogleCalendarReturn() {
+  const url = new URL(window.location.href);
+  const result = url.searchParams.get("googleCalendar");
+  if (!result) return null;
+  url.searchParams.delete("googleCalendar");
+  history.replaceState(null, "", `${url.pathname}${url.search}${url.hash}`);
+  return result;
+}
+
+const googleCalendarReturn = readAndClearGoogleCalendarReturn();
+
+function setGoogleCalendarUi({ message, actionLabel = null, disabled = false }) {
+  if (googleCalendarStatus) googleCalendarStatus.textContent = message;
+  if (!googleCalendarAction) return;
+  googleCalendarAction.disabled = disabled;
+  googleCalendarAction.textContent = actionLabel || "";
+  googleCalendarAction.classList.toggle("hidden", !actionLabel);
+}
+
+async function callGoogleCalendarFunction(endpoint, user, forceRefresh = false) {
+  const response = await fetch(endpoint, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${await user.getIdToken(forceRefresh)}`,
+    },
+    body: "{}",
+    cache: "no-store",
+  });
+  if (response.status === 401 && !forceRefresh) return callGoogleCalendarFunction(endpoint, user, true);
+  let body = null;
+  try {
+    body = await response.json();
+  } catch {
+    body = null;
+  }
+  if (!response.ok || !body || body.ok !== true) {
+    const error = new Error(body && body.error ? body.error : "google_calendar_request_failed");
+    error.code = body && body.error ? body.error : "google_calendar_request_failed";
+    throw error;
+  }
+  return body;
+}
+
+async function loadGoogleCalendarStatus(user) {
+  if (googleCalendarReturn && googleCalendarReturn !== "connected") {
+    setGoogleCalendarUi({
+      message: googleCalendarReturn === "state_rejected"
+        ? "The connection request expired or was already used. Please reconnect."
+        : "Google Calendar needs to be connected again.",
+      actionLabel: "Reconnect Google Calendar",
+    });
+  } else {
+    setGoogleCalendarUi({ message: "Checking connection…", disabled: true });
+  }
+  try {
+    const status = await callGoogleCalendarFunction(GOOGLE_CALENDAR_STATUS_ENDPOINT, user);
+    if (status.connectionStatus === "connected") {
+      setGoogleCalendarUi({ message: "Connected with read-only permission. Event access is not enabled in this checkpoint." });
+      return;
+    }
+    if (status.connectionStatus === "reconnect_required" || googleCalendarReturn) {
+      setGoogleCalendarUi({ message: "Google Calendar needs to be connected again.", actionLabel: "Reconnect Google Calendar" });
+      return;
+    }
+    setGoogleCalendarUi({ message: "Not connected. EdenAtlas will request read-only event permission.", actionLabel: "Connect Google Calendar" });
+  } catch (err) {
+    const notConfigured = err && err.code === "google_calendar_not_configured";
+    setGoogleCalendarUi({
+      message: notConfigured
+        ? "Google Calendar is not configured for this environment yet."
+        : "Connection status is unavailable. Please try again.",
+      actionLabel: notConfigured ? null : "Retry connection",
+    });
+  }
+}
+
+async function startGoogleCalendarConnection() {
+  const user = auth.currentUser;
+  if (!user || !googleCalendarAction) return;
+  setGoogleCalendarUi({ message: "Preparing secure Google authorization…", actionLabel: "Connecting…", disabled: true });
+  try {
+    const result = await callGoogleCalendarFunction(GOOGLE_CALENDAR_START_ENDPOINT, user);
+    const authorizationUrl = new URL(result.authorizationUrl);
+    if (authorizationUrl.origin !== "https://accounts.google.com") throw new Error("invalid_authorization_origin");
+    window.location.assign(authorizationUrl.toString());
+  } catch {
+    setGoogleCalendarUi({ message: "Could not start the secure connection. Please try again.", actionLabel: "Retry connection" });
+  }
+}
 
 // Every other page's toLocaleDateString/toLocaleString call still passes `undefined` (browser
 // default) rather than reading the app's own language choice — this is the one page asked to
@@ -134,7 +230,10 @@ nextBtn.addEventListener("click", () => {
 onAuthStateChanged(auth, (user) => {
   if (!user) return;
   loadMonth();
+  loadGoogleCalendarStatus(user);
 });
+
+if (googleCalendarAction) googleCalendarAction.addEventListener("click", startGoogleCalendarConnection);
 
 // Re-render the month label, weekday headers, and grid from the already-fetched
 // cachedMonthData whenever the language switcher fires — no Firestore re-fetch needed.

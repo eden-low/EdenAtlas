@@ -156,7 +156,10 @@
 // change — index.html is now the public recruiter Portfolio, home.html is the private app
 // landing page), v21 (Trash privacy fix), v20 (Memory Trash + location-edit fix), v19 (canonical
 // location pipeline fix).
-const CACHE = "eden-shell-v41";
+// v42 (Phase 3A.1 Google Calendar OAuth foundation): calendar.html/calendar.js add the minimal
+// connect/status UI. Netlify Function source is never cached, and every Function response remains
+// covered by NEVER_CACHE_PATH_PREFIXES below.
+const CACHE = "eden-shell-v42";
 
 const PRECACHE = [
   "index.html", "home.html", "resume.html", "gallery.html", "journal.html", "expenses.html",

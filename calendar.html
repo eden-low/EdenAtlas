@@ -49,6 +49,22 @@
   </header>
 
   <main class="max-w-6xl mx-auto px-4 mt-8 space-y-6">
+    <section id="google-calendar-connection" class="reveal bg-cardBg/90 neon-border-purple rounded-2xl p-5" aria-labelledby="google-calendar-title">
+      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div class="min-w-0">
+          <div class="flex items-center gap-2">
+            <i class="fa-brands fa-google text-neonPurple" aria-hidden="true"></i>
+            <h2 id="google-calendar-title" class="font-cyber font-semibold text-base">Google Calendar</h2>
+            <span class="text-[9px] font-code px-2 py-0.5 rounded-full border border-borderNeon text-textGray">READ ONLY</span>
+          </div>
+          <p id="google-calendar-status" class="text-xs text-textGray mt-2" role="status" aria-live="polite">Checking connection&hellip;</p>
+        </div>
+        <button id="google-calendar-action" type="button" class="hidden shrink-0 px-4 py-2 rounded-lg bg-neonPurple/15 border border-neonPurple/50 text-neonPurple hover:bg-neonPurple/25 transition-colors text-xs font-cyber font-semibold disabled:opacity-50 disabled:cursor-not-allowed">
+          Connect Google Calendar
+        </button>
+      </div>
+    </section>
+
     <section class="reveal bg-cardBg/90 neon-border-purple rounded-2xl p-6">
       <div class="flex items-center justify-between gap-4">
         <button id="cal-prev" class="w-9 h-9 rounded-lg bg-darkBg/60 border border-borderNeon text-textGray hover:text-neonPurple hover:border-neonPurple/50 transition-colors">

@@ -413,6 +413,18 @@ service cloud.firestore {
       allow write: if request.auth != null && request.auth.uid == uid && request.resource.data.uid == uid;
     }
 
+    // Phase 3A.1: OAuth state and Calendar connection records are server-only. A connection may
+    // contain an encrypted refresh-token envelope, while a state record is itself a one-time
+    // authorization credential. Browser clients must never read or mutate either collection.
+    // Netlify Functions use Firebase Admin and therefore do not depend on client rules for access.
+    match /google_calendar_connections/{uid} {
+      allow read, write: if false;
+    }
+
+    match /google_calendar_oauth_states/{stateHash} {
+      allow read, write: if false;
+    }
+
     // v3.2.2: a small denormalized mirror of users/{uid} — {uid, displayName, username,
     // photoURL, role, careerVisibility} only, deliberately never `email` — world-readable so an
     // unauthenticated HR visitor hitting resume.html?u=... can resolve the resume owner's name/
