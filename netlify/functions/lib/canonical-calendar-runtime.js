@@ -1,4 +1,3 @@
-const crypto = require("node:crypto");
 const { initializeApp, cert, getApps, getApp } = require("firebase-admin/app");
 const { getAuth } = require("firebase-admin/auth");
 const { getFirestore } = require("firebase-admin/firestore");
@@ -6,6 +5,7 @@ const { initializeFirebaseAdmin } = require("./firebase-admin");
 const { readGeneratedBuildContext } = require("./build-context");
 const { withGeneratedDeployOrigins } = require("./google-calendar-http");
 const { createCalendarEventStore } = require("./calendar-event-store");
+const { createCalendarEventIdentity } = require("./calendar-event-identity");
 
 function buildCanonicalCalendarDeps() {
   const buildContext = readGeneratedBuildContext();
@@ -36,9 +36,9 @@ function buildCanonicalCalendarDeps() {
       store = createCalendarEventStore({
         db: getDb(),
         now: () => new Date(),
-        // Temporary opaque server ID only. Phase 3B.5 replaces this injected strategy with the
-        // approved stable identity without changing repository/source semantics.
-        generateId: () => `ce_${crypto.randomUUID().replace(/-/g, "")}`,
+        // The key remains inside this server runtime. It is never returned, logged, persisted,
+        // accepted in a request, or made available to browser code.
+        identity: createCalendarEventIdentity(env.CALENDAR_IDENTITY_KEY),
       });
     }
     return store;

@@ -7,6 +7,7 @@
 
 const { FirebaseConfigError } = require("./lib/firebase-admin");
 const { CalendarEventStoreError } = require("./lib/calendar-event-store");
+const { CalendarEventIdentityError } = require("./lib/calendar-event-identity");
 const {
   jsonResponse,
   checkPostRequest,
@@ -55,6 +56,16 @@ function parseCanonicalCalendarRequest(raw) {
     return { value: body };
   }
   if (body.action === "refresh_projection") {
+    if (!exactKeys(body, ["action", "canonicalEventId", "expectedVersion"])) {
+      return { error: "unknown_field" };
+    }
+    if (!validId(body.canonicalEventId, 128)) return { error: "invalid_canonical_event_id" };
+    if (!Number.isSafeInteger(body.expectedVersion) || body.expectedVersion < 1) {
+      return { error: "invalid_expected_version" };
+    }
+    return { value: body };
+  }
+  if (body.action === "tombstone") {
     if (!exactKeys(body, ["action", "canonicalEventId", "expectedVersion"])) {
       return { error: "unknown_field" };
     }
@@ -128,6 +139,17 @@ function createHandler(deps) {
         return jsonResponse(201, { ok: true, event: canonicalEvent }, responseHeaders);
       }
 
+      if (parsed.value.action === "tombstone") {
+        // This explicit operation is the only Phase 3B.5 source-deletion signal. A failed or
+        // missing source read never reaches it and is never inferred to mean deletion.
+        const canonicalEvent = await store.tombstoneOwnedEvent({
+          verifiedUid,
+          canonicalEventId: parsed.value.canonicalEventId,
+          expectedVersion: parsed.value.expectedVersion,
+        });
+        return jsonResponse(200, { ok: true, event: canonicalEvent }, responseHeaders);
+      }
+
       const reference = await store.readOwnedSourceReference({
         verifiedUid,
         canonicalEventId: parsed.value.canonicalEventId,
@@ -146,6 +168,9 @@ function createHandler(deps) {
       });
       return jsonResponse(200, { ok: true, event: canonicalEvent }, responseHeaders);
     } catch (err) {
+      if (err instanceof CalendarEventIdentityError) {
+        return jsonResponse(503, { ok: false, error: "canonical_identity_not_configured" }, responseHeaders);
+      }
       if (err instanceof CalendarEventStoreError) {
         return jsonResponse(err.statusCode, { ok: false, error: err.code }, responseHeaders);
       }

@@ -2,6 +2,7 @@ const assert = require("node:assert");
 const fs = require("node:fs");
 const path = require("node:path");
 const { CalendarEventStoreError } = require("../lib/calendar-event-store.js");
+const { CalendarEventIdentityError } = require("../lib/calendar-event-identity.js");
 const {
   createHandler,
   parseCanonicalCalendarRequest,
@@ -37,6 +38,7 @@ function createHarness(options = {}) {
     createCalls: [],
     referenceCalls: [],
     updateCalls: [],
+    tombstoneCalls: [],
   };
   const sources = options.sources || {
     expenses: { "expense-1": { uid: UID, date: "2026-08-24" } },
@@ -65,6 +67,16 @@ function createHarness(options = {}) {
       observed.updateCalls.push(args);
       return { id: args.canonicalEventId, ownerUid: args.verifiedUid, version: args.expectedVersion + 1 };
     },
+    async tombstoneOwnedEvent(args) {
+      observed.tombstoneCalls.push(args);
+      return {
+        id: args.canonicalEventId,
+        ownerUid: args.verifiedUid,
+        version: args.expectedVersion + 1,
+        deletedAt: "2026-09-01T00:00:00Z",
+        deletionOrigin: "edenatlas",
+      };
+    },
   };
   const db = {
     collection(name) {
@@ -81,7 +93,7 @@ function createHarness(options = {}) {
     ensureFirebaseAdmin: options.ensureFirebaseAdmin || (async () => {}),
     verifyIdToken: options.verifyIdToken || (async () => ({ uid: UID })),
     getDb: () => db,
-    getStore: () => store,
+    getStore: options.getStore || (() => store),
   };
   return { handler: createHandler(deps), observed };
 }
@@ -127,6 +139,8 @@ async function run() {
       { action: "project_source", sourceEntityType: "expense", sourceEntityId: "expense-1", path: "expenses/expense-1" },
       { action: "project_source", sourceEntityType: "expense", sourceEntityId: "expense-1", event: { title: "injected" } },
       { action: "project_source", sourceEntityType: "expense", sourceEntityId: "expense-1", createdAt: "2000-01-01T00:00:00Z" },
+      { action: "project_source", sourceEntityType: "expense", sourceEntityId: "expense-1", instanceKey: "attacker" },
+      { action: "list", serverIdentityKey: "attacker-controlled-secret" },
     ];
     for (const request of bodies) {
       const { handler, observed } = createHarness();
@@ -154,6 +168,7 @@ async function run() {
     const { handler, observed } = createHarness({ sources });
     const response = await handler(post({ action: "project_source", sourceEntityType: "expense", sourceEntityId: "other-expense" }));
     assert.strictEqual(response.statusCode, 404);
+    assert.deepStrictEqual(observed.tombstoneCalls, []);
     assert.strictEqual(bodyOf(response).error, "source_not_found");
     assert.deepStrictEqual(observed.createCalls, []);
   });
@@ -162,10 +177,12 @@ async function run() {
     let harness = createHarness({ sources: { journals: {} } });
     let response = await harness.handler(post({ action: "project_source", sourceEntityType: "journal", sourceEntityId: "missing" }));
     assert.strictEqual(response.statusCode, 404);
+    assert.deepStrictEqual(harness.observed.tombstoneCalls, []);
     harness = createHarness({ sources: { journals: { malformed: { entryDate: "2026-08-24" } } } });
     response = await harness.handler(post({ action: "project_source", sourceEntityType: "journal", sourceEntityId: "malformed" }));
     assert.strictEqual(response.statusCode, 400);
     assert.strictEqual(bodyOf(response).error, "invalid_source_record");
+    assert.deepStrictEqual(harness.observed.tombstoneCalls, []);
   });
 
   await test("refresh_projection uses the owned stored mapping, not browser-supplied source identity", async () => {
@@ -178,12 +195,27 @@ async function run() {
     assert.strictEqual(observed.updateCalls[0].source.uid, UID);
   });
 
+  await test("explicit tombstone derives owner from auth and does not read or accept source identity", async () => {
+    const { handler, observed } = createHarness();
+    const response = await handler(post({
+      action: "tombstone", canonicalEventId: "server-event", expectedVersion: 2,
+    }));
+    assert.strictEqual(response.statusCode, 200);
+    assert.deepStrictEqual(observed.tombstoneCalls, [{
+      verifiedUid: UID, canonicalEventId: "server-event", expectedVersion: 2,
+    }]);
+    assert.deepStrictEqual(observed.sourceReads, []);
+    assert.strictEqual(bodyOf(response).event.deletionOrigin, "edenatlas");
+  });
+
   await test("invalid source types, path-shaped IDs, and versions fail before Firestore", async () => {
     const requests = [
       { action: "project_source", sourceEntityType: "google_event", sourceEntityId: "g1" },
       { action: "project_source", sourceEntityType: "expense", sourceEntityId: "../expense-1" },
       { action: "refresh_projection", canonicalEventId: "events/server-event", expectedVersion: 1 },
       { action: "refresh_projection", canonicalEventId: "server-event", expectedVersion: 0 },
+      { action: "tombstone", canonicalEventId: "events/server-event", expectedVersion: 1 },
+      { action: "tombstone", canonicalEventId: "server-event", expectedVersion: 0 },
     ];
     for (const request of requests) {
       const { handler, observed } = createHarness();
@@ -203,6 +235,22 @@ async function run() {
     assert.strictEqual(response.statusCode, 404);
   });
 
+  await test("identity configuration failures are safe and never expose the server key", async () => {
+    const secret = "SUPER_SECRET_CALENDAR_IDENTITY_KEY";
+    let harness = createHarness({
+      getStore: () => { throw new CalendarEventIdentityError("calendar_identity_key_unavailable"); },
+    });
+    let response = await harness.handler(post({ action: "list" }));
+    assert.strictEqual(response.statusCode, 503);
+    assert.deepStrictEqual(bodyOf(response), { ok: false, error: "canonical_identity_not_configured" });
+    assert.ok(!response.body.includes(secret));
+
+    harness = createHarness({ getStore: () => { throw new Error(secret); } });
+    response = await harness.handler(post({ action: "list" }));
+    assert.strictEqual(response.statusCode, 500);
+    assert.ok(!response.body.includes(secret));
+  });
+
   await test("unsupported methods and origins fail closed", async () => {
     const { handler } = createHarness();
     let response = await handler(post({ action: "list" }, { httpMethod: "GET" }));
@@ -211,10 +259,11 @@ async function run() {
     assert.strictEqual(response.statusCode, 403);
   });
 
-  await test("request parser accepts only the three minimal operation contracts", () => {
+  await test("request parser accepts only the four minimal operation contracts", () => {
     assert.deepStrictEqual(parseCanonicalCalendarRequest(JSON.stringify({ action: "list" })).value, { action: "list" });
     assert.strictEqual(parseCanonicalCalendarRequest(JSON.stringify({ action: "project_source", sourceEntityType: "journey", sourceEntityId: "j1" })).value.sourceEntityId, "j1");
     assert.strictEqual(parseCanonicalCalendarRequest(JSON.stringify({ action: "refresh_projection", canonicalEventId: "c1", expectedVersion: 1 })).value.expectedVersion, 1);
+    assert.strictEqual(parseCanonicalCalendarRequest(JSON.stringify({ action: "tombstone", canonicalEventId: "c1", expectedVersion: 1 })).value.expectedVersion, 1);
   });
 
   await test("production runtime verifies revocation and contains no OAuth/provider/sync behavior", () => {
@@ -226,6 +275,7 @@ async function run() {
       "GOOGLE_CALENDAR_SCOPE", "calendar.events.insert", "calendar.events.update",
       "calendar.events.delete", "googleEventId", "externalEventId", "calendar_sync_jobs",
       "calendar_sync_cursors", "etag",
+      "randomUUID",
     ]) {
       assert.ok(!combined.includes(forbidden), `forbidden canonical API behavior: ${forbidden}`);
     }
