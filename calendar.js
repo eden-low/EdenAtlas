@@ -4,7 +4,11 @@ import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.15.0/f
 import { collection, query, where, getDocs } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-firestore.js";
 import { excludeDeleted } from "./js/memory-filters.js";
 import { expenseCurrency, expenseTransactionTimestamp } from "./js/expense-model.js";
-import { resolveJournalEntryDate } from "./js/date-utils.js";
+import {
+  projectExpenseToCalendarEvent,
+  projectJournalToCalendarEvent,
+  projectJourneyToCalendarEvent,
+} from "./js/calendar-event-adapter-core.js";
 
 const monthLabel = document.getElementById("cal-month-label");
 const calGrid = document.getElementById("cal-grid");
@@ -168,14 +172,14 @@ async function fetchMine(collectionName) {
     const snap = await getDocs(query(collection(db, collectionName), where("uid", "==", user.uid)));
     // Trashed Memories never show up on the day grid — a no-op for expenses/journals, neither
     // of which carry deletedAt.
-    return excludeDeleted(snap.docs.map((d) => d.data()));
+    return excludeDeleted(snap.docs.map((d) => ({ ...d.data(), id: d.id })));
   } catch (err) {
     console.error(`[calendar] ${collectionName} fetch failed:`, err.code || err);
     return [];
   }
 }
 
-let cachedMonthData = { expenses: [], photos: [], journals: [], googleEvents: [] };
+let cachedMonthData = { expenses: [], photos: [], journals: [], journeys: [], googleEvents: [] };
 
 async function loadMonth(user = auth.currentUser) {
   const requestedView = new Date(viewDate.getFullYear(), viewDate.getMonth(), 1);
@@ -185,10 +189,11 @@ async function loadMonth(user = auth.currentUser) {
       .then((result) => ({ result, error: null }))
       .catch((error) => ({ result: null, error }))
     : Promise.resolve({ result: null, error: null });
-  const [expenses, photos, journals, googleResult] = await Promise.all([
+  const [expenses, photos, journals, journeys, googleResult] = await Promise.all([
     fetchMine("expenses"),
     fetchMine("photos"),
     fetchMine("journals"),
+    fetchMine("life_events"),
     googleRequest,
   ]);
   if (loadVersion !== monthLoadVersion) return;
@@ -213,7 +218,7 @@ async function loadMonth(user = auth.currentUser) {
     }
   }
 
-  cachedMonthData = { expenses, photos, journals, googleEvents };
+  cachedMonthData = { expenses, photos, journals, journeys, googleEvents };
   renderMonth();
 }
 
@@ -223,7 +228,8 @@ function renderMonth() {
   monthLabel.textContent = viewDate.toLocaleDateString(dateLocale(), { month: "long", year: "numeric" });
   renderWeekdayHeaders();
 
-  const { expenses, photos, journals, googleEvents } = cachedMonthData;
+  const { expenses, photos, journals, journeys, googleEvents } = cachedMonthData;
+  const projectedAt = new Date().toISOString();
   const byDay = new Map();
   function addRenderedItem(key, html, source = "internal") {
     if (!byDay.has(key)) byDay.set(key, []);
@@ -235,21 +241,49 @@ function renderMonth() {
     const key = toDateKey(d);
     addRenderedItem(key, render(item));
   }
-  function addLiteralDateItem(dateLiteral, item, render) {
+  function addCanonicalEvent(event, html) {
+    const dateLiteral = event && event.origin === "edenatlas" && event.allDay
+      && event.start && event.start.type === "date" ? event.start.date : null;
     const monthPrefix = `${viewDate.getFullYear()}-${String(viewDate.getMonth() + 1).padStart(2, "0")}-`;
     if (!dateLiteral || !dateLiteral.startsWith(monthPrefix)) return;
-    addRenderedItem(dateLiteral, render(item));
+    addRenderedItem(dateLiteral, html);
+  }
+  function projectionContext(source) {
+    return {
+      // Display-only caller inputs. No persistent/sync identity is generated in Phase 3B.3.
+      id: source.id,
+      ownerUid: source.uid,
+      sourceEntityId: source.id,
+      projectedAt,
+    };
+  }
+  function projectSource(project, source, type) {
+    try {
+      return project(source, projectionContext(source));
+    } catch (err) {
+      console.error(`[calendar] invalid ${type} source projection:`, err.code || err.name || "invalid_source");
+      return null;
+    }
   }
 
   expenses.forEach((e) => {
     const transactionDate = expenseTransactionTimestamp(e);
     if (!transactionDate) return;
-    addItem("transactionDate", { ...e, transactionDate }, (item) => `💰 ${expenseCurrency(item) === "MYR" ? "RM" : expenseCurrency(item)} ${Number(item.amount || 0).toFixed(0)}`);
+    // Legacy Expense compatibility remains display-only: the canonical adapter itself requires
+    // a validated transaction date and never falls back to createdAt.
+    const event = projectSource(projectExpenseToCalendarEvent, { ...e, date: transactionDate }, "Expense");
+    if (event) addCanonicalEvent(event, `💰 ${expenseCurrency(e) === "MYR" ? "RM" : expenseCurrency(e)} ${Number(e.amount || 0).toFixed(0)}`);
   });
   photos.forEach((p) => addItem("uploadedAt", p, () => `📷 Photo`));
   journals.forEach((j) => {
-    const entryDate = resolveJournalEntryDate(j);
-    addLiteralDateItem(entryDate.date, j, (item) => `📝 ${esc(item.title || "Entry")}`);
+    const event = projectSource(projectJournalToCalendarEvent, j, "Journal");
+    // The provider-safe canonical title stays generic; EdenAtlas's private UI may retain its
+    // existing local title display without placing that title in summary/provider payload data.
+    if (event) addCanonicalEvent(event, `📝 ${esc(j.title || "Entry")}`);
+  });
+  journeys.forEach((journey) => {
+    const event = projectSource(projectJourneyToCalendarEvent, journey, "Journey");
+    if (event) addCanonicalEvent(event, `🧭 ${esc(event.title)}`);
   });
   googleEvents.forEach((event) => {
     const rawStart = event && event.start && (event.start.date || event.start.dateTime);

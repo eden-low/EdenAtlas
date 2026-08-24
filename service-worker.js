@@ -156,6 +156,9 @@
 // change — index.html is now the public recruiter Portfolio, home.html is the private app
 // landing page), v21 (Trash privacy fix), v20 (Memory Trash + location-edit fix), v19 (canonical
 // location pipeline fix).
+// v45 (Phase 3B.3 canonical source adapters): the Calendar shell now consumes the shared pure
+// Expense/Journal/Journey canonical projection core, including single-day Journey rendering.
+// calendar.js and the new js/calendar-event-adapter-core.js are precached below.
 // v44 (Phase 3B.2 source date semantics): Journal and Journey source-date handling now uses
 // explicit Asia/Kuala_Lumpur semantics. The affected HTML/scripts and shared date helper are
 // already precached, so this shell bump ensures installed clients receive the contract together.
@@ -167,7 +170,7 @@
 // v42 (Phase 3A.1 Google Calendar OAuth foundation): calendar.html/calendar.js add the minimal
 // connect/status UI. Netlify Function source is never cached, and every Function response remains
 // covered by NEVER_CACHE_PATH_PREFIXES below.
-const CACHE = "eden-shell-v44";
+const CACHE = "eden-shell-v45";
 
 const PRECACHE = [
   "index.html", "home.html", "resume.html", "gallery.html", "journal.html", "expenses.html",
@@ -180,7 +183,7 @@ const PRECACHE = [
   "profile.js", "career.js", "atlas.js", "portfolio.js", "project.js", "assistant.js", "discover.js",
   "js/i18n.js", "js/mobile-nav.js", "js/sidebar.js", "js/splash.js", "js/location-search.js",
   "js/location-fields.js", "js/memory-filters.js", "js/resume-data.js",
-  "js/date-utils.js", "js/reflection.js", "js/weather-client.js",
+  "js/date-utils.js", "js/calendar-event-adapter-core.js", "js/reflection.js", "js/weather-client.js",
   "js/expense-model.js", "js/expense-render.js", "js/expense-receipt-client.js",
   "js/environment.js", "js/push-notifications.js", "js/build-info.generated.js",
   "locales/en.json", "locales/zh-CN.json",

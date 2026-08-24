@@ -133,10 +133,17 @@ await test("Journal edit UI exposes entryDate and clearly labels legacy fallback
   assert.match(journalSource, /Legacy entry:[^"`]*createdAt/);
 });
 
-await test("EdenAtlas Calendar buckets Journal entries by semantic entryDate with legacy fallback", () => {
-  assert.match(calendarSource, /resolveJournalEntryDate\(j\)/);
-  assert.match(calendarSource, /addLiteralDateItem\(entryDate\.date,\s*j/);
+await test("EdenAtlas Calendar buckets Journal entries through the canonical source adapter", () => {
+  assert.match(calendarSource, /projectJournalToCalendarEvent/);
+  assert.match(calendarSource, /projectSource\(projectJournalToCalendarEvent,\s*j,\s*"Journal"\)/);
+  assert.match(calendarSource, /addCanonicalEvent\(event,/);
   assert.doesNotMatch(calendarSource, /journals\.forEach\(\(j\)\s*=>\s*addItem\("createdAt"/);
+});
+
+await test("EdenAtlas Calendar includes single-day Journey through the canonical source adapter", () => {
+  assert.match(calendarSource, /fetchMine\("life_events"\)/);
+  assert.match(calendarSource, /projectSource\(projectJourneyToCalendarEvent,\s*journey,\s*"Journey"\)/);
+  assert.match(calendarSource, /event\.start\.type === "date"/);
 });
 
 await test("Journey create/edit uses the explicit Malaysia adapter and adds no multi-day fields", () => {
