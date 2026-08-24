@@ -249,6 +249,10 @@
                     <input id="qa-journal-title" type="text" required class="w-full bg-darkBg/60 border border-borderNeon rounded-lg px-3 py-2 text-sm text-white">
                 </div>
                 <div>
+                    <label class="block text-xs font-code text-textGray mb-1.5" for="qa-journal-entry-date">Entry date</label>
+                    <input id="qa-journal-entry-date" type="date" required class="w-full bg-darkBg/60 border border-borderNeon rounded-lg px-3 py-2 text-sm text-white">
+                </div>
+                <div>
                     <label class="block text-xs font-code text-textGray mb-1.5" for="qa-journal-content" data-i18n="home.whats_on_your_mind">What's on your mind?</label>
                     <textarea id="qa-journal-content" rows="4" required class="w-full bg-darkBg/60 border border-borderNeon rounded-lg px-3 py-2 text-sm text-white"></textarea>
                 </div>
@@ -326,6 +330,7 @@
         import { reflectionDateKey, reflectionDocId, buildReflectionSavePayload } from "./js/reflection.js";
         import { fetchWeather } from "./js/weather-client.js";
         import { buildExpenseCreatePayload, expenseTransactionTimestamp } from "./js/expense-model.js";
+        import { localDateString, normalizeDateLiteral, resolveJournalEntryDate, resolveJourneyDate } from "./js/date-utils.js";
 
         // Untrusted stored content (habit titles, photo captions, journal titles, event titles —
         // all interpolated into innerHTML further below) must never be assigned raw, even though
@@ -486,7 +491,7 @@
                 spendingRow.classList.add("hidden");
             }
 
-            const journalToday = data.journals.some((j) => j.createdAt?.toDate && isSameDay(j.createdAt.toDate(), today));
+            const journalToday = data.journals.some((j) => resolveJournalEntryDate(j).date === localDateString(today));
             document.getElementById("today-journal").innerHTML = journalToday
                 ? `<span class="text-emerald-400"><i class="fa-solid fa-check mr-1"></i>${t("home.written_today")}</span>`
                 : `<a href="journal.html" class="text-textGray hover:text-neonPurple">${t("common.none_yet")} &rarr;</a>`;
@@ -514,6 +519,7 @@
 
         function renderMemories(data) {
             const today = new Date();
+            const [todayYear, todayMonth, todayDay] = localDateString(today).split("-").map(Number);
             const hits = [];
             const collect = (list, dateField, type) => {
                 list.forEach((item) => {
@@ -524,9 +530,19 @@
                     }
                 });
             };
+            const collectLiteralDates = (list, dateOf, type) => {
+                list.forEach((item) => {
+                    const literal = dateOf(item);
+                    if (!literal) return;
+                    const [year, month, day] = literal.split("-").map(Number);
+                    if (month === todayMonth && day === todayDay && year !== todayYear) {
+                        hits.push({ type, item, yearsAgo: todayYear - year });
+                    }
+                });
+            };
             collect(data.photos, "uploadedAt", "photo");
-            collect(data.journals, "createdAt", "journal");
-            collect(data.events, "date", "event");
+            collectLiteralDates(data.journals, (item) => resolveJournalEntryDate(item).date, "journal");
+            collectLiteralDates(data.events, (item) => resolveJourneyDate(item).date, "event");
 
             const section = document.getElementById("memories-section");
             if (!hits.length) {
@@ -630,7 +646,9 @@
                 document.getElementById("month-connections").textContent = data.friendCount ?? 0;
             }
 
-            document.getElementById("month-journal").textContent = data.journals.filter((j) => j.createdAt?.toDate && isThisMonth(j.createdAt.toDate(), now)).length;
+            const journalMonth = localDateString(now).slice(0, 7);
+            document.getElementById("month-journal").textContent = data.journals
+                .filter((j) => resolveJournalEntryDate(j).date?.startsWith(journalMonth)).length;
             document.getElementById("month-photos").textContent = data.photos.filter((p) => p.uploadedAt?.toDate && isThisMonth(p.uploadedAt.toDate(), now)).length;
 
             const daysElapsed = now.getDate();
@@ -686,6 +704,10 @@
         wireModal("qa-expense-modal", "qa-expense-btn");
         wireModal("qa-journal-modal", "qa-journal-btn");
         wireModal("qa-photo-modal", "qa-photo-btn");
+        const quickJournalEntryDate = document.getElementById("qa-journal-entry-date");
+        const resetQuickJournalEntryDate = () => { quickJournalEntryDate.value = localDateString(new Date()); };
+        document.getElementById("qa-journal-btn").addEventListener("click", resetQuickJournalEntryDate);
+        resetQuickJournalEntryDate();
 
         document.getElementById("qa-expense-form").addEventListener("submit", async (event) => {
             event.preventDefault();
@@ -731,11 +753,13 @@
                     tags: [],
                     imageUrl: null,
                     visibility: event.target.querySelector('input[name="qa-journal-visibility"]:checked').value,
+                    entryDate: normalizeDateLiteral(document.getElementById("qa-journal-entry-date").value),
                     createdAt: serverTimestamp(),
                     uid: user.uid,
                 });
                 statusEl.textContent = t("common.saved");
                 event.target.reset();
+                resetQuickJournalEntryDate();
                 setTimeout(() => document.getElementById("qa-journal-modal").classList.add("hidden"), 500);
                 refreshHome();
             } catch (err) {

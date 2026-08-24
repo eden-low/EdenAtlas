@@ -4,6 +4,7 @@ import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.15.0/f
 import { collection, query, where, getDocs } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-firestore.js";
 import { excludeDeleted } from "./js/memory-filters.js";
 import { expenseCurrency, expenseTransactionTimestamp } from "./js/expense-model.js";
+import { resolveJournalEntryDate } from "./js/date-utils.js";
 
 const monthLabel = document.getElementById("cal-month-label");
 const calGrid = document.getElementById("cal-grid");
@@ -234,6 +235,11 @@ function renderMonth() {
     const key = toDateKey(d);
     addRenderedItem(key, render(item));
   }
+  function addLiteralDateItem(dateLiteral, item, render) {
+    const monthPrefix = `${viewDate.getFullYear()}-${String(viewDate.getMonth() + 1).padStart(2, "0")}-`;
+    if (!dateLiteral || !dateLiteral.startsWith(monthPrefix)) return;
+    addRenderedItem(dateLiteral, render(item));
+  }
 
   expenses.forEach((e) => {
     const transactionDate = expenseTransactionTimestamp(e);
@@ -241,7 +247,10 @@ function renderMonth() {
     addItem("transactionDate", { ...e, transactionDate }, (item) => `💰 ${expenseCurrency(item) === "MYR" ? "RM" : expenseCurrency(item)} ${Number(item.amount || 0).toFixed(0)}`);
   });
   photos.forEach((p) => addItem("uploadedAt", p, () => `📷 Photo`));
-  journals.forEach((j) => addItem("createdAt", j, (item) => `📝 ${esc(item.title || "Entry")}`));
+  journals.forEach((j) => {
+    const entryDate = resolveJournalEntryDate(j);
+    addLiteralDateItem(entryDate.date, j, (item) => `📝 ${esc(item.title || "Entry")}`);
+  });
   googleEvents.forEach((event) => {
     const rawStart = event && event.start && (event.start.date || event.start.dateTime);
     const key = typeof rawStart === "string" && /^\d{4}-\d{2}-\d{2}/.test(rawStart) ? rawStart.slice(0, 10) : null;

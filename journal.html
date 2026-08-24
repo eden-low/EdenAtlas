@@ -128,6 +128,10 @@
           <input id="journal-title" type="text" required placeholder="Today's entry" class="w-full bg-darkBg/60 border border-borderNeon rounded-lg px-3 py-2 text-sm text-white placeholder:text-textGray/60">
         </div>
         <div>
+          <label class="block text-xs font-code text-textGray mb-1.5" for="journal-entry-date">Entry date</label>
+          <input id="journal-entry-date" type="date" required class="w-full bg-darkBg/60 border border-borderNeon rounded-lg px-3 py-2 text-sm text-white">
+        </div>
+        <div>
           <label class="block text-xs font-code text-textGray mb-1.5" for="journal-content">Content <span class="text-textGray/60">(markdown supported)</span></label>
           <textarea id="journal-content" rows="6" required placeholder="What happened today?" class="w-full bg-darkBg/60 border border-borderNeon rounded-lg px-3 py-2 text-sm text-white placeholder:text-textGray/60 font-code"></textarea>
         </div>
@@ -198,6 +202,11 @@
         <div>
           <label class="block text-xs font-code text-textGray mb-1.5" for="journal-edit-title">Title</label>
           <input id="journal-edit-title" type="text" required class="w-full bg-darkBg/60 border border-borderNeon rounded-lg px-3 py-2 text-sm text-white">
+        </div>
+        <div>
+          <label class="block text-xs font-code text-textGray mb-1.5" for="journal-edit-entry-date">Entry date</label>
+          <input id="journal-edit-entry-date" type="date" required class="w-full bg-darkBg/60 border border-borderNeon rounded-lg px-3 py-2 text-sm text-white">
+          <p id="journal-edit-date-source" class="hidden text-[10px] font-code text-amber-300 mt-1.5"></p>
         </div>
         <div>
           <label class="block text-xs font-code text-textGray mb-1.5" for="journal-edit-content">Content</label>

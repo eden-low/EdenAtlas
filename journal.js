@@ -3,6 +3,7 @@ import { t as i18nT, getLang, init as initI18n } from "./js/i18n.js";
 import { wirePlaceSearch } from "./js/location-search.js";
 import { readLocationFields, wireExactLocationControls } from "./js/location-fields.js";
 import { resolveDisplayName } from "./js/identity.js";
+import { localDateString, normalizeDateLiteral, resolveJournalEntryDate } from "./js/date-utils.js";
 import {
   onAuthStateChanged,
   signInWithPopup,
@@ -80,6 +81,7 @@ const journalEditModalClose = document.getElementById("journal-edit-modal-close"
 const journalEditModalBackdrop = document.getElementById("journal-edit-modal-backdrop");
 const journalEditForm = document.getElementById("journal-edit-form");
 const journalEditStatus = document.getElementById("journal-edit-status");
+const journalEditDateSource = document.getElementById("journal-edit-date-source");
 
 let cachedCollections = null;
 async function loadMyCollectionOptions() {
@@ -142,9 +144,12 @@ function renderMoodOptions() {
 // it would otherwise have a real chance of painting raw "journal.mood_happy"-style keys.
 initI18n().then(renderMoodOptions);
 
-function formatTimestamp(ts) {
-  if (!ts?.toDate) return "";
-  return ts.toDate().toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
+function journalDateMeta(entry) {
+  return resolveJournalEntryDate(entry);
+}
+
+function journalDateSortKey(entry) {
+  return journalDateMeta(entry).date || "";
 }
 
 function snippet(text, max = 160) {
@@ -159,7 +164,7 @@ function entryKey(entry) {
 const JOURNAL_REMINDER_DAYS = 3;
 
 function todayKey(d = new Date()) {
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  return localDateString(d);
 }
 
 // Best-effort local reminder: written by each user's own client when they next load this
@@ -214,6 +219,7 @@ function journalCard(entry) {
     .join(" ");
   const user = auth.currentUser;
   const isMine = !!user && entry.uid === user.uid;
+  const entryDate = journalDateMeta(entry);
 
   card.innerHTML = `
     ${entry.imageUrl ? `<img src="${esc(entry.imageUrl)}" alt="" class="w-full h-40 object-cover">` : ""}
@@ -229,7 +235,10 @@ function journalCard(entry) {
       </div>
       <div class="text-sm text-textGray leading-relaxed journal-body">${expanded ? renderMarkdownSafe(entry.content) : snippet(entry.content || "")}</div>
       <div class="flex flex-wrap items-center gap-1.5">${tagsHtml}${entry.locationName ? `<span class="text-[10px] font-code px-2 py-0.5 rounded-full border border-borderNeon text-textGray"><i class="fa-solid fa-location-dot mr-1"></i>${esc(entry.locationName)}</span>` : ""}</div>
-      <p class="text-[11px] text-textGray/70 font-code">${formatTimestamp(entry.createdAt)}</p>
+      <p class="text-[11px] text-textGray/70 font-code">
+        ${entryDate.date ? esc(entryDate.date) : "Date unavailable"}
+        ${entryDate.isLegacyFallback && entryDate.date ? `<span class="ml-1 text-amber-300" title="Derived from createdAt using Asia/Kuala_Lumpur">Legacy date</span>` : ""}
+      </p>
     </div>`;
 
   card.addEventListener("click", (event) => {
@@ -332,7 +341,8 @@ async function fetchVisibleEntries() {
   if (!mayParticipate && (activeVisibility === "private" || activeVisibility === "connections")) setVisibilityFilter("all");
 
   const list = [...entries.values()];
-  list.sort((a, b) => (b.createdAt?.toMillis?.() || 0) - (a.createdAt?.toMillis?.() || 0));
+  list.sort((a, b) => journalDateSortKey(b).localeCompare(journalDateSortKey(a))
+    || (b.createdAt?.toMillis?.() || 0) - (a.createdAt?.toMillis?.() || 0));
   cachedEntries = list;
   renderGrid();
   if (user) checkJournalReminder(list.filter((e) => e.uid === user.uid));
@@ -425,6 +435,7 @@ onAuthStateChanged(auth, async (user) => {
 });
 
 function openModal() {
+  document.getElementById("journal-entry-date").value = localDateString(new Date());
   journalModal.classList.remove("hidden");
 }
 function closeModal() {
@@ -451,6 +462,7 @@ journalForm.addEventListener("submit", async (event) => {
 
   const title = document.getElementById("journal-title").value.trim();
   const content = document.getElementById("journal-content").value.trim();
+  const entryDateValue = document.getElementById("journal-entry-date").value;
   const mood = moodSelect.value;
   const tags = document.getElementById("journal-tags").value
     .split(",")
@@ -459,7 +471,7 @@ journalForm.addEventListener("submit", async (event) => {
   const visibility = journalForm.querySelector('input[name="journal-visibility"]:checked').value;
   const file = document.getElementById("journal-image").files[0];
   const collectionId = document.getElementById("journal-collection").value || null;
-  if (!title || !content) return;
+  if (!title || !content || !entryDateValue) return;
 
   journalStatus.textContent = i18nT("common.saving");
   try {
@@ -479,6 +491,7 @@ journalForm.addEventListener("submit", async (event) => {
       tags,
       visibility,
       imageUrl,
+      entryDate: normalizeDateLiteral(entryDateValue),
       createdAt: serverTimestamp(),
       uid: user.uid,
       collectionId,
@@ -512,6 +525,21 @@ async function openEditModal(entry) {
   document.getElementById("journal-edit-id").value = entry.id;
   document.getElementById("journal-edit-title").value = entry.title || "";
   document.getElementById("journal-edit-content").value = entry.content || "";
+  const entryDate = journalDateMeta(entry);
+  document.getElementById("journal-edit-entry-date").value = entryDate.date || "";
+  if (entryDate.basis === "legacy_createdAt") {
+    journalEditDateSource.textContent = "Legacy entry: date derived from createdAt. Saving will make this the explicit entry date.";
+    journalEditDateSource.classList.remove("hidden");
+  } else if (entryDate.basis === "invalid_entryDate") {
+    journalEditDateSource.textContent = "This entry has an invalid entryDate. Choose a valid date before saving.";
+    journalEditDateSource.classList.remove("hidden");
+  } else if (entryDate.basis === "missing") {
+    journalEditDateSource.textContent = "Legacy entry has no usable createdAt. Choose an explicit entry date before saving.";
+    journalEditDateSource.classList.remove("hidden");
+  } else {
+    journalEditDateSource.textContent = "";
+    journalEditDateSource.classList.add("hidden");
+  }
   document.querySelector(`#journal-edit-form input[name="journal-edit-visibility"][value="${entry.visibility || "public"}"]`).checked = true;
   document.getElementById("journal-edit-tags").value = (entry.tags || []).join(", ");
   document.getElementById("journal-edit-location-name").value = entry.locationName || "";
@@ -533,6 +561,8 @@ function closeEditModal() {
   journalEditModal.classList.add("hidden");
   journalEditForm.reset();
   journalEditStatus.textContent = "";
+  journalEditDateSource.textContent = "";
+  journalEditDateSource.classList.add("hidden");
 }
 journalEditModalClose.addEventListener("click", closeEditModal);
 journalEditModalBackdrop.addEventListener("click", closeEditModal);
@@ -545,9 +575,13 @@ journalEditForm.addEventListener("submit", async (event) => {
   const entry = cachedEntries.find((e) => e.id === id);
   if (!entry || entry.uid !== user.uid) return;
 
+  const entryDateValue = document.getElementById("journal-edit-entry-date").value;
+  if (!entryDateValue) return;
+
   const payload = {
     title: document.getElementById("journal-edit-title").value.trim(),
     content: document.getElementById("journal-edit-content").value.trim(),
+    entryDate: normalizeDateLiteral(entryDateValue),
     visibility: document.querySelector('#journal-edit-form input[name="journal-edit-visibility"]:checked').value,
     tags: document.getElementById("journal-edit-tags").value.split(",").map((t) => t.trim()).filter(Boolean),
     collectionId: document.getElementById("journal-edit-collection").value || null,

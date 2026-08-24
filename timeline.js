@@ -3,6 +3,7 @@ import { t as i18nT, getLang } from "./js/i18n.js";
 import { wirePlaceSearch } from "./js/location-search.js";
 import { readLocationFields, wireExactLocationControls } from "./js/location-fields.js";
 import { resolveDisplayName } from "./js/identity.js";
+import { malaysiaDateLiteralToInstant, resolveJourneyDate } from "./js/date-utils.js";
 import {
   onAuthStateChanged,
   signInWithPopup,
@@ -92,14 +93,17 @@ function eventKey(event) {
   return `${event.uid}-${event.date?.toMillis?.() || 0}-${event.title}`;
 }
 
-function formatDate(ts) {
-  if (!ts?.toDate) return "";
-  return ts.toDate().toLocaleDateString(undefined, { month: "long", day: "numeric" });
+function journeyDateMeta(event) {
+  return resolveJourneyDate(event);
+}
+
+function formatDate(event) {
+  return journeyDateMeta(event).date || "";
 }
 
 function matchesSearch(event, q) {
   if (!q) return true;
-  const year = event.date?.toDate?.()?.getFullYear().toString();
+  const year = journeyDateMeta(event).date?.slice(0, 4);
   return (
     event.title?.toLowerCase().includes(q) ||
     event.description?.toLowerCase().includes(q) ||
@@ -143,7 +147,7 @@ function eventRow(event) {
     <div class="cursor-pointer">
       <div class="flex items-start justify-between gap-3">
         <div>
-          <p class="text-[11px] font-code text-textGray">${formatDate(event.date)}</p>
+          <p class="text-[11px] font-code text-textGray">${formatDate(event)}</p>
           <h3 class="text-sm font-semibold mt-0.5">${esc(event.title)}</h3>
         </div>
         <div class="flex items-center gap-1.5 flex-shrink-0">
@@ -191,7 +195,7 @@ function renderTimeline() {
   const visible = visibleEvents();
   const groups = new Map();
   visible.forEach((e) => {
-    const year = e.date?.toDate?.()?.getFullYear() || "Unknown";
+    const year = journeyDateMeta(e).date?.slice(0, 4) || "Unknown";
     if (!groups.has(year)) groups.set(year, []);
     groups.get(year).push(e);
   });
@@ -368,10 +372,8 @@ const syncEventEditLocation = wireExactLocationControls("event-edit", i18nT);
 wirePlaceSearch("event", syncEventLocation);
 const eventEditPlaceSearch = wirePlaceSearch("event-edit", syncEventEditLocation);
 
-function dateToInputValue(ts) {
-  const d = ts?.toDate?.();
-  if (!d) return "";
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+function dateToInputValue(event) {
+  return journeyDateMeta(event).date || "";
 }
 
 eventForm.addEventListener("submit", async (event) => {
@@ -390,8 +392,7 @@ eventForm.addEventListener("submit", async (event) => {
 
   eventStatus.textContent = i18nT("common.saving");
   try {
-    const [year, month, day] = dateValue.split("-").map(Number);
-    const date = Timestamp.fromDate(new Date(year, month - 1, day));
+    const date = Timestamp.fromDate(malaysiaDateLiteralToInstant(dateValue));
 
     const locationFields = readLocationFields("event");
     await addDoc(collection(db, "life_events"), {
@@ -433,7 +434,7 @@ async function openEditModal(event) {
   document.getElementById("event-edit-id").value = event.id;
   document.getElementById("event-edit-title").value = event.title || "";
   document.getElementById("event-edit-description").value = event.description || "";
-  document.getElementById("event-edit-date").value = dateToInputValue(event.date);
+  document.getElementById("event-edit-date").value = dateToInputValue(event);
   document.getElementById("event-edit-type").value = event.type;
   document.querySelector(`#event-edit-form input[name="event-edit-visibility"][value="${event.visibility || "public"}"]`).checked = true;
   document.getElementById("event-edit-tags").value = (event.tags || []).join(", ");
@@ -469,11 +470,10 @@ eventEditForm.addEventListener("submit", async (evt) => {
   if (!event || event.uid !== user.uid) return;
 
   const dateValue = document.getElementById("event-edit-date").value;
-  const [year, month, day] = dateValue.split("-").map(Number);
   const payload = {
     title: document.getElementById("event-edit-title").value.trim(),
     description: document.getElementById("event-edit-description").value.trim(),
-    date: Timestamp.fromDate(new Date(year, month - 1, day)),
+    date: Timestamp.fromDate(malaysiaDateLiteralToInstant(dateValue)),
     type: document.getElementById("event-edit-type").value,
     visibility: document.querySelector('#event-edit-form input[name="event-edit-visibility"]:checked').value,
     collectionId: document.getElementById("event-edit-collection").value || null,

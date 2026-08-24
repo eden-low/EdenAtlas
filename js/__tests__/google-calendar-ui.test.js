@@ -46,7 +46,7 @@ assert.ok(!eventsFunction.includes("atlas-context"));
 assert.ok(!eventsFunction.includes("events.insert"));
 assert.ok(!eventsFunction.includes("events.update"));
 assert.ok(!eventsFunction.includes("events.delete"));
-assert.ok(serviceWorker.includes('const CACHE = "eden-shell-v43"'));
+assert.ok(serviceWorker.includes('const CACHE = "eden-shell-v44"'));
 assert.ok(serviceWorker.includes('"calendar.js"'));
 assert.ok(serviceWorker.includes('const NEVER_CACHE_PATH_PREFIXES = ["/.netlify/functions/"]'));
 assert.ok(!buildInfoGenerator.includes("GOOGLE_CALENDAR_CLIENT_SECRET"));

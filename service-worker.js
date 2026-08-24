@@ -156,6 +156,9 @@
 // change — index.html is now the public recruiter Portfolio, home.html is the private app
 // landing page), v21 (Trash privacy fix), v20 (Memory Trash + location-edit fix), v19 (canonical
 // location pipeline fix).
+// v44 (Phase 3B.2 source date semantics): Journal and Journey source-date handling now uses
+// explicit Asia/Kuala_Lumpur semantics. The affected HTML/scripts and shared date helper are
+// already precached, so this shell bump ensures installed clients receive the contract together.
 // v43 (Phase 3A.2 Google Calendar read): calendar.js now loads bounded, normalized primary-
 // calendar events through the authenticated server Function and renders them as a distinct source.
 // calendar.html/calendar.js are already precached, so this bump makes the new read UI replace the
@@ -164,7 +167,7 @@
 // v42 (Phase 3A.1 Google Calendar OAuth foundation): calendar.html/calendar.js add the minimal
 // connect/status UI. Netlify Function source is never cached, and every Function response remains
 // covered by NEVER_CACHE_PATH_PREFIXES below.
-const CACHE = "eden-shell-v43";
+const CACHE = "eden-shell-v44";
 
 const PRECACHE = [
   "index.html", "home.html", "resume.html", "gallery.html", "journal.html", "expenses.html",
