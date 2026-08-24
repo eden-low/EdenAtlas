@@ -61,6 +61,9 @@ async function run() {
     await test("all browser access to Google Calendar OAuth state is denied", async () => {
       await assertCollectionDenied("google_calendar_oauth_states");
     });
+    await test("all browser access to server-owned canonical Calendar events is denied", async () => {
+      await assertCollectionDenied("calendar_events");
+    });
   } finally {
     await testEnv.cleanup();
   }

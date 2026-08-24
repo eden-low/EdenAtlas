@@ -164,6 +164,14 @@ service cloud.firestore {
       allow create: if canParticipate() && request.resource.data.uid == request.auth.uid;
     }
 
+    // Phase 3B.4 canonical Calendar store: Firebase Admin only. Browser clients must use the
+    // authenticated Netlify Function, which derives ownerUid from a verified/revocation-checked
+    // Firebase token and loads every source document server-side. No browser role has direct
+    // read or write access, including the document owner and the site Owner account.
+    match /calendar_events/{canonicalEventId} {
+      allow read, write: if false;
+    }
+
     match /habits/{habitId} {
       allow read: if isMineOrPublic(resource.data);
       allow update, delete: if request.auth != null && resource.data.uid == request.auth.uid;
