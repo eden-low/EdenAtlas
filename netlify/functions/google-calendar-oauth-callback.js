@@ -21,6 +21,21 @@ const {
 } = require("./lib/google-calendar-oauth");
 const { jsonResponse, requestBaseUrl, redirectResponse } = require("./lib/google-calendar-http");
 
+function retainedOutboundState(existingConnection) {
+  const calendarId = existingConnection
+    && existingConnection.outboundCalendarPolicy === GOOGLE_CALENDAR_OUTBOUND_POLICY
+    && typeof existingConnection.outboundCalendarId === "string"
+    && existingConnection.outboundCalendarId
+    && existingConnection.outboundCalendarId !== "primary"
+    ? existingConnection.outboundCalendarId : null;
+  const ambiguousFailure = !calendarId && existingConnection
+    && ["failed", "provisioning"].includes(existingConnection.calendarProvisioningState);
+  return {
+    outboundCalendarId: calendarId,
+    calendarProvisioningState: calendarId ? "created" : ambiguousFailure ? "failed" : "not_created",
+  };
+}
+
 function calendarReturnUrl(redirectUri, result) {
   const url = new URL("/calendar.html", new URL(redirectUri).origin);
   url.searchParams.set("googleCalendar", result);
@@ -86,10 +101,12 @@ function createHandler(deps) {
       }
       if (query.error) throw new GoogleCalendarOAuthError("authorization_denied");
       const connectionRef = deps.getDb().collection(GOOGLE_CALENDAR_CONNECTIONS_COLLECTION).doc(consumed.uid);
-      let existingConnection = null;
+      const existingSnapshot = await connectionRef.get();
+      const existingConnection = existingSnapshot && existingSnapshot.exists ? (existingSnapshot.data() || {}) : null;
+      if (existingConnection && existingConnection.uid !== consumed.uid) {
+        throw new GoogleCalendarOAuthError("oauth_state_wrong_uid");
+      }
       if (authorizationIntent === GOOGLE_CALENDAR_WRITE_INTENT) {
-        const existingSnapshot = await connectionRef.get();
-        existingConnection = existingSnapshot && existingSnapshot.exists ? (existingSnapshot.data() || {}) : null;
         const existingCapability = connectionCapability(existingConnection);
         if (!connectionIsUsable(existingConnection)
             || ![GOOGLE_CALENDAR_CAPABILITY_READONLY, GOOGLE_CALENDAR_CAPABILITY_WRITE_CONSENT_REQUIRED]
@@ -113,14 +130,16 @@ function createHandler(deps) {
         randomBytesImpl: deps.randomBytesImpl,
       });
       const writeAuthorized = tokenResult.capability === GOOGLE_CALENDAR_CAPABILITY_WRITE_AUTHORIZED;
+      const retainedOutbound = retainedOutboundState(existingConnection);
       await connectionRef.set({
         uid: consumed.uid,
+        ownerUid: consumed.uid,
         provider: "google_calendar",
         status: "connected",
         grantedScopes: tokenResult.grantedScopes,
         capabilityStatus: tokenResult.capability,
         outboundCalendarPolicy: GOOGLE_CALENDAR_OUTBOUND_POLICY,
-        outboundCalendarId: null,
+        ...retainedOutbound,
         encryptedRefreshToken,
         tokenEncryptionVersion: TOKEN_ENCRYPTION_VERSION,
         connectedAt: existingConnection && existingConnection.connectedAt ? existingConnection.connectedAt : now,
@@ -148,3 +167,4 @@ exports.handler = createHandler(buildGoogleCalendarDeps());
 exports.createHandler = createHandler;
 exports.calendarReturnUrl = calendarReturnUrl;
 exports.safeFailureCode = safeFailureCode;
+exports.retainedOutboundState = retainedOutboundState;

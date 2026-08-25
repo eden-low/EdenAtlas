@@ -172,6 +172,11 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    // Phase 3B.7 provider mappings contain server-controlled Google identities.
+    match /calendar_event_sync/{mappingId} {
+      allow read, write: if false;
+    }
+
     match /habits/{habitId} {
       allow read: if isMineOrPublic(resource.data);
       allow update, delete: if request.auth != null && resource.data.uid == request.auth.uid;

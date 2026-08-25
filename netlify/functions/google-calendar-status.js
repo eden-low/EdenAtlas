@@ -19,12 +19,27 @@ function isoOrNull(value) {
 }
 
 function sanitizeConnection(snapshot) {
-  if (!snapshot || !snapshot.exists) return { connectionStatus: "disconnected", capabilityStatus: null };
+  if (!snapshot || !snapshot.exists) return {
+    connectionStatus: "disconnected", capabilityStatus: null, calendarProvisioningState: "not_created",
+  };
   const data = snapshot.data() || {};
   const usable = connectionIsUsable(data);
+  const capabilityStatus = usable ? connectionCapability(data) : null;
+  let calendarProvisioningState = "not_created";
+  if (!usable || data.calendarProvisioningState === "reconnect_required") {
+    calendarProvisioningState = "reconnect_required";
+  } else if (capabilityStatus === "write_authorized"
+      && data.calendarProvisioningState === "created"
+      && typeof data.outboundCalendarId === "string"
+      && data.outboundCalendarId !== "primary") {
+    calendarProvisioningState = "created";
+  } else if (data.calendarProvisioningState === "failed") {
+    calendarProvisioningState = "failed";
+  }
   return {
     connectionStatus: usable ? "connected" : "reconnect_required",
-    capabilityStatus: usable ? connectionCapability(data) : null,
+    capabilityStatus,
+    calendarProvisioningState,
     connectedAt: isoOrNull(data.connectedAt),
     updatedAt: isoOrNull(data.updatedAt),
   };

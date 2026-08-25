@@ -42,6 +42,7 @@ const DEPLOY_ORIGIN_PATH = path.join(ROOT, "netlify", "functions", "lib", "deplo
 const ANILIST_SRC = path.join(ROOT, "netlify", "functions", "anilist.js");
 const GOOGLE_CALENDAR_STATUS_SRC = path.join(ROOT, "netlify", "functions", "google-calendar-status.js");
 const GOOGLE_CALENDAR_EVENTS_SRC = path.join(ROOT, "netlify", "functions", "google-calendar-events.js");
+const GOOGLE_CALENDAR_CREATE_SRC = path.join(ROOT, "netlify", "functions", "google-calendar-create-event.js");
 
 const STAGING_PROJECT_ID = "edenatlas-staging"; // sourced the same way it always is: a value the
 // caller (this test, matching the task's own requested env) supplies via STAGING_FIREBASE_PROJECT_ID
@@ -382,7 +383,9 @@ function optionsEvent(origin) {
         assert.strictEqual(body.ok, true);
         assert.strictEqual(body.connectionStatus, "connected");
         assert.ok(!Object.prototype.hasOwnProperty.call(body, "status"));
-        assert.deepStrictEqual(body.grantedScopes, ["https://www.googleapis.com/auth/calendar.events.readonly"]);
+        assert.strictEqual(body.capabilityStatus, "readonly");
+        assert.strictEqual(body.calendarProvisioningState, "not_created");
+        assert.ok(!Object.prototype.hasOwnProperty.call(body, "grantedScopes"));
         assert.ok(!response.body.includes("encryptedRefreshToken"));
         assert.ok(!response.body.includes("packaged-status-ciphertext"));
       });
@@ -415,6 +418,13 @@ function optionsEvent(origin) {
         ]) assert.ok(!response.body.includes(forbidden));
       });
     }
+
+    await test("packaging the real google-calendar-create-event.js Function succeeds with the repo-configured bundler", async () => {
+      await packageAndExtractFunction(
+        GOOGLE_CALENDAR_CREATE_SRC,
+        "google-calendar-create-event.js"
+      );
+    });
 
     // ---- Scenario 2: the generated build-context file is entirely missing at packaging time
     // (a deliberately contrived worst case — in a real deploy `npm run build` always writes this

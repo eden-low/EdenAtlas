@@ -18,16 +18,23 @@ const nextBtn = document.getElementById("cal-next");
 const googleCalendarStatus = document.getElementById("google-calendar-status");
 const googleCalendarAction = document.getElementById("google-calendar-action");
 const googleCalendarCapability = document.getElementById("google-calendar-capability");
+const googleCalendarManualCreate = document.getElementById("google-calendar-manual-create");
+const googleCalendarManualStatus = document.getElementById("google-calendar-manual-status");
+const googleCalendarCreateOne = document.getElementById("google-calendar-create-one");
 
 const GOOGLE_CALENDAR_START_ENDPOINT = "/.netlify/functions/google-calendar-oauth-start";
 const GOOGLE_CALENDAR_STATUS_ENDPOINT = "/.netlify/functions/google-calendar-status";
 const GOOGLE_CALENDAR_EVENTS_ENDPOINT = "/.netlify/functions/google-calendar-events";
+const CANONICAL_CALENDAR_ENDPOINT = "/.netlify/functions/canonical-calendar-events";
+const GOOGLE_CALENDAR_CREATE_ENDPOINT = "/.netlify/functions/google-calendar-create-event";
 
 let viewDate = new Date();
 viewDate.setDate(1);
 let googleConnectionStatus = "disconnected";
 let googleCapabilityStatus = null;
+let googleCalendarProvisioningState = "not_created";
 let monthLoadVersion = 0;
+let manualExpenseCandidate = null;
 
 function readAndClearGoogleCalendarReturn() {
   const url = new URL(window.location.href);
@@ -74,6 +81,41 @@ function setConnectedGoogleCalendarUi(detail = "") {
   });
 }
 
+function candidateDate(expense) {
+  const raw = expenseTransactionTimestamp(expense);
+  const date = raw instanceof Date ? raw : raw && typeof raw.toDate === "function" ? raw.toDate() : null;
+  return date && Number.isFinite(date.getTime()) ? date : null;
+}
+
+function sourceCreatedDate(expense) {
+  const raw = expense && expense.createdAt;
+  const date = raw instanceof Date ? raw : raw && typeof raw.toDate === "function" ? raw.toDate() : null;
+  return date && Number.isFinite(date.getTime()) ? date : new Date(0);
+}
+
+function renderManualCreateUi() {
+  const writeEnabled = googleConnectionStatus === "connected" && googleCapabilityStatus === "write_authorized";
+  if (!googleCalendarManualCreate) return;
+  googleCalendarManualCreate.classList.toggle("hidden", !writeEnabled);
+  if (!writeEnabled) return;
+  const monthExpenses = cachedMonthData.expenses
+    .map((expense) => ({ expense, date: candidateDate(expense) }))
+    .filter(({ date }) => date && date.getFullYear() === viewDate.getFullYear() && date.getMonth() === viewDate.getMonth())
+    .sort((left, right) => sourceCreatedDate(right.expense).getTime() - sourceCreatedDate(left.expense).getTime()
+      || right.date.getTime() - left.date.getTime()
+      || String(right.expense.id).localeCompare(String(left.expense.id)));
+  manualExpenseCandidate = monthExpenses.length ? monthExpenses[0] : null;
+  if (!manualExpenseCandidate) {
+    googleCalendarManualStatus.textContent = "No Expense candidate in this month. Create one fresh harmless test Expense first.";
+    googleCalendarCreateOne.classList.add("hidden");
+    return;
+  }
+  googleCalendarManualStatus.textContent = `One Expense candidate · ${manualExpenseCandidate.date.toLocaleDateString(dateLocale())}. No financial details will be sent to Google.`;
+  googleCalendarCreateOne.textContent = "Create in Google Calendar";
+  googleCalendarCreateOne.disabled = false;
+  googleCalendarCreateOne.classList.remove("hidden");
+}
+
 async function callGoogleCalendarFunction(endpoint, user, payload = {}, forceRefresh = false) {
   const response = await fetch(endpoint, {
     method: "POST",
@@ -104,6 +146,7 @@ async function loadGoogleCalendarStatus(user) {
   try {
     const status = await callGoogleCalendarFunction(GOOGLE_CALENDAR_STATUS_ENDPOINT, user);
     googleConnectionStatus = status.connectionStatus;
+    googleCalendarProvisioningState = status.calendarProvisioningState || "not_created";
     if (status.connectionStatus === "connected") {
       googleCapabilityStatus = status.capabilityStatus;
       if (!["readonly", "write_consent_required", "write_authorized"].includes(googleCapabilityStatus)) {
@@ -175,6 +218,48 @@ async function startGoogleCalendarConnection() {
         : "Could not start the secure connection. Please try again.",
       actionLabel: enablingSync ? "Enable EdenAtlas Calendar Sync" : "Retry connection",
     });
+  }
+}
+
+async function createOneExpenseInGoogleCalendar() {
+  const user = auth.currentUser;
+  const candidate = manualExpenseCandidate;
+  if (!user || !candidate || googleCapabilityStatus !== "write_authorized") return;
+  if (!window.confirm("Create this one Expense event in the dedicated EdenAtlas Google Calendar? No other event will be synchronized.")) return;
+  googleCalendarCreateOne.disabled = true;
+  googleCalendarCreateOne.textContent = "Creating one event…";
+  googleCalendarManualStatus.textContent = googleCalendarProvisioningState === "created"
+    ? "Checking for an existing matching event before create…"
+    : "Provisioning the dedicated EdenAtlas calendar, then creating this one event…";
+  try {
+    const prepared = await callGoogleCalendarFunction(CANONICAL_CALENDAR_ENDPOINT, user, {
+      action: "prepare_manual_create",
+      sourceEntityType: "expense",
+      sourceEntityId: candidate.expense.id,
+    });
+    if (typeof prepared.canonicalEventHandle !== "string") throw new Error("invalid_canonical_handle");
+    const result = await callGoogleCalendarFunction(GOOGLE_CALENDAR_CREATE_ENDPOINT, user, {
+      canonicalEventHandle: prepared.canonicalEventHandle,
+    });
+    googleCalendarProvisioningState = result.calendarProvisioningState;
+    googleCalendarManualStatus.textContent = result.createState === "already_created"
+      ? "Created in Google Calendar. The existing matching event was reused; no duplicate was created."
+      : "Created in Google Calendar.";
+    googleCalendarCreateOne.textContent = "Create same event again";
+    googleCalendarCreateOne.disabled = false;
+  } catch (err) {
+    if (err && ["reconnect_required", "calendar_api_unauthorized", "calendar_access_denied"].includes(err.code)) {
+      googleConnectionStatus = "reconnect_required";
+      googleCapabilityStatus = null;
+      setGoogleCalendarUi({ message: "Google Calendar needs explicit reconnection before this event can be created.", actionLabel: "Reconnect Google Calendar" });
+      renderManualCreateUi();
+      return;
+    }
+    googleCalendarManualStatus.textContent = err && err.code === "create_in_progress"
+      ? "This one-event create is already in progress. Please try again shortly."
+      : "The event was not marked created. Retry is safe and uses the same provider identity.";
+    googleCalendarCreateOne.textContent = "Retry Create in Google Calendar";
+    googleCalendarCreateOne.disabled = false;
   }
 }
 
@@ -264,6 +349,7 @@ async function loadMonth(user = auth.currentUser) {
 
   cachedMonthData = { expenses, photos, journals, journeys, googleEvents };
   renderMonth();
+  renderManualCreateUi();
 }
 
 // Pure render from cachedMonthData — safe to call again on a language switch without
@@ -378,6 +464,7 @@ onAuthStateChanged(auth, async (user) => {
 });
 
 if (googleCalendarAction) googleCalendarAction.addEventListener("click", startGoogleCalendarConnection);
+if (googleCalendarCreateOne) googleCalendarCreateOne.addEventListener("click", createOneExpenseInGoogleCalendar);
 
 // Re-render the month label, weekday headers, and grid from the already-fetched
 // cachedMonthData whenever the language switcher fires — no Firestore re-fetch needed.

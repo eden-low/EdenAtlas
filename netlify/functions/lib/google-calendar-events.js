@@ -173,7 +173,7 @@ async function readBoundedJson(response, maxBytes) {
   }
 }
 
-async function refreshGoogleAccessToken({ fetchImpl = fetch, config, refreshToken }) {
+async function refreshGoogleAccessToken({ fetchImpl = fetch, config, refreshToken, requiredCapability = null }) {
   let response;
   try {
     response = await fetchImpl(GOOGLE_TOKEN_ENDPOINT, {
@@ -210,8 +210,11 @@ async function refreshGoogleAccessToken({ fetchImpl = fetch, config, refreshToke
   if (!accessToken || accessToken.length > 8192 || (payload.token_type && payload.token_type !== "Bearer")) {
     throw new GoogleCalendarReadError("calendar_invalid_response", 502);
   }
-  if (payload.scope && !hasApprovedReadScopeSet(normalizeGrantedScopes(payload.scope))) {
-    throw new GoogleCalendarReadError("unexpected_scope_set", 401, { reconnectRequired: true });
+  if (payload.scope) {
+    const refreshedCapability = grantedCapability(normalizeGrantedScopes(payload.scope));
+    if (!refreshedCapability || (requiredCapability && refreshedCapability !== requiredCapability)) {
+      throw new GoogleCalendarReadError("unexpected_scope_set", 401, { reconnectRequired: true });
+    }
   }
   return accessToken;
 }

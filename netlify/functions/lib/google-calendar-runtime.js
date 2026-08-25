@@ -6,6 +6,8 @@ const { readGeneratedBuildContext, isStagingBuildContext } = require("./build-co
 const { withGeneratedDeployOrigins, normalizeExactOrigin } = require("./google-calendar-http");
 const { parseMasterKey, validateHttpsOrLocalRedirect } = require("./google-calendar-oauth");
 const { checkBurst } = require("./rate-limit");
+const { createCalendarEventStore } = require("./calendar-event-store");
+const { createCalendarEventIdentity } = require("./calendar-event-identity");
 
 const REQUIRED_OAUTH_ENV = [
   "GOOGLE_CALENDAR_CLIENT_ID",
@@ -61,6 +63,7 @@ function buildGoogleCalendarDeps() {
   const environment = resolveCalendarEnvironment(buildContext);
   const env = withGeneratedDeployOrigins(process.env);
   let app = null;
+  let canonicalStore = null;
 
   function ensureApp() {
     if (app) return app;
@@ -82,6 +85,17 @@ function buildGoogleCalendarDeps() {
     ensureFirebaseAdmin: async () => { ensureApp(); },
     verifyIdToken: (token) => getAuth(ensureApp()).verifyIdToken(token, true),
     getDb: () => getFirestore(ensureApp()),
+    getCanonicalStore: () => {
+      if (!canonicalStore) {
+        canonicalStore = createCalendarEventStore({
+          db: getFirestore(ensureApp()),
+          now: () => new Date(),
+          identity: createCalendarEventIdentity(env.CALENDAR_IDENTITY_KEY),
+        });
+      }
+      return canonicalStore;
+    },
+    getProviderIdentityKey: () => env.CALENDAR_IDENTITY_KEY,
     getOAuthConfig: () => readOAuthConfig(env, environment),
     checkBurst,
     fetchImpl: undefined,

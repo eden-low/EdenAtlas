@@ -172,7 +172,8 @@
 // v42 (Phase 3A.1 Google Calendar OAuth foundation): calendar.html/calendar.js add the minimal
 // connect/status UI. Netlify Function source is never cached, and every Function response remains
 // covered by NEVER_CACHE_PATH_PREFIXES below.
-const CACHE = "eden-shell-v46";
+// v47 (Phase 3B.7): expose the explicit, one-Expense manual Google create control.
+const CACHE = "eden-shell-v47";
 
 const PRECACHE = [
   "index.html", "home.html", "resume.html", "gallery.html", "journal.html", "expenses.html",

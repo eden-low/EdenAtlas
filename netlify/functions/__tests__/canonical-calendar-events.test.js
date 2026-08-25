@@ -163,6 +163,16 @@ async function run() {
     assert.strictEqual(bodyOf(response).event.ownerUid, UID);
   });
 
+  await test("prepare_manual_create returns only an opaque canonical handle", async () => {
+    const { handler, observed } = createHarness();
+    const response = await handler(post({
+      action: "prepare_manual_create", sourceEntityType: "expense", sourceEntityId: "expense-1",
+    }));
+    assert.strictEqual(response.statusCode, 201);
+    assert.deepStrictEqual(bodyOf(response), { ok: true, canonicalEventHandle: "server-event" });
+    assert.strictEqual(observed.createCalls.length, 1);
+  });
+
   await test("cross-user source IDs return not-found and never reach persistence", async () => {
     const sources = { expenses: { "other-expense": { uid: OTHER_UID, date: "2026-08-24" } } };
     const { handler, observed } = createHarness({ sources });
@@ -259,9 +269,10 @@ async function run() {
     assert.strictEqual(response.statusCode, 403);
   });
 
-  await test("request parser accepts only the four minimal operation contracts", () => {
+  await test("request parser accepts only the five minimal operation contracts", () => {
     assert.deepStrictEqual(parseCanonicalCalendarRequest(JSON.stringify({ action: "list" })).value, { action: "list" });
     assert.strictEqual(parseCanonicalCalendarRequest(JSON.stringify({ action: "project_source", sourceEntityType: "journey", sourceEntityId: "j1" })).value.sourceEntityId, "j1");
+    assert.strictEqual(parseCanonicalCalendarRequest(JSON.stringify({ action: "prepare_manual_create", sourceEntityType: "expense", sourceEntityId: "e1" })).value.sourceEntityId, "e1");
     assert.strictEqual(parseCanonicalCalendarRequest(JSON.stringify({ action: "refresh_projection", canonicalEventId: "c1", expectedVersion: 1 })).value.expectedVersion, 1);
     assert.strictEqual(parseCanonicalCalendarRequest(JSON.stringify({ action: "tombstone", canonicalEventId: "c1", expectedVersion: 1 })).value.expectedVersion, 1);
   });

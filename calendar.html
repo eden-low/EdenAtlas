@@ -58,10 +58,23 @@
             <span id="google-calendar-capability" class="text-[9px] font-code px-2 py-0.5 rounded-full border border-borderNeon text-textGray">READ ONLY</span>
           </div>
           <p id="google-calendar-status" class="text-xs text-textGray mt-2" role="status" aria-live="polite">Checking connection&hellip;</p>
-          <p class="text-[11px] text-textGray/80 mt-1">Enabling EdenAtlas Calendar Sync grants additional Google Calendar capability for a dedicated EdenAtlas calendar. This permission step does not create a calendar or synchronize events yet.</p>
+          <p class="text-[11px] text-textGray/80 mt-1">Enabling EdenAtlas Calendar Sync grants additional Google Calendar capability for a dedicated EdenAtlas calendar. Granting permission alone does not synchronize events.</p>
         </div>
         <button id="google-calendar-action" type="button" class="hidden shrink-0 px-4 py-2 rounded-lg bg-neonPurple/15 border border-neonPurple/50 text-neonPurple hover:bg-neonPurple/25 transition-colors text-xs font-cyber font-semibold disabled:opacity-50 disabled:cursor-not-allowed">
           Connect Google Calendar
+        </button>
+      </div>
+    </section>
+
+    <section id="google-calendar-manual-create" class="hidden reveal bg-cardBg/90 neon-border-purple rounded-2xl p-5" aria-labelledby="google-calendar-manual-title">
+      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div class="min-w-0">
+          <h2 id="google-calendar-manual-title" class="font-cyber font-semibold text-sm">Manual single-event create</h2>
+          <p id="google-calendar-manual-status" class="text-xs text-textGray mt-2" role="status" aria-live="polite">Choose a month containing a newly-created test Expense.</p>
+          <p class="text-[11px] text-textGray/80 mt-1">This creates only the one shown Expense event in the dedicated EdenAtlas Google Calendar. It does not enable automatic or historical synchronization.</p>
+        </div>
+        <button id="google-calendar-create-one" type="button" class="hidden shrink-0 px-4 py-2 rounded-lg bg-neonPurple/15 border border-neonPurple/50 text-neonPurple hover:bg-neonPurple/25 transition-colors text-xs font-cyber font-semibold disabled:opacity-50 disabled:cursor-not-allowed">
+          Create in Google Calendar
         </button>
       </div>
     </section>

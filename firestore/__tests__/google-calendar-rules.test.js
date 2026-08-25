@@ -64,6 +64,9 @@ async function run() {
     await test("all browser access to server-owned canonical Calendar events is denied", async () => {
       await assertCollectionDenied("calendar_events");
     });
+    await test("all browser access to server-only Google provider mappings is denied", async () => {
+      await assertCollectionDenied("calendar_event_sync");
+    });
   } finally {
     await testEnv.cleanup();
   }

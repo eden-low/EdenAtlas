@@ -15,7 +15,10 @@ const {
   encryptRefreshToken,
 } = require("../lib/google-calendar-oauth");
 const { createHandler: createStartHandler } = require("../google-calendar-oauth-start");
-const { createHandler: createCallbackHandler } = require("../google-calendar-oauth-callback");
+const {
+  createHandler: createCallbackHandler,
+  retainedOutboundState,
+} = require("../google-calendar-oauth-callback");
 const { createHandler: createStatusHandler } = require("../google-calendar-status");
 const { resolveCalendarEnvironment, readOAuthConfig } = require("../lib/google-calendar-runtime");
 
@@ -98,6 +101,28 @@ function readonlyConnection(overrides = {}) {
 }
 
 async function run() {
+  await test("OAuth reconnect preserves only a validated server-owned secondary calendar state", () => {
+    const calendarId = "edenatlas-secondary@group.calendar.google.com";
+    assert.deepStrictEqual(retainedOutboundState({
+      outboundCalendarPolicy: GOOGLE_CALENDAR_OUTBOUND_POLICY,
+      outboundCalendarId: calendarId,
+      calendarProvisioningState: "reconnect_required",
+    }), { outboundCalendarId: calendarId, calendarProvisioningState: "created" });
+    assert.deepStrictEqual(retainedOutboundState({
+      outboundCalendarPolicy: GOOGLE_CALENDAR_OUTBOUND_POLICY,
+      outboundCalendarId: null,
+      calendarProvisioningState: "provisioning",
+    }), { outboundCalendarId: null, calendarProvisioningState: "failed" });
+    for (const invalid of [
+      { outboundCalendarPolicy: GOOGLE_CALENDAR_OUTBOUND_POLICY, outboundCalendarId: "primary", calendarProvisioningState: "created" },
+      { outboundCalendarPolicy: "browser_selected", outboundCalendarId: calendarId, calendarProvisioningState: "created" },
+      null,
+    ]) {
+      assert.deepStrictEqual(retainedOutboundState(invalid), {
+        outboundCalendarId: null, calendarProvisioningState: "not_created",
+      });
+    }
+  });
   await test("Calendar OAuth enables only Production, stable Staging, and local development contexts", () => {
     assert.strictEqual(resolveCalendarEnvironment({ context: "production", branch: "main" }), "production");
     assert.strictEqual(resolveCalendarEnvironment({ context: "branch-deploy", branch: "staging" }), "staging");
@@ -283,7 +308,10 @@ async function run() {
           return { doc: () => ({ stateRef: true }) };
         }
         assert.strictEqual(name, GOOGLE_CALENDAR_CONNECTIONS_COLLECTION);
-        return { doc: (uid) => ({ set: async (record) => observed.connectionWrites.push({ uid, record }) }) };
+        return { doc: (uid) => ({
+          get: async () => ({ exists: false, data: () => undefined }),
+          set: async (record) => observed.connectionWrites.push({ uid, record }),
+        }) };
       },
       async runTransaction(callback) {
         return callback({
@@ -504,6 +532,7 @@ async function run() {
     assert.strictEqual(observed.uid, VERIFIED_UID);
     assert.strictEqual(body.connectionStatus, "connected");
     assert.strictEqual(body.capabilityStatus, GOOGLE_CALENDAR_CAPABILITY_READONLY);
+    assert.strictEqual(body.calendarProvisioningState, "not_created");
     assert.ok(!Object.prototype.hasOwnProperty.call(body, "status"));
     assert.ok(!Object.prototype.hasOwnProperty.call(body, "grantedScopes"));
     assert.ok(!response.body.includes(encryptedRefreshToken.ciphertext));
@@ -534,6 +563,39 @@ async function run() {
     assert.strictEqual(reconnect.capabilityStatus, null);
     assert.ok(!JSON.stringify(reconnect).includes("provider-secret-detail"));
     assert.ok(!Object.prototype.hasOwnProperty.call(reconnect, "grantedScopes"));
+  });
+
+  await test("calendar provisioning status exposes only sanitized state, never the persisted destination", async () => {
+    const encryptedRefreshToken = encryptRefreshToken({
+      refreshToken: "status-write-refresh-token",
+      uid: VERIFIED_UID,
+      masterKeyRaw: MASTER_KEY,
+      randomBytesImpl: () => Buffer.alloc(12, 8),
+    });
+    const calendarId = "private-secondary-id@group.calendar.google.com";
+    const connection = {
+      ...readonlyConnection(),
+      ownerUid: VERIFIED_UID,
+      grantedScopes: [GOOGLE_CALENDAR_SCOPE, GOOGLE_CALENDAR_APP_CREATED_SCOPE],
+      capabilityStatus: GOOGLE_CALENDAR_CAPABILITY_WRITE_AUTHORIZED,
+      outboundCalendarPolicy: GOOGLE_CALENDAR_OUTBOUND_POLICY,
+      outboundCalendarId: calendarId,
+      calendarProvisioningState: "created",
+      encryptedRefreshToken,
+    };
+    const handler = createStatusHandler(baseDeps({
+      getDb: () => ({ collection: () => ({ doc: () => ({
+        get: async () => ({ exists: true, data: () => connection }),
+      }) }) }),
+    }));
+    const response = await handler(postEvent());
+    const body = bodyOf(response);
+    assert.strictEqual(body.calendarProvisioningState, "created");
+    assert.ok(!response.body.includes(calendarId));
+    assert.ok(!response.body.includes(encryptedRefreshToken.ciphertext));
+    assert.deepStrictEqual(Object.keys(body).sort(), [
+      "calendarProvisioningState", "capabilityStatus", "connectedAt", "connectionStatus", "ok", "updatedAt",
+    ]);
   });
 
   console.log(`\n${passed} passed, ${failed} failed`);

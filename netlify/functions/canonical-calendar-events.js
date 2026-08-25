@@ -47,7 +47,7 @@ function parseCanonicalCalendarRequest(raw) {
   if (body.action === "list") {
     return exactKeys(body, ["action"]) ? { value: body } : { error: "unknown_field" };
   }
-  if (body.action === "project_source") {
+  if (body.action === "project_source" || body.action === "prepare_manual_create") {
     if (!exactKeys(body, ["action", "sourceEntityType", "sourceEntityId"])) {
       return { error: "unknown_field" };
     }
@@ -123,7 +123,7 @@ function createHandler(deps) {
         return jsonResponse(200, { ok: true, events }, responseHeaders);
       }
 
-      if (parsed.value.action === "project_source") {
+      if (parsed.value.action === "project_source" || parsed.value.action === "prepare_manual_create") {
         const source = await loadOwnedSource(
           deps.getDb(),
           verifiedUid,
@@ -136,6 +136,9 @@ function createHandler(deps) {
           sourceEntityId: parsed.value.sourceEntityId,
           source,
         });
+        if (parsed.value.action === "prepare_manual_create") {
+          return jsonResponse(201, { ok: true, canonicalEventHandle: canonicalEvent.id }, responseHeaders);
+        }
         return jsonResponse(201, { ok: true, event: canonicalEvent }, responseHeaders);
       }
 
