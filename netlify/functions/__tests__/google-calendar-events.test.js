@@ -4,6 +4,8 @@ const assert = require("node:assert");
 const {
   GOOGLE_TOKEN_ENDPOINT,
   GOOGLE_CALENDAR_SCOPE,
+  GOOGLE_CALENDAR_APP_CREATED_SCOPE,
+  GOOGLE_CALENDAR_CAPABILITY_WRITE_AUTHORIZED,
   encryptRefreshToken,
 } = require("../lib/google-calendar-oauth");
 const {
@@ -255,7 +257,7 @@ async function run() {
     assert.strictEqual(reconnect.observed.tokenCalls.length, 0);
   });
 
-  await test("only the exact read-only scope is accepted", async () => {
+  await test("unapproved broad scope sets are rejected", async () => {
     const record = validConnection();
     record.grantedScopes.push("https://www.googleapis.com/auth/calendar");
     const { handler, observed } = createHarness({ connection: record });
@@ -263,6 +265,26 @@ async function run() {
     assert.strictEqual(bodyOf(result).connectionStatus, "reconnect_required");
     assert.strictEqual(observed.tokenCalls.length, 0);
     assert.strictEqual(observed.connectionWrites[0].value.lastErrorCode, "unexpected_scope_set");
+  });
+
+  await test("write-authorized users retain inbound reads and Primary is never an outbound target", async () => {
+    const record = validConnection();
+    record.grantedScopes = [GOOGLE_CALENDAR_SCOPE, GOOGLE_CALENDAR_APP_CREATED_SCOPE];
+    record.capabilityStatus = GOOGLE_CALENDAR_CAPABILITY_WRITE_AUTHORIZED;
+    const { handler, observed } = createHarness({
+      connection: record,
+      tokenResponses: [response(200, {
+        access_token: ACCESS_TOKEN,
+        token_type: "Bearer",
+        scope: `${GOOGLE_CALENDAR_SCOPE} ${GOOGLE_CALENDAR_APP_CREATED_SCOPE}`,
+      })],
+    });
+    const result = await handler(postEvent());
+    assert.strictEqual(bodyOf(result).connectionStatus, "connected");
+    assert.strictEqual(observed.calendarCalls.length, 1);
+    assert.strictEqual(observed.calendarCalls[0].options.method, "GET");
+    assert.strictEqual(new URL(observed.calendarCalls[0].url).pathname, "/calendar/v3/calendars/primary/events");
+    assert.ok(observed.calendarCalls.every((call) => !["POST", "PUT", "PATCH", "DELETE"].includes(call.options.method)));
   });
 
   await test("server refreshes access and queries only primary with bounded parameters", async () => {

@@ -156,6 +156,8 @@
 // change — index.html is now the public recruiter Portfolio, home.html is the private app
 // landing page), v21 (Trash privacy fix), v20 (Memory Trash + location-edit fix), v19 (canonical
 // location pipeline fix).
+// v46 (Phase 3B.6 explicit Google Calendar sync re-consent): calendar.html/calendar.js add the
+// capability-aware opt-in UI. Function routes remain network-only.
 // v45 (Phase 3B.3 canonical source adapters): the Calendar shell now consumes the shared pure
 // Expense/Journal/Journey canonical projection core, including single-day Journey rendering.
 // calendar.js and the new js/calendar-event-adapter-core.js are precached below.
@@ -170,7 +172,7 @@
 // v42 (Phase 3A.1 Google Calendar OAuth foundation): calendar.html/calendar.js add the minimal
 // connect/status UI. Netlify Function source is never cached, and every Function response remains
 // covered by NEVER_CACHE_PATH_PREFIXES below.
-const CACHE = "eden-shell-v45";
+const CACHE = "eden-shell-v46";
 
 const PRECACHE = [
   "index.html", "home.html", "resume.html", "gallery.html", "journal.html", "expenses.html",

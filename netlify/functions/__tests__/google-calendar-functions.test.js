@@ -1,6 +1,14 @@
 const assert = require("node:assert");
 const {
   GOOGLE_CALENDAR_SCOPE,
+  GOOGLE_CALENDAR_APP_CREATED_SCOPE,
+  GOOGLE_CALENDAR_READ_INTENT,
+  GOOGLE_CALENDAR_WRITE_INTENT,
+  GOOGLE_CALENDAR_CAPABILITY_READONLY,
+  GOOGLE_CALENDAR_CAPABILITY_WRITE_CONSENT_REQUIRED,
+  GOOGLE_CALENDAR_CAPABILITY_WRITE_AUTHORIZED,
+  GOOGLE_CALENDAR_OUTBOUND_POLICY,
+  GOOGLE_TOKEN_ENDPOINT,
   GOOGLE_CALENDAR_CONNECTIONS_COLLECTION,
   GOOGLE_CALENDAR_OAUTH_STATES_COLLECTION,
   createOAuthState,
@@ -65,6 +73,26 @@ function baseDeps(overrides = {}) {
     now: () => new Date(NOW),
     randomBytesImpl: undefined,
     fetchImpl: undefined,
+    ...overrides,
+  };
+}
+
+function readonlyConnection(overrides = {}) {
+  return {
+    uid: VERIFIED_UID,
+    provider: "google_calendar",
+    status: "connected",
+    grantedScopes: [GOOGLE_CALENDAR_SCOPE],
+    capabilityStatus: GOOGLE_CALENDAR_CAPABILITY_READONLY,
+    encryptedRefreshToken: encryptRefreshToken({
+      refreshToken: "existing-readonly-refresh-token",
+      uid: VERIFIED_UID,
+      masterKeyRaw: MASTER_KEY,
+      randomBytesImpl: () => Buffer.alloc(12, 3),
+    }),
+    connectedAt: NOW,
+    updatedAt: NOW,
+    reconnectRequired: false,
     ...overrides,
   };
 }
@@ -146,6 +174,85 @@ async function run() {
     assert.ok(!response.body.includes(MASTER_KEY));
   });
 
+  await test("write capability requires the explicit enable_sync action for an owned read-only connection", async () => {
+    const observed = { docUids: [], connectionWrites: [], stateRecords: [], fetchCalls: 0 };
+    const connection = readonlyConnection();
+    const connectionRef = { kind: "connection" };
+    const stateRef = { kind: "state" };
+    const db = {
+      collection: (name) => {
+        if (name === GOOGLE_CALENDAR_CONNECTIONS_COLLECTION) {
+          return { doc: (uid) => { observed.docUids.push(uid); return connectionRef; } };
+        }
+        assert.strictEqual(name, GOOGLE_CALENDAR_OAUTH_STATES_COLLECTION);
+        return { doc: () => stateRef };
+      },
+      runTransaction: async (callback) => callback({
+        get: async (ref) => {
+          assert.strictEqual(ref, connectionRef);
+          return { exists: true, data: () => connection };
+        },
+        set: (ref, value, options) => {
+          if (ref === stateRef) observed.stateRecords.push(value);
+          else {
+            assert.strictEqual(ref, connectionRef);
+            observed.connectionWrites.push({ value, options });
+            Object.assign(connection, value);
+          }
+        },
+      }),
+    };
+    const handler = createStartHandler(baseDeps({
+      randomBytesImpl: () => Buffer.alloc(32, 11),
+      fetchImpl: async () => { observed.fetchCalls++; throw new Error("must not call provider"); },
+      getDb: () => db,
+    }));
+
+    const response = await handler(postEvent({ body: JSON.stringify({ action: "enable_sync" }) }));
+    assert.strictEqual(response.statusCode, 200);
+    assert.deepStrictEqual(observed.docUids, [VERIFIED_UID]);
+    assert.strictEqual(observed.stateRecords[0].authorizationIntent, GOOGLE_CALENDAR_WRITE_INTENT);
+    assert.strictEqual(observed.connectionWrites[0].value.capabilityStatus, GOOGLE_CALENDAR_CAPABILITY_WRITE_CONSENT_REQUIRED);
+    assert.deepStrictEqual(new URL(bodyOf(response).authorizationUrl).searchParams.get("scope").split(" "), [
+      GOOGLE_CALENDAR_SCOPE,
+      GOOGLE_CALENDAR_APP_CREATED_SCOPE,
+    ]);
+    assert.strictEqual(observed.fetchCalls, 0);
+  });
+
+  await test("browser scope input and unauthorized write upgrades are rejected", async () => {
+    let stateWrites = 0;
+    let selectedUid = null;
+    const connectionRef = { kind: "connection" };
+    const handler = createStartHandler(baseDeps({
+      getDb: () => ({
+        collection: (name) => ({
+          doc: (uid) => {
+            if (name === GOOGLE_CALENDAR_CONNECTIONS_COLLECTION) {
+              selectedUid = uid;
+              return connectionRef;
+            }
+            return { kind: "state" };
+          },
+        }),
+        runTransaction: async (callback) => callback({
+          get: async (ref) => { assert.strictEqual(ref, connectionRef); return { exists: false }; },
+          set: () => { stateWrites++; },
+        }),
+      }),
+    }));
+    const arbitraryScope = await handler(postEvent({
+      body: JSON.stringify({ action: "enable_sync", scope: "https://www.googleapis.com/auth/calendar" }),
+    }));
+    assert.strictEqual(arbitraryScope.statusCode, 400);
+    assert.strictEqual(bodyOf(arbitraryScope).error, "unknown_field");
+    const disconnectedUpgrade = await handler(postEvent({ body: JSON.stringify({ action: "enable_sync" }) }));
+    assert.strictEqual(disconnectedUpgrade.statusCode, 409);
+    assert.strictEqual(bodyOf(disconnectedUpgrade).error, "google_calendar_reconnect_required");
+    assert.strictEqual(selectedUid, VERIFIED_UID);
+    assert.strictEqual(stateWrites, 0);
+  });
+
   await test("callback rejects unsupported method and an exact redirect URI mismatch", async () => {
     const handler = createCallbackHandler(baseDeps());
     assert.strictEqual((await handler({ httpMethod: "POST" })).statusCode, 405);
@@ -163,6 +270,7 @@ async function run() {
       uid: VERIFIED_UID,
       environment: "staging",
       redirectUri: REDIRECT_URI,
+      authorizationIntent: GOOGLE_CALENDAR_READ_INTENT,
       masterKeyRaw: MASTER_KEY,
       now: NOW,
       randomBytesImpl: () => Buffer.alloc(32, 6),
@@ -223,11 +331,115 @@ async function run() {
     assert.strictEqual(observed.connectionWrites.length, 1);
   });
 
+  await test("successful explicit re-consent records write authorization without a Calendar API call", async () => {
+    const state = createOAuthState({
+      uid: VERIFIED_UID,
+      environment: "staging",
+      redirectUri: REDIRECT_URI,
+      authorizationIntent: GOOGLE_CALENDAR_WRITE_INTENT,
+      masterKeyRaw: MASTER_KEY,
+      now: NOW,
+      randomBytesImpl: () => Buffer.alloc(32, 12),
+    });
+    const stateRecord = { ...state.record };
+    const existing = readonlyConnection({ capabilityStatus: GOOGLE_CALENDAR_CAPABILITY_WRITE_CONSENT_REQUIRED });
+    const observed = { providerCalls: [], connectionWrites: [] };
+    const connectionRef = {
+      get: async () => ({ exists: true, data: () => existing }),
+      set: async (record) => observed.connectionWrites.push(record),
+    };
+    const db = {
+      collection(name) {
+        if (name === GOOGLE_CALENDAR_OAUTH_STATES_COLLECTION) return { doc: () => ({ stateRef: true }) };
+        assert.strictEqual(name, GOOGLE_CALENDAR_CONNECTIONS_COLLECTION);
+        return { doc: (uid) => { assert.strictEqual(uid, VERIFIED_UID); return connectionRef; } };
+      },
+      async runTransaction(callback) {
+        return callback({
+          get: async () => ({ exists: true, data: () => stateRecord }),
+          update: (_ref, update) => Object.assign(stateRecord, update),
+        });
+      },
+    };
+    const handler = createCallbackHandler(baseDeps({
+      getDb: () => db,
+      randomBytesImpl: () => Buffer.alloc(12, 13),
+      fetchImpl: async (url) => {
+        observed.providerCalls.push(url);
+        assert.strictEqual(url, GOOGLE_TOKEN_ENDPOINT);
+        return {
+          ok: true,
+          json: async () => ({
+            access_token: "transient-write-access-token",
+            refresh_token: "new-write-refresh-token",
+            scope: `${GOOGLE_CALENDAR_SCOPE} ${GOOGLE_CALENDAR_APP_CREATED_SCOPE}`,
+          }),
+        };
+      },
+    }));
+    const response = await handler({
+      httpMethod: "GET",
+      rawUrl: `${REDIRECT_URI}?code=write-code&state=${state.state}`,
+      queryStringParameters: { code: "write-code", state: state.state },
+    });
+    assert.strictEqual(new URL(response.headers.Location).searchParams.get("googleCalendar"), "sync_permission_enabled");
+    assert.deepStrictEqual(observed.providerCalls, [GOOGLE_TOKEN_ENDPOINT]);
+    assert.strictEqual(observed.connectionWrites.length, 1);
+    const persisted = observed.connectionWrites[0];
+    assert.strictEqual(persisted.capabilityStatus, GOOGLE_CALENDAR_CAPABILITY_WRITE_AUTHORIZED);
+    assert.strictEqual(persisted.outboundCalendarPolicy, GOOGLE_CALENDAR_OUTBOUND_POLICY);
+    assert.strictEqual(persisted.outboundCalendarId, null);
+    assert.deepStrictEqual(persisted.grantedScopes, [GOOGLE_CALENDAR_APP_CREATED_SCOPE, GOOGLE_CALENDAR_SCOPE].sort());
+    assert.ok(!JSON.stringify(persisted).includes("new-write-refresh-token"));
+    assert.ok(observed.providerCalls.every((url) => !String(url).includes("/calendar/v3/")));
+  });
+
+  await test("declining write re-consent leaves the read-only token and capability intact", async () => {
+    const state = createOAuthState({
+      uid: VERIFIED_UID,
+      environment: "staging",
+      redirectUri: REDIRECT_URI,
+      authorizationIntent: GOOGLE_CALENDAR_WRITE_INTENT,
+      masterKeyRaw: MASTER_KEY,
+      now: NOW,
+      randomBytesImpl: () => Buffer.alloc(32, 14),
+    });
+    const stateRecord = { ...state.record };
+    const connection = readonlyConnection({ capabilityStatus: GOOGLE_CALENDAR_CAPABILITY_WRITE_CONSENT_REQUIRED });
+    const before = JSON.stringify(connection);
+    let tokenCalls = 0;
+    let connectionWrites = 0;
+    const db = {
+      collection: (name) => name === GOOGLE_CALENDAR_OAUTH_STATES_COLLECTION
+        ? { doc: () => ({ stateRef: true }) }
+        : { doc: () => ({ set: async () => { connectionWrites++; } }) },
+      runTransaction: async (callback) => callback({
+        get: async () => ({ exists: true, data: () => stateRecord }),
+        update: (_ref, update) => Object.assign(stateRecord, update),
+      }),
+    };
+    const handler = createCallbackHandler(baseDeps({
+      getDb: () => db,
+      fetchImpl: async () => { tokenCalls++; throw new Error("must not exchange"); },
+    }));
+    const response = await handler({
+      httpMethod: "GET",
+      rawUrl: `${REDIRECT_URI}?error=access_denied&state=${state.state}`,
+      queryStringParameters: { error: "access_denied", state: state.state },
+    });
+    assert.strictEqual(new URL(response.headers.Location).searchParams.get("googleCalendar"), "sync_permission_declined");
+    assert.strictEqual(tokenCalls, 0);
+    assert.strictEqual(connectionWrites, 0);
+    assert.strictEqual(JSON.stringify(connection), before);
+    assert.deepStrictEqual(connection.grantedScopes, [GOOGLE_CALENDAR_SCOPE]);
+  });
+
   await test("callback rejects a client-supplied uid even when state is otherwise valid", async () => {
     const state = createOAuthState({
       uid: VERIFIED_UID,
       environment: "staging",
       redirectUri: REDIRECT_URI,
+      authorizationIntent: GOOGLE_CALENDAR_READ_INTENT,
       masterKeyRaw: MASTER_KEY,
       now: NOW,
       randomBytesImpl: () => Buffer.alloc(32, 7),
@@ -291,9 +503,37 @@ async function run() {
     assert.strictEqual(observed.collection, GOOGLE_CALENDAR_CONNECTIONS_COLLECTION);
     assert.strictEqual(observed.uid, VERIFIED_UID);
     assert.strictEqual(body.connectionStatus, "connected");
+    assert.strictEqual(body.capabilityStatus, GOOGLE_CALENDAR_CAPABILITY_READONLY);
     assert.ok(!Object.prototype.hasOwnProperty.call(body, "status"));
+    assert.ok(!Object.prototype.hasOwnProperty.call(body, "grantedScopes"));
     assert.ok(!response.body.includes(encryptedRefreshToken.ciphertext));
     assert.ok(!response.body.includes("encryptedRefreshToken"));
+  });
+
+  await test("write-consent-required and reconnect status are deterministic and sanitized", async () => {
+    const connection = readonlyConnection({ capabilityStatus: GOOGLE_CALENDAR_CAPABILITY_WRITE_CONSENT_REQUIRED });
+    const createStatus = (record) => createStatusHandler(baseDeps({
+      getDb: () => ({
+        collection: () => ({
+          doc: (uid) => {
+            assert.strictEqual(uid, VERIFIED_UID);
+            return { get: async () => ({ exists: true, data: () => record }) };
+          },
+        }),
+      }),
+    }));
+    const first = bodyOf(await createStatus(connection)(postEvent()));
+    const second = bodyOf(await createStatus(connection)(postEvent()));
+    assert.strictEqual(first.connectionStatus, "connected");
+    assert.strictEqual(first.capabilityStatus, GOOGLE_CALENDAR_CAPABILITY_WRITE_CONSENT_REQUIRED);
+    assert.deepStrictEqual(first, second);
+
+    const invalid = readonlyConnection({ reconnectRequired: true, lastErrorCode: "provider-secret-detail" });
+    const reconnect = bodyOf(await createStatus(invalid)(postEvent()));
+    assert.strictEqual(reconnect.connectionStatus, "reconnect_required");
+    assert.strictEqual(reconnect.capabilityStatus, null);
+    assert.ok(!JSON.stringify(reconnect).includes("provider-secret-detail"));
+    assert.ok(!Object.prototype.hasOwnProperty.call(reconnect, "grantedScopes"));
   });
 
   console.log(`\n${passed} passed, ${failed} failed`);

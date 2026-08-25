@@ -3,13 +3,14 @@
 const { FirebaseConfigError } = require("./lib/firebase-admin");
 const {
   GOOGLE_CALENDAR_CONNECTIONS_COLLECTION,
+  connectionCapability,
   decryptRefreshToken,
   encryptedTokenEnvelopeIsValid,
 } = require("./lib/google-calendar-oauth");
 const {
   GoogleCalendarReadError,
   parseEventsRequest,
-  hasExactReadOnlyScope,
+  hasApprovedReadScopeSet,
   refreshGoogleAccessToken,
   listPrimaryCalendarEvents,
 } = require("./lib/google-calendar-events");
@@ -86,7 +87,7 @@ function createHandler(deps) {
     if (connection.status !== "connected" || connection.reconnectRequired === true) {
       return jsonResponse(200, connectionResponse("reconnect_required"), responseHeaders);
     }
-    if (!hasExactReadOnlyScope(connection.grantedScopes)) {
+    if (!hasApprovedReadScopeSet(connection.grantedScopes) || !connectionCapability(connection)) {
       try {
         await markReconnectRequired(connectionRef, now, "unexpected_scope_set");
       } catch {

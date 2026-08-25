@@ -17,6 +17,7 @@ const prevBtn = document.getElementById("cal-prev");
 const nextBtn = document.getElementById("cal-next");
 const googleCalendarStatus = document.getElementById("google-calendar-status");
 const googleCalendarAction = document.getElementById("google-calendar-action");
+const googleCalendarCapability = document.getElementById("google-calendar-capability");
 
 const GOOGLE_CALENDAR_START_ENDPOINT = "/.netlify/functions/google-calendar-oauth-start";
 const GOOGLE_CALENDAR_STATUS_ENDPOINT = "/.netlify/functions/google-calendar-status";
@@ -25,6 +26,7 @@ const GOOGLE_CALENDAR_EVENTS_ENDPOINT = "/.netlify/functions/google-calendar-eve
 let viewDate = new Date();
 viewDate.setDate(1);
 let googleConnectionStatus = "disconnected";
+let googleCapabilityStatus = null;
 let monthLoadVersion = 0;
 
 function readAndClearGoogleCalendarReturn() {
@@ -40,10 +42,36 @@ const googleCalendarReturn = readAndClearGoogleCalendarReturn();
 
 function setGoogleCalendarUi({ message, actionLabel = null, disabled = false }) {
   if (googleCalendarStatus) googleCalendarStatus.textContent = message;
+  if (googleCalendarCapability) {
+    googleCalendarCapability.textContent = googleCapabilityStatus === "write_authorized" ? "SYNC PERMISSION" : "READ ONLY";
+  }
   if (!googleCalendarAction) return;
   googleCalendarAction.disabled = disabled;
   googleCalendarAction.textContent = actionLabel || "";
   googleCalendarAction.classList.toggle("hidden", !actionLabel);
+}
+
+function writeConsentNotice() {
+  if (googleCalendarReturn === "sync_permission_declined") {
+    return " Sync permission was declined; read-only access remains enabled.";
+  }
+  if (["sync_scope_rejected", "sync_reconsent_required"].includes(googleCalendarReturn)) {
+    return " Sync permission was not granted; explicit Google re-consent is still required.";
+  }
+  return "";
+}
+
+function setConnectedGoogleCalendarUi(detail = "") {
+  if (googleCapabilityStatus === "write_authorized") {
+    setGoogleCalendarUi({
+      message: `Google Calendar connected. EdenAtlas sync permission enabled. No events are synchronized yet.${detail}`,
+    });
+    return;
+  }
+  setGoogleCalendarUi({
+    message: `Google Calendar connected. Read-only access enabled.${writeConsentNotice()}${detail}`,
+    actionLabel: "Enable EdenAtlas Calendar Sync",
+  });
 }
 
 async function callGoogleCalendarFunction(endpoint, user, payload = {}, forceRefresh = false) {
@@ -72,24 +100,20 @@ async function callGoogleCalendarFunction(endpoint, user, payload = {}, forceRef
 }
 
 async function loadGoogleCalendarStatus(user) {
-  if (googleCalendarReturn && googleCalendarReturn !== "connected") {
-    setGoogleCalendarUi({
-      message: googleCalendarReturn === "state_rejected"
-        ? "The connection request expired or was already used. Please reconnect."
-        : "Google Calendar needs to be connected again.",
-      actionLabel: "Reconnect Google Calendar",
-    });
-  } else {
-    setGoogleCalendarUi({ message: "Checking connection…", disabled: true });
-  }
+  setGoogleCalendarUi({ message: "Checking connection…", disabled: true });
   try {
     const status = await callGoogleCalendarFunction(GOOGLE_CALENDAR_STATUS_ENDPOINT, user);
     googleConnectionStatus = status.connectionStatus;
     if (status.connectionStatus === "connected") {
-      setGoogleCalendarUi({ message: "Connected with read-only permission. Loading Google Calendar eventsâ€¦" });
+      googleCapabilityStatus = status.capabilityStatus;
+      if (!["readonly", "write_consent_required", "write_authorized"].includes(googleCapabilityStatus)) {
+        throw new Error("invalid_capability_status");
+      }
+      setConnectedGoogleCalendarUi(" Loading inbound Google Calendar events…");
       return;
     }
-    if (status.connectionStatus === "reconnect_required" || googleCalendarReturn) {
+    googleCapabilityStatus = null;
+    if (status.connectionStatus === "reconnect_required" || googleCalendarReturn === "state_rejected") {
       setGoogleCalendarUi({ message: "Google Calendar needs to be connected again.", actionLabel: "Reconnect Google Calendar" });
       return;
     }
@@ -121,14 +145,36 @@ async function fetchGoogleCalendarMonth(user, date) {
 async function startGoogleCalendarConnection() {
   const user = auth.currentUser;
   if (!user || !googleCalendarAction) return;
-  setGoogleCalendarUi({ message: "Preparing secure Google authorization…", actionLabel: "Connecting…", disabled: true });
+  const enablingSync = googleConnectionStatus === "connected"
+    && ["readonly", "write_consent_required"].includes(googleCapabilityStatus);
+  setGoogleCalendarUi({
+    message: enablingSync
+      ? "Preparing explicit Google re-consent for EdenAtlas sync permission…"
+      : "Preparing secure Google authorization…",
+    actionLabel: enablingSync ? "Opening Google consent…" : "Connecting…",
+    disabled: true,
+  });
   try {
-    const result = await callGoogleCalendarFunction(GOOGLE_CALENDAR_START_ENDPOINT, user);
+    const result = await callGoogleCalendarFunction(
+      GOOGLE_CALENDAR_START_ENDPOINT,
+      user,
+      enablingSync ? { action: "enable_sync" } : {},
+    );
     const authorizationUrl = new URL(result.authorizationUrl);
     if (authorizationUrl.origin !== "https://accounts.google.com") throw new Error("invalid_authorization_origin");
     window.location.assign(authorizationUrl.toString());
-  } catch {
-    setGoogleCalendarUi({ message: "Could not start the secure connection. Please try again.", actionLabel: "Retry connection" });
+  } catch (err) {
+    if (enablingSync && err && err.code === "google_calendar_write_already_authorized") {
+      googleCapabilityStatus = "write_authorized";
+      setConnectedGoogleCalendarUi();
+      return;
+    }
+    setGoogleCalendarUi({
+      message: enablingSync
+        ? "Could not start sync re-consent. Read-only access remains enabled."
+        : "Could not start the secure connection. Please try again.",
+      actionLabel: enablingSync ? "Enable EdenAtlas Calendar Sync" : "Retry connection",
+    });
   }
 }
 
@@ -200,15 +246,13 @@ async function loadMonth(user = auth.currentUser) {
 
   let googleEvents = [];
   if (googleResult.error) {
-    setGoogleCalendarUi({ message: "Connected, but Google Calendar events are temporarily unavailable." });
+    setConnectedGoogleCalendarUi(" Inbound Google Calendar events are temporarily unavailable.");
   } else if (googleResult.result) {
     if (googleResult.result.connectionStatus === "connected") {
       googleEvents = Array.isArray(googleResult.result.events) ? googleResult.result.events : [];
-      setGoogleCalendarUi({
-        message: googleResult.result.truncated
-          ? "Connected. Showing the first 200 Google Calendar events for this month."
-          : "Connected. Google Calendar events are shown below.",
-      });
+      setConnectedGoogleCalendarUi(googleResult.result.truncated
+        ? " Showing the first 200 inbound Google Calendar events for this month."
+        : " Inbound Google Calendar events are shown below.");
     } else if (googleResult.result.connectionStatus === "reconnect_required") {
       googleConnectionStatus = "reconnect_required";
       setGoogleCalendarUi({ message: "Google Calendar needs to be connected again.", actionLabel: "Reconnect Google Calendar" });

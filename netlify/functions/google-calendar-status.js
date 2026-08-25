@@ -3,8 +3,8 @@
 const { FirebaseConfigError } = require("./lib/firebase-admin");
 const {
   GOOGLE_CALENDAR_CONNECTIONS_COLLECTION,
-  GOOGLE_CALENDAR_SCOPE,
-  encryptedTokenEnvelopeIsValid,
+  connectionCapability,
+  connectionIsUsable,
 } = require("./lib/google-calendar-oauth");
 const {
   jsonResponse,
@@ -19,18 +19,12 @@ function isoOrNull(value) {
 }
 
 function sanitizeConnection(snapshot) {
-  if (!snapshot || !snapshot.exists) return { connectionStatus: "disconnected" };
+  if (!snapshot || !snapshot.exists) return { connectionStatus: "disconnected", capabilityStatus: null };
   const data = snapshot.data() || {};
-  const scopes = Array.isArray(data.grantedScopes)
-    ? data.grantedScopes.filter((scope) => scope === GOOGLE_CALENDAR_SCOPE)
-    : [];
-  const usable = data.status === "connected"
-    && scopes.includes(GOOGLE_CALENDAR_SCOPE)
-    && encryptedTokenEnvelopeIsValid(data.encryptedRefreshToken)
-    && data.reconnectRequired !== true;
+  const usable = connectionIsUsable(data);
   return {
     connectionStatus: usable ? "connected" : "reconnect_required",
-    grantedScopes: scopes,
+    capabilityStatus: usable ? connectionCapability(data) : null,
     connectedAt: isoOrNull(data.connectedAt),
     updatedAt: isoOrNull(data.updatedAt),
   };

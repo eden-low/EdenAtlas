@@ -1,7 +1,7 @@
 const {
   GOOGLE_TOKEN_ENDPOINT,
-  GOOGLE_CALENDAR_SCOPE,
   normalizeGrantedScopes,
+  grantedCapability,
 } = require("./google-calendar-oauth");
 
 const GOOGLE_CALENDAR_EVENTS_ENDPOINT = "https://www.googleapis.com/calendar/v3/calendars/primary/events";
@@ -103,10 +103,8 @@ function parseEventsRequest(rawBody) {
   return { value: { start: start.value, end: end.value } };
 }
 
-function hasExactReadOnlyScope(scopes) {
-  if (!Array.isArray(scopes)) return false;
-  const normalized = normalizeGrantedScopes(scopes.filter((scope) => typeof scope === "string").join(" "));
-  return normalized.length === 1 && normalized[0] === GOOGLE_CALENDAR_SCOPE;
+function hasApprovedReadScopeSet(scopes) {
+  return grantedCapability(scopes) !== null;
 }
 
 function boundedString(value, maxLength) {
@@ -212,7 +210,7 @@ async function refreshGoogleAccessToken({ fetchImpl = fetch, config, refreshToke
   if (!accessToken || accessToken.length > 8192 || (payload.token_type && payload.token_type !== "Bearer")) {
     throw new GoogleCalendarReadError("calendar_invalid_response", 502);
   }
-  if (payload.scope && !hasExactReadOnlyScope(normalizeGrantedScopes(payload.scope))) {
+  if (payload.scope && !hasApprovedReadScopeSet(normalizeGrantedScopes(payload.scope))) {
     throw new GoogleCalendarReadError("unexpected_scope_set", 401, { reconnectRequired: true });
   }
   return accessToken;
@@ -303,7 +301,7 @@ module.exports = {
   GoogleCalendarReadError,
   parseRfc3339,
   parseEventsRequest,
-  hasExactReadOnlyScope,
+  hasApprovedReadScopeSet,
   normalizeGoogleEvent,
   refreshGoogleAccessToken,
   listPrimaryCalendarEvents,

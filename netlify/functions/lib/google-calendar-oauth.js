@@ -9,9 +9,16 @@ const crypto = require("node:crypto");
 const GOOGLE_AUTHORIZATION_ENDPOINT = "https://accounts.google.com/o/oauth2/v2/auth";
 const GOOGLE_TOKEN_ENDPOINT = "https://oauth2.googleapis.com/token";
 const GOOGLE_CALENDAR_SCOPE = "https://www.googleapis.com/auth/calendar.events.readonly";
+const GOOGLE_CALENDAR_APP_CREATED_SCOPE = "https://www.googleapis.com/auth/calendar.app.created";
+const GOOGLE_CALENDAR_READ_INTENT = "readonly_connect";
+const GOOGLE_CALENDAR_WRITE_INTENT = "write_upgrade";
+const GOOGLE_CALENDAR_CAPABILITY_READONLY = "readonly";
+const GOOGLE_CALENDAR_CAPABILITY_WRITE_CONSENT_REQUIRED = "write_consent_required";
+const GOOGLE_CALENDAR_CAPABILITY_WRITE_AUTHORIZED = "write_authorized";
+const GOOGLE_CALENDAR_OUTBOUND_POLICY = "edenatlas_app_created_secondary";
 const GOOGLE_CALENDAR_CONNECTIONS_COLLECTION = "google_calendar_connections";
 const GOOGLE_CALENDAR_OAUTH_STATES_COLLECTION = "google_calendar_oauth_states";
-const STATE_VERSION = 1;
+const STATE_VERSION = 2;
 const STATE_TTL_MS = 10 * 60 * 1000;
 const STATE_DELETE_AFTER_MS = 24 * 60 * 60 * 1000;
 const TOKEN_ENCRYPTION_VERSION = 1;
@@ -56,6 +63,34 @@ function validOpaqueState(value) {
   return typeof value === "string" && /^[A-Za-z0-9_-]{43}$/.test(value);
 }
 
+function scopesForAuthorizationIntent(authorizationIntent) {
+  if (authorizationIntent === GOOGLE_CALENDAR_READ_INTENT) return [GOOGLE_CALENDAR_SCOPE];
+  if (authorizationIntent === GOOGLE_CALENDAR_WRITE_INTENT) {
+    return [GOOGLE_CALENDAR_SCOPE, GOOGLE_CALENDAR_APP_CREATED_SCOPE];
+  }
+  throw new GoogleCalendarOAuthError("invalid_authorization_intent", 400);
+}
+
+function parseOAuthStartRequest(raw) {
+  if (raw == null || raw === "") return { value: { authorizationIntent: GOOGLE_CALENDAR_READ_INTENT } };
+  if (typeof raw !== "string" || Buffer.byteLength(raw, "utf8") > 256) {
+    return { error: "invalid_request_body" };
+  }
+  let body;
+  try {
+    body = JSON.parse(raw);
+  } catch {
+    return { error: "invalid_json" };
+  }
+  if (!body || typeof body !== "object" || Array.isArray(body)) return { error: "invalid_json" };
+  if (Object.keys(body).some((key) => key !== "action")) return { error: "unknown_field" };
+  if (!Object.prototype.hasOwnProperty.call(body, "action")) {
+    return { value: { authorizationIntent: GOOGLE_CALENDAR_READ_INTENT } };
+  }
+  if (body.action !== "enable_sync") return { error: "invalid_authorization_action" };
+  return { value: { authorizationIntent: GOOGLE_CALENDAR_WRITE_INTENT } };
+}
+
 function toDate(value) {
   if (value instanceof Date) return value;
   if (value && typeof value.toDate === "function") return value.toDate();
@@ -84,6 +119,7 @@ function stateBindingPayload(record, stateHash) {
     record.uid,
     record.environment,
     record.redirectUri,
+    record.authorizationIntent,
     toDate(record.createdAt).toISOString(),
     toDate(record.expiresAt).toISOString(),
   ]);
@@ -103,7 +139,15 @@ function safeEqualText(left, right) {
   return a.length === b.length && crypto.timingSafeEqual(a, b);
 }
 
-function createOAuthState({ uid, environment, redirectUri, masterKeyRaw, now = new Date(), randomBytesImpl = crypto.randomBytes }) {
+function createOAuthState({
+  uid,
+  environment,
+  redirectUri,
+  authorizationIntent,
+  masterKeyRaw,
+  now = new Date(),
+  randomBytesImpl = crypto.randomBytes,
+}) {
   if (typeof uid !== "string" || !uid || uid.length > 128) {
     throw new GoogleCalendarOAuthError("invalid_uid", 500);
   }
@@ -111,6 +155,7 @@ function createOAuthState({ uid, environment, redirectUri, masterKeyRaw, now = n
     throw new GoogleCalendarOAuthError("invalid_environment", 500);
   }
   const exactRedirectUri = validateHttpsOrLocalRedirect(redirectUri);
+  scopesForAuthorizationIntent(authorizationIntent);
   const masterKey = parseMasterKey(masterKeyRaw);
   const createdAt = toDate(now);
   if (!Number.isFinite(createdAt.getTime())) throw new GoogleCalendarOAuthError("invalid_server_time", 500);
@@ -126,6 +171,7 @@ function createOAuthState({ uid, environment, redirectUri, masterKeyRaw, now = n
     uid,
     environment,
     redirectUri: exactRedirectUri,
+    authorizationIntent,
     createdAt,
     expiresAt: new Date(createdAt.getTime() + STATE_TTL_MS),
     deleteAfter: new Date(createdAt.getTime() + STATE_DELETE_AFTER_MS),
@@ -146,6 +192,7 @@ function verifyOAuthStateRecord({ state, record, expectedEnvironment, expectedRe
       || typeof record.uid !== "string" || !record.uid
       || typeof record.environment !== "string"
       || typeof record.redirectUri !== "string"
+      || ![GOOGLE_CALENDAR_READ_INTENT, GOOGLE_CALENDAR_WRITE_INTENT].includes(record.authorizationIntent)
       || !Number.isFinite(createdAt.getTime())
       || !Number.isFinite(expiresAt.getTime())
       || !Number.isFinite(currentTime.getTime())) {
@@ -175,7 +222,7 @@ function verifyOAuthStateRecord({ state, record, expectedEnvironment, expectedRe
   if (expiresAt.getTime() <= currentTime.getTime()) {
     throw new GoogleCalendarOAuthError("oauth_state_expired");
   }
-  return { uid: record.uid, stateHash };
+  return { uid: record.uid, stateHash, authorizationIntent: record.authorizationIntent };
 }
 
 async function consumeOAuthState({ db, state, expectedEnvironment, expectedRedirectUri, masterKeyRaw, now = new Date() }) {
@@ -198,7 +245,7 @@ async function consumeOAuthState({ db, state, expectedEnvironment, expectedRedir
   });
 }
 
-function buildAuthorizationUrl({ clientId, redirectUri, state }) {
+function buildAuthorizationUrl({ clientId, redirectUri, state, authorizationIntent }) {
   if (typeof clientId !== "string" || !clientId.trim() || !validOpaqueState(state)) {
     throw new GoogleCalendarOAuthError("oauth_not_configured", 500);
   }
@@ -206,7 +253,7 @@ function buildAuthorizationUrl({ clientId, redirectUri, state }) {
   url.searchParams.set("client_id", clientId.trim());
   url.searchParams.set("redirect_uri", validateHttpsOrLocalRedirect(redirectUri));
   url.searchParams.set("response_type", "code");
-  url.searchParams.set("scope", GOOGLE_CALENDAR_SCOPE);
+  url.searchParams.set("scope", scopesForAuthorizationIntent(authorizationIntent).join(" "));
   url.searchParams.set("access_type", "offline");
   url.searchParams.set("include_granted_scopes", "true");
   url.searchParams.set("prompt", "consent");
@@ -218,7 +265,54 @@ function normalizeGrantedScopes(raw) {
   return [...new Set(String(raw || "").split(/\s+/).filter(Boolean))].sort();
 }
 
-async function exchangeAuthorizationCode({ fetchImpl = fetch, clientId, clientSecret, redirectUri, code }) {
+function grantedCapability(scopes) {
+  if (!Array.isArray(scopes) || scopes.some((scope) => typeof scope !== "string")) return null;
+  const normalized = normalizeGrantedScopes(scopes.join(" "));
+  const readonly = normalizeGrantedScopes(GOOGLE_CALENDAR_SCOPE);
+  const writeAuthorized = normalizeGrantedScopes(`${GOOGLE_CALENDAR_SCOPE} ${GOOGLE_CALENDAR_APP_CREATED_SCOPE}`);
+  if (normalized.length === readonly.length && normalized.every((scope, index) => scope === readonly[index])) {
+    return GOOGLE_CALENDAR_CAPABILITY_READONLY;
+  }
+  if (normalized.length === writeAuthorized.length
+      && normalized.every((scope, index) => scope === writeAuthorized[index])) {
+    return GOOGLE_CALENDAR_CAPABILITY_WRITE_AUTHORIZED;
+  }
+  return null;
+}
+
+function connectionCapability(connection) {
+  const granted = grantedCapability(connection && connection.grantedScopes);
+  if (!granted) return null;
+  const stored = connection && connection.capabilityStatus;
+  if (granted === GOOGLE_CALENDAR_CAPABILITY_WRITE_AUTHORIZED) {
+    return stored == null || stored === GOOGLE_CALENDAR_CAPABILITY_WRITE_AUTHORIZED
+      ? GOOGLE_CALENDAR_CAPABILITY_WRITE_AUTHORIZED
+      : null;
+  }
+  if (stored == null || stored === GOOGLE_CALENDAR_CAPABILITY_READONLY) {
+    return GOOGLE_CALENDAR_CAPABILITY_READONLY;
+  }
+  return stored === GOOGLE_CALENDAR_CAPABILITY_WRITE_CONSENT_REQUIRED
+    ? GOOGLE_CALENDAR_CAPABILITY_WRITE_CONSENT_REQUIRED
+    : null;
+}
+
+function connectionIsUsable(connection) {
+  return !!connection
+    && connection.status === "connected"
+    && connection.reconnectRequired !== true
+    && encryptedTokenEnvelopeIsValid(connection.encryptedRefreshToken)
+    && connectionCapability(connection) !== null;
+}
+
+async function exchangeAuthorizationCode({
+  fetchImpl = fetch,
+  clientId,
+  clientSecret,
+  redirectUri,
+  code,
+  authorizationIntent,
+}) {
   if (typeof code !== "string" || !code || code.length > 4096) {
     throw new GoogleCalendarOAuthError("authorization_code_invalid");
   }
@@ -250,10 +344,15 @@ async function exchangeAuthorizationCode({ fetchImpl = fetch, clientId, clientSe
   const refreshToken = typeof payload.refresh_token === "string" ? payload.refresh_token : "";
   const grantedScopes = normalizeGrantedScopes(payload.scope);
   if (!refreshToken) throw new GoogleCalendarOAuthError("refresh_token_missing", 502);
-  if (!grantedScopes.includes(GOOGLE_CALENDAR_SCOPE)) {
+  const requiredScopes = scopesForAuthorizationIntent(authorizationIntent);
+  const capability = grantedCapability(grantedScopes);
+  const expectedCapability = authorizationIntent === GOOGLE_CALENDAR_WRITE_INTENT
+    ? GOOGLE_CALENDAR_CAPABILITY_WRITE_AUTHORIZED
+    : GOOGLE_CALENDAR_CAPABILITY_READONLY;
+  if (capability !== expectedCapability || requiredScopes.some((scope) => !grantedScopes.includes(scope))) {
     throw new GoogleCalendarOAuthError("required_scope_not_granted", 403);
   }
-  return { refreshToken, grantedScopes };
+  return { refreshToken, grantedScopes, capability };
 }
 
 async function revokeOAuthToken({ fetchImpl = fetch, token }) {
@@ -340,6 +439,13 @@ module.exports = {
   GOOGLE_AUTHORIZATION_ENDPOINT,
   GOOGLE_TOKEN_ENDPOINT,
   GOOGLE_CALENDAR_SCOPE,
+  GOOGLE_CALENDAR_APP_CREATED_SCOPE,
+  GOOGLE_CALENDAR_READ_INTENT,
+  GOOGLE_CALENDAR_WRITE_INTENT,
+  GOOGLE_CALENDAR_CAPABILITY_READONLY,
+  GOOGLE_CALENDAR_CAPABILITY_WRITE_CONSENT_REQUIRED,
+  GOOGLE_CALENDAR_CAPABILITY_WRITE_AUTHORIZED,
+  GOOGLE_CALENDAR_OUTBOUND_POLICY,
   GOOGLE_CALENDAR_CONNECTIONS_COLLECTION,
   GOOGLE_CALENDAR_OAUTH_STATES_COLLECTION,
   STATE_TTL_MS,
@@ -349,12 +455,17 @@ module.exports = {
   verifyOAuthStateRecord,
   consumeOAuthState,
   buildAuthorizationUrl,
+  parseOAuthStartRequest,
+  scopesForAuthorizationIntent,
   exchangeAuthorizationCode,
   revokeOAuthToken,
   encryptRefreshToken,
   decryptRefreshToken,
   encryptedTokenEnvelopeIsValid,
   normalizeGrantedScopes,
+  grantedCapability,
+  connectionCapability,
+  connectionIsUsable,
   parseMasterKey,
   sha256Hex,
   validateHttpsOrLocalRedirect,
