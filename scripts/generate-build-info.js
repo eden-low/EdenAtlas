@@ -24,7 +24,7 @@ const fs = require("fs");
 const path = require("path");
 
 const ROOT = path.resolve(__dirname, "..");
-const OUT_PATH = path.join(ROOT, "js", "build-info.generated.js");
+const OUT_PATH = path.join(ROOT, "frontend", "js", "build-info.generated.js");
 // Gap 2 fix: js/fcm-config.generated.js — a SEPARATE output file, deliberately a plain classic
 // script setting `self.__EDEN_FCM_CONFIG__` (not `window.__EDEN_FCM_CONFIG__`) so the EXACT SAME
 // generated file can be `importScripts()`-ed synchronously by service-worker.js (a worker has no
@@ -34,7 +34,7 @@ const OUT_PATH = path.join(ROOT, "js", "build-info.generated.js");
 // is this build using" — duplicating that decision into a second, independent resolver risked the
 // two disagreeing (e.g. one correctly picking Staging, the other silently falling back to
 // Production) with no test able to catch the drift.
-const FCM_CONFIG_OUT_PATH = path.join(ROOT, "js", "fcm-config.generated.js");
+const FCM_CONFIG_OUT_PATH = path.join(ROOT, "frontend", "js", "fcm-config.generated.js");
 
 function rawOrNull(value) {
   return typeof value === "string" && value.trim() !== "" ? value.trim() : null;
@@ -42,7 +42,7 @@ function rawOrNull(value) {
 
 // Duplicated from firebase-init.js on purpose (same "public client config, safe to duplicate at a
 // runtime boundary that can't import a browser ES module" convention already used for
-// PRODUCTION_PROJECT_ID in netlify/functions/lib/firebase-admin.js) — this script runs under
+// PRODUCTION_PROJECT_ID in backend/netlify/functions/lib/firebase-admin.js) — this script runs under
 // plain Node at build time and can't `import` firebase-init.js's ES module either.
 const PRODUCTION_FIREBASE_CONFIG = {
   apiKey: "AIzaSyBLJmKmn4Nwc2Ad3CG_KoPAn96HSfuvvU8",
@@ -76,7 +76,7 @@ function readStagingFirebaseConfig() {
 
 // Deploy-context policy fix: broadened from "only the literal `staging` branch" to EVERY
 // pre-production context (any Deploy Preview, any branch deploy) — mirrors js/environment.js's
-// isPreProduction() and netlify/functions/lib/firebase-admin.js's resolveDeployRole() exactly, so
+// isPreProduction() and backend/netlify/functions/lib/firebase-admin.js's resolveDeployRole() exactly, so
 // the browser's push-notification config can never disagree with the rest of the app's deploy-
 // context classification. An earlier version of this function only recognized the literal
 // `staging` branch, which left every OTHER Deploy Preview/branch deploy silently using

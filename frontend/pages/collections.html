@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<script src="js/build-info.generated.js"></script>
+  <script>(function(){try{var s=JSON.parse(localStorage.getItem('lfj:settings')||'{}');if(s.theme==='light')document.documentElement.setAttribute('data-theme','light');}catch(e){}})();</script>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Collections | EdenAtlas</title>
+  <link rel="stylesheet" href="tailwind.generated.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
+  <link rel="stylesheet" href="styles.css" />
+  <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" content="#09090e">
+  <script>try{if(JSON.parse(localStorage.getItem('lfj:settings')||'{}').theme==='light')document.querySelector('meta[name="theme-color"]').setAttribute('content','#f5f5f7');}catch(e){}</script>
+  <link rel="apple-touch-icon" href="images/icon-192.png">
+  <link rel="icon" type="image/png" sizes="192x192" href="images/icon-192.png">
+</head>
+<body class="auth-check-pending bg-darkBg text-white font-sans grid-bg min-h-screen pb-12">
+  <header class="hidden max-w-7xl mx-auto px-4 pt-6">
+    <div class="bg-cardBg/80 backdrop-blur-md neon-border-purple rounded-2xl px-6 py-4 flex flex-col md:flex-row items-center justify-between gap-4">
+      <div class="flex items-center gap-3">
+        <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-neonViolet to-neonPurple flex items-center justify-center shadow-lg shadow-neonPurple/20">
+          <i class="fa-solid fa-circle-user text-white text-lg animate-pulse"></i>
+        </div>
+        <div>
+          <span class="font-cyber font-semibold text-lg tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-white to-neonPurple">EdenAtlas</span>
+          <span class="text-[10px] block text-neonPurple font-code font-bold tracking-widest -mt-1">DIGITAL ATLAS</span>
+        </div>
+      </div>
+      <nav class="flex-1 min-w-0 flex flex-wrap items-center justify-center gap-x-4 gap-y-2 text-sm font-cyber font-semibold tracking-wider text-textGray">
+        <a href="home.html" class="hover:text-neonPurple transition-colors flex items-center gap-1.5"><i class="fa-solid fa-house text-xs"></i> <span data-i18n="nav.home">Home</span></a>
+        <a href="atlas.html" class="hover:text-neonPurple transition-colors flex items-center gap-1.5"><i class="fa-solid fa-map-location-dot text-xs"></i> <span data-i18n="nav.atlas">Atlas</span></a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="max-w-5xl mx-auto px-4 mt-8 space-y-6">
+    <section class="reveal bg-cardBg/90 neon-border-purple rounded-2xl p-6">
+      <div class="flex flex-col md:flex-row md:items-start md:justify-between gap-4">
+        <div>
+          <a href="atlas.html" class="text-xs font-code text-textGray hover:text-white transition-colors"><i class="fa-solid fa-arrow-left mr-1.5"></i><span data-i18n="collections.back_to_atlas">Back to Atlas</span></a>
+          <h1 class="font-cyber font-semibold text-2xl mt-2" data-i18n="collections.title">Collections</h1>
+          <p class="text-textGray mt-2 text-sm" data-i18n="collections.subtitle">Life chapters that group your Memories, Journal, Finance, Journey, and Career records together.</p>
+        </div>
+        <div id="auth-control" class="flex items-center gap-3"></div>
+      </div>
+      <p id="collections-access-note" class="hidden mt-4 text-xs font-code text-amber-400 bg-amber-500/10 border border-amber-500/20 rounded-xl px-4 py-2">
+        <i class="fa-solid fa-lock mr-1.5"></i> Signed in, but this account isn't on the private access list.
+      </p>
+    </section>
+
+    <section class="reveal flex items-center justify-end">
+      <button id="new-collection-btn" class="hidden px-4 py-2 bg-gradient-to-r from-neonViolet to-neonPurple rounded-xl text-xs font-cyber font-bold tracking-wider text-white hover:scale-105 transition-all whitespace-nowrap">
+        <i class="fa-solid fa-plus mr-1.5"></i> <span data-i18n="collections.new">NEW COLLECTION</span>
+      </button>
+    </section>
+
+    <div id="collections-grid" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+      <div class="skeleton h-40 rounded-2xl"></div>
+      <div class="skeleton h-40 rounded-2xl"></div>
+      <div class="skeleton h-40 rounded-2xl"></div>
+    </div>
+    <p id="collections-empty" class="hidden text-center text-xs font-code text-textGray py-10" data-i18n="collections.no_collections">Every chapter begins with one memory.</p>
+  </main>
+
+  <!-- New/Edit Collection modal -->
+  <div id="collection-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4 overflow-y-auto">
+    <div id="collection-modal-backdrop" class="absolute inset-0 bg-darkBg/80 backdrop-blur-sm"></div>
+    <div class="relative w-full max-w-lg bg-cardBg neon-border-purple rounded-2xl p-6 my-8">
+      <div class="flex items-center justify-between mb-4">
+        <h2 id="collection-modal-title" class="font-cyber font-semibold text-lg">New Collection</h2>
+        <button id="collection-modal-close" class="text-textGray hover:text-white text-xl leading-none">&times;</button>
+      </div>
+      <form id="collection-form" class="space-y-4">
+        <input type="hidden" id="collection-form-id">
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block text-xs font-code text-textGray mb-1.5" for="collection-title-en">Title (English)</label>
+            <input id="collection-title-en" type="text" required placeholder="Japan Trip" class="w-full bg-darkBg/60 border border-borderNeon rounded-lg px-3 py-2 text-sm text-white placeholder:text-textGray/60">
+          </div>
+          <div>
+            <label class="block text-xs font-code text-textGray mb-1.5" for="collection-title-zh">Title (Chinese)</label>
+            <input id="collection-title-zh" type="text" placeholder="日本之旅" class="w-full bg-darkBg/60 border border-borderNeon rounded-lg px-3 py-2 text-sm text-white placeholder:text-textGray/60">
+          </div>
+        </div>
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block text-xs font-code text-textGray mb-1.5" for="collection-description-en">Description (English)</label>
+            <textarea id="collection-description-en" rows="2" class="w-full bg-darkBg/60 border border-borderNeon rounded-lg px-3 py-2 text-sm text-white"></textarea>
+          </div>
+          <div>
+            <label class="block text-xs font-code text-textGray mb-1.5" for="collection-description-zh">Description (Chinese)</label>
+            <textarea id="collection-description-zh" rows="2" class="w-full bg-darkBg/60 border border-borderNeon rounded-lg px-3 py-2 text-sm text-white"></textarea>
+          </div>
+        </div>
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block text-xs font-code text-textGray mb-1.5" for="collection-icon">Icon (Lucide name)</label>
+            <input id="collection-icon" type="text" placeholder="plane, briefcase, heart..." class="w-full bg-darkBg/60 border border-borderNeon rounded-lg px-3 py-2 text-sm text-white placeholder:text-textGray/60">
+          </div>
+          <div>
+            <label class="block text-xs font-code text-textGray mb-1.5">Color</label>
+            <div id="collection-color-swatches" class="flex items-center gap-2 flex-wrap">
+              <input type="hidden" id="collection-color" value="#a78bfa">
+              <button type="button" data-color="#a78bfa" class="color-swatch w-7 h-7 rounded-full border-2 border-white/40" style="background:#a78bfa"></button>
+              <button type="button" data-color="#6ea8fe" class="color-swatch w-7 h-7 rounded-full border-2 border-transparent" style="background:#6ea8fe"></button>
+              <button type="button" data-color="#fbbf24" class="color-swatch w-7 h-7 rounded-full border-2 border-transparent" style="background:#fbbf24"></button>
+              <button type="button" data-color="#34d399" class="color-swatch w-7 h-7 rounded-full border-2 border-transparent" style="background:#34d399"></button>
+              <button type="button" data-color="#fb7185" class="color-swatch w-7 h-7 rounded-full border-2 border-transparent" style="background:#fb7185"></button>
+            </div>
+          </div>
+        </div>
+        <div>
+          <label class="block text-xs font-code text-textGray mb-1.5" for="collection-cover-url">Cover image URL <span class="text-textGray/60">(optional)</span></label>
+          <input id="collection-cover-url" type="url" placeholder="https://..." class="w-full bg-darkBg/60 border border-borderNeon rounded-lg px-3 py-2 text-sm text-white placeholder:text-textGray/60">
+          <button type="button" id="collection-pick-cover-btn" class="mt-2 text-[11px] font-code text-neonPurple hover:underline">Choose from my Memories</button>
+          <div id="collection-cover-picker" class="hidden mt-2 grid grid-cols-5 gap-1.5 max-h-40 overflow-y-auto"></div>
+        </div>
+        <div>
+          <label class="block text-xs font-code text-textGray mb-1.5" for="collection-notes">Reflection / Notes <span class="text-textGray/60">(optional)</span></label>
+          <textarea id="collection-notes" rows="3" class="w-full bg-darkBg/60 border border-borderNeon rounded-lg px-3 py-2 text-sm text-white"></textarea>
+        </div>
+        <div class="flex items-center gap-4 text-xs font-code text-textGray">
+          <label class="flex items-center gap-1.5"><input type="radio" name="collection-visibility" value="public" checked> <span data-i18n="common.public">Public</span></label>
+          <label class="flex items-center gap-1.5"><input type="radio" name="collection-visibility" value="connections"> <span data-i18n="common.connections">Connections</span></label>
+          <label class="flex items-center gap-1.5"><input type="radio" name="collection-visibility" value="private"> <span data-i18n="common.private">Private</span></label>
+        </div>
+        <button type="submit" class="w-full px-5 py-2.5 bg-gradient-to-r from-neonViolet to-neonPurple rounded-xl text-xs font-cyber font-bold tracking-wider text-white hover:scale-105 transition-all">
+          SAVE
+        </button>
+        <p id="collection-status" class="text-xs font-code text-textGray text-center"></p>
+      </form>
+    </div>
+  </div>
+
+  <script type="module" src="js/splash.js"></script>
+    <script type="module" src="js/i18n.js"></script>
+  <footer class="max-w-7xl mx-auto px-4 mt-10 pb-6 text-center">
+    <p class="text-[11px] font-code text-textGray/70" data-i18n="footer.line">EdenAtlas &middot; by Jun &middot; Version 3.2</p>
+  </footer>
+
+  <script src="js/scripts.js" defer></script>
+  <script type="module" src="js/auth-guard.js"></script>
+    <script type="module" src="js/global-search.js"></script>
+    <script type="module" src="js/mobile-nav.js"></script>
+    <script type="module" src="js/sidebar.js"></script>
+  <script type="module" src="js/collections.js"></script>
+</body>
+</html>

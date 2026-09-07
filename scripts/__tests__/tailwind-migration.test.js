@@ -1,6 +1,6 @@
 // Deterministic checks for the Tailwind local build migration (Production Hardening Phase 2).
 // No test framework, no network access beyond what an already-installed local devDependency
-// needs — mirrors netlify/functions/__tests__/weather.test.js's plain test(name, fn) +
+// needs — mirrors backend/netlify/functions/__tests__/weather.test.js's plain test(name, fn) +
 // pass/fail-tally style (an async run() function called fire-and-forget at the very end, never
 // a true top-level await, so this file stays unambiguously CommonJS under this repo's root
 // package.json, which has no "type" field). Run with:
@@ -46,7 +46,9 @@ const CONVERTED_PAGES = [
   "notifications.html", "profile.html", "gallery.html", "journal.html", "dashboard.html",
   "expenses.html", "constellation.html", "contact.html", "collections.html", "calendar.html",
   "atlas.html", "me.html", "collection-detail.html", "migrate-career.html",
-];
+].map((name) => name === "migrate-career.html"
+  ? path.join("scripts", name)
+  : path.join("frontend", "pages", name));
 
 async function run() {
   // --- Ensure build artifacts exist before asserting against them (see header comment) ---
@@ -57,18 +59,20 @@ async function run() {
     execSync("node scripts/build-site.js", { cwd: ROOT, stdio: "pipe" });
   }
 
-  const allTrackedHtml = fs.readdirSync(ROOT).filter((f) => f.endsWith(".html"));
+  const allTrackedHtml = fs.readdirSync(path.join(ROOT, "frontend", "pages"))
+    .filter((f) => f.endsWith(".html"))
+    .map((name) => path.join("frontend", "pages", name));
 
   await test("exactly 25 pages are in the approved conversion scope", () => {
     assert.strictEqual(CONVERTED_PAGES.length, 25);
   });
 
-  await test("no HTML file (repo root) contains cdn.tailwindcss.com", () => {
+  await test("no product HTML source contains cdn.tailwindcss.com", () => {
     const offenders = allTrackedHtml.filter((f) => read(f).includes("cdn.tailwindcss.com"));
     assert.deepStrictEqual(offenders, []);
   });
 
-  await test("no HTML file (repo root) contains an inline tailwind.config assignment", () => {
+  await test("no product HTML source contains an inline tailwind.config assignment", () => {
     const offenders = allTrackedHtml.filter((f) => /tailwind\.config\s*=/.test(read(f)));
     assert.deepStrictEqual(offenders, []);
   });
@@ -78,19 +82,22 @@ async function run() {
       const html = read(page);
       const matches = html.match(/tailwind\.generated\.css/g) || [];
       assert.strictEqual(matches.length, 1, `${page} has ${matches.length} tailwind.generated.css references, expected 1`);
-      assert.match(html, /<link rel="stylesheet" href="tailwind\.generated\.css">/, `${page} is missing the expected <link> tag shape`);
+      const href = page === path.join("scripts", "migrate-career.html")
+        ? "../tailwind.generated.css"
+        : "tailwind.generated.css";
+      assert.ok(html.includes(`<link rel="stylesheet" href="${href}">`), `${page} is missing the expected <link> tag shape`);
     }
   });
 
   await test("portfolio.html (redirect stub) does not link tailwind.generated.css", () => {
-    const html = read("portfolio.html");
+    const html = read(path.join("frontend", "pages", "portfolio.html"));
     assert.ok(!html.includes("tailwind.generated.css"));
     assert.ok(!html.includes("cdn.tailwindcss.com"));
     assert.ok(!/tailwind\.config\s*=/.test(html));
   });
 
   await test("home.html's stylesheet order is normalized: tailwind.generated.css before styles.css", () => {
-    const html = read("home.html");
+    const html = read(path.join("frontend", "pages", "home.html"));
     const genIdx = html.indexOf("tailwind.generated.css");
     const stylesIdx = html.indexOf('href="styles.css"');
     assert.ok(genIdx !== -1 && stylesIdx !== -1 && genIdx < stylesIdx);
@@ -120,10 +127,9 @@ async function run() {
     requiredColors.forEach((token) => assert.ok(code.includes(token), `missing color token ${token}`));
     requiredHex.forEach((hex) => assert.ok(code.includes(hex), `missing hex value ${hex}`));
     ["cyber", "code", "sans"].forEach((font) => assert.ok(code.includes(`${font}:`), `missing fontFamily key ${font}`));
-    assert.ok(code.includes('"./*.html"'));
-    assert.ok(code.includes('"./*.js"'));
-    assert.ok(code.includes('"./js/**/*.js"'));
-    assert.ok(code.includes('"!./js/**/__tests__/**"'));
+    assert.ok(code.includes('"./frontend/pages/**/*.html"'));
+    assert.ok(code.includes('"./frontend/js/**/*.js"'));
+    assert.ok(code.includes('"!./frontend/js/**/__tests__/**"'));
     assert.ok(!/darkMode\s*:/.test(code), "darkMode key must not be set");
     assert.ok(!/safelist\s*:/.test(code), "safelist key must not be present");
     assert.ok(!/plugins\s*:/.test(code), "plugins must not be present");
@@ -136,7 +142,7 @@ async function run() {
     // platform-specific working-tree line ending is a checkout artifact, not a real content
     // difference, and must never fail this check. Still asserts the exact three directives, in
     // the exact order, with no extra content — CRLF/CR normalization only, no other leniency.
-    const raw = read("tailwind-input.css");
+    const raw = read(path.join("frontend", "styles", "tailwind-input.css"));
     const normalized = raw.replace(/\r\n?/g, "\n").trim();
     assert.strictEqual(normalized, "@tailwind base;\n@tailwind components;\n@tailwind utilities;");
   });
@@ -159,12 +165,12 @@ async function run() {
     assert.ok(css.includes("text-\\[10px\\]") || /text-\\\[\d+px\\\]/.test(css), "no arbitrary-value text utility found in compiled CSS");
   });
 
-  await test("scripts/build-site.js explicitly allowlists tailwind.generated.css", () => {
+  await test("scripts/build-site.js explicitly maps tailwind.generated.css to the public root", () => {
     const src = read(path.join("scripts", "build-site.js"));
-    assert.ok(/["']tailwind\.generated\.css["']/.test(src));
-    const copiedSection = src.split("NOT copied")[0] || "";
-    assert.ok(!/["']tailwind\.config\.js["']/.test(copiedSection), "tailwind.config.js must not appear in the copied allowlist section");
-    assert.ok(!/["']tailwind-input\.css["']/.test(copiedSection), "tailwind-input.css must not appear in the copied allowlist section");
+    assert.ok(/source:\s*["']tailwind\.generated\.css["'],\s*target:\s*["']tailwind\.generated\.css["']/.test(src));
+    const mappingSection = src.slice(src.indexOf("const SOURCE_FILE_MAPPINGS"), src.indexOf("function rmrf"));
+    assert.ok(!/source:.*tailwind\.config\.js/.test(mappingSection), "tailwind.config.js must not appear in the public mappings");
+    assert.ok(!/source:.*tailwind-input\.css/.test(mappingSection), "tailwind-input.css must not appear in the public mappings");
   });
 
   await test("site/tailwind.generated.css exists after the full build", () => {
@@ -174,7 +180,7 @@ async function run() {
 
   await test("site/ excludes Tailwind source, package files, tests, and build scripts", () => {
     const excluded = [
-      "tailwind.config.js", "tailwind-input.css", "package.json", "package-lock.json",
+      "tailwind.config.js", path.join("frontend", "styles", "tailwind-input.css"), "package.json", "package-lock.json",
       path.join("scripts", "build-site.js"),
       path.join("scripts", "__tests__", "tailwind-migration.test.js"),
     ];
@@ -186,7 +192,7 @@ async function run() {
   });
 
   await test("service-worker.js PRECACHE includes tailwind.generated.css", () => {
-    const sw = read("service-worker.js");
+    const sw = read(path.join("frontend", "service-worker.js"));
     const precacheBlock = sw.slice(sw.indexOf("const PRECACHE"), sw.indexOf("const BYPASS_HOSTS"));
     assert.ok(precacheBlock.includes('"tailwind.generated.css"'));
   });
@@ -195,21 +201,21 @@ async function run() {
     // Exact-pinned to v30 through the Tailwind migration pass itself; a later, unrelated pass
     // (e.g. the Recent Memories invisible-click-target fix) is expected to bump this further —
     // this test only needs to confirm the migration's own bump was never silently reverted.
-    const sw = read("service-worker.js");
+    const sw = read(path.join("frontend", "service-worker.js"));
     const match = sw.match(/const CACHE = "eden-shell-v(\d+)";/);
     assert.ok(match, "service-worker.js is missing the expected CACHE = \"eden-shell-vN\" line");
     assert.ok(Number(match[1]) >= 30, `expected eden-shell-v30 or later, got eden-shell-v${match[1]}`);
   });
 
   await test("cdn.tailwindcss.com is absent from service-worker.js BYPASS_HOSTS", () => {
-    const sw = read("service-worker.js");
+    const sw = read(path.join("frontend", "service-worker.js"));
     const bypassStart = sw.indexOf("const BYPASS_HOSTS");
     const bypassBlock = sw.slice(bypassStart, bypassStart + 400);
     assert.ok(!bypassBlock.includes("cdn.tailwindcss.com"));
   });
 
   await test("service-worker.js still bypasses every other pre-existing host/path", () => {
-    const sw = read("service-worker.js");
+    const sw = read(path.join("frontend", "service-worker.js"));
     ["gstatic.com", "googleapis.com", "firebaseapp.com", "openweathermap.org", "cdnjs.cloudflare.com", "cdn.jsdelivr.net", "unpkg.com", "aliyuncs.com"].forEach((host) => {
       assert.ok(sw.includes(host), `missing pre-existing bypass host: ${host}`);
     });
@@ -239,8 +245,8 @@ async function run() {
       pkg.scripts.build,
       "npm run build:css && node scripts/generate-deploy-origin.js && node scripts/generate-function-context.js && node scripts/generate-build-info.js && node scripts/build-site.js"
     );
-    assert.strictEqual(pkg.scripts["build:css"], "tailwindcss -c tailwind.config.js -i ./tailwind-input.css -o ./tailwind.generated.css --minify");
-    assert.strictEqual(pkg.scripts["watch:css"], "tailwindcss -c tailwind.config.js -i ./tailwind-input.css -o ./tailwind.generated.css --watch");
+    assert.strictEqual(pkg.scripts["build:css"], "tailwindcss -c tailwind.config.js -i ./frontend/styles/tailwind-input.css -o ./tailwind.generated.css --minify");
+    assert.strictEqual(pkg.scripts["watch:css"], "tailwindcss -c tailwind.config.js -i ./frontend/styles/tailwind-input.css -o ./tailwind.generated.css --watch");
     assert.strictEqual(pkg.scripts["generate:deploy-origin"], "node scripts/generate-deploy-origin.js");
     assert.strictEqual(pkg.scripts["generate:function-context"], "node scripts/generate-function-context.js");
     assert.strictEqual(pkg.scripts["generate:build-info"], "node scripts/generate-build-info.js");
@@ -249,7 +255,7 @@ async function run() {
   await test("existing test scripts (test:functions, test:frontend, test) still run every prior suite", () => {
     // Structural check (split each npm script on "&&" into its individual commands), not a
     // fragile whole-string equality or a loose "contains somewhere" regex: test:frontend
-    // legitimately grew a new, ADDITIONAL entry (js/__tests__/home-recent-memories.test.js, the
+    // legitimately grew a new, ADDITIONAL entry (frontend/js/__tests__/home-recent-memories.test.js, the
     // Recent Memories invisible-click-target regression fix) after this migration pass, but every
     // command that ran before this pass must still be present, unmodified, and in its original
     // relative order — this is a strict superset check, not a loosened one.
@@ -261,11 +267,11 @@ async function run() {
     // (Discover AI — Qwen Chinese translation + "For You" recommendations) is the new addition on
     // top — never a silent removal disguised as a reorder.
     const priorFunctionsCmds = [
-      "node netlify/functions/__tests__/assistant.test.js",
-      "node netlify/functions/__tests__/weather.test.js",
-      "node netlify/functions/__tests__/anilist.test.js",
-      "node netlify/functions/__tests__/discover-ai.test.js",
-      "node netlify/functions/__tests__/anime-airing-check.test.js",
+      "node backend/netlify/functions/__tests__/assistant.test.js",
+      "node backend/netlify/functions/__tests__/weather.test.js",
+      "node backend/netlify/functions/__tests__/anilist.test.js",
+      "node backend/netlify/functions/__tests__/discover-ai.test.js",
+      "node backend/netlify/functions/__tests__/anime-airing-check.test.js",
     ];
     let functionsCursor = 0;
     priorFunctionsCmds.forEach((cmd) => {
@@ -279,21 +285,18 @@ async function run() {
     // buildContext wiring proof) after it — an insertion in the middle, not just an append, so
     // this is checked by exact array equality rather than the ordered-subsequence check above.
     assert.deepStrictEqual(functionsCmds, [
-      "node netlify/functions/__tests__/assistant.test.js",
-      "node netlify/functions/__tests__/atlas-context.test.js",
-      "node netlify/functions/__tests__/atlas-retrieval.test.js",
-      "node netlify/functions/__tests__/weather.test.js",
-      "node netlify/functions/__tests__/anilist.test.js",
-      "node netlify/functions/__tests__/discover-ai.test.js",
-      "node netlify/functions/__tests__/expense-receipt-validation.test.js",
-      "node netlify/functions/__tests__/qwen-vision.test.js",
-      "node netlify/functions/__tests__/expense-receipt-ai.test.js",
-      "node netlify/functions/__tests__/google-calendar-oauth.test.js",
-      "node netlify/functions/__tests__/google-calendar-functions.test.js",
-      "node netlify/functions/__tests__/google-calendar-events.test.js",
-      "node netlify/functions/__tests__/airing-check-core.test.js",
-      "node netlify/functions/__tests__/anime-airing-check.test.js",
-      "node netlify/functions/__tests__/staging-isolation-wiring.test.js",
+      "node backend/netlify/functions/__tests__/assistant.test.js",
+      "node backend/netlify/functions/__tests__/atlas-context.test.js",
+      "node backend/netlify/functions/__tests__/atlas-retrieval.test.js",
+      "node backend/netlify/functions/__tests__/weather.test.js",
+      "node backend/netlify/functions/__tests__/anilist.test.js",
+      "node backend/netlify/functions/__tests__/discover-ai.test.js",
+      "node backend/netlify/functions/__tests__/expense-receipt-validation.test.js",
+      "node backend/netlify/functions/__tests__/qwen-vision.test.js",
+      "node backend/netlify/functions/__tests__/expense-receipt-ai.test.js",
+      "node backend/netlify/functions/__tests__/airing-check-core.test.js",
+      "node backend/netlify/functions/__tests__/anime-airing-check.test.js",
+      "node backend/netlify/functions/__tests__/staging-isolation-wiring.test.js",
     ]);
 
     const frontendCmds = splitCmds(pkg.scripts["test:frontend"]);
@@ -304,18 +307,18 @@ async function run() {
     // baseline list — the same "new addition becomes next pass's baseline" convention this
     // assertion has followed every time it was updated before.
     const priorFrontendCmds = [
-      "node js/__tests__/date-utils.test.js",
-      "node js/__tests__/reflection.test.js",
-      "node js/__tests__/home-recent-memories.test.js",
-      "node js/__tests__/xss-security.test.js",
-      "node js/__tests__/auth-pulse-scope.test.js",
-      "node js/__tests__/discover-security.test.js",
-      "node js/__tests__/discover-tabs.test.js",
-      "node js/__tests__/discover-description.test.js",
-      "node js/__tests__/discover-foryou.test.js",
-      "node js/__tests__/discover-translate.test.js",
-      "node js/__tests__/environment.test.js",
-      "node js/__tests__/push-notifications.test.js",
+      "node frontend/js/__tests__/date-utils.test.js",
+      "node frontend/js/__tests__/reflection.test.js",
+      "node frontend/js/__tests__/home-recent-memories.test.js",
+      "node frontend/js/__tests__/xss-security.test.js",
+      "node frontend/js/__tests__/auth-pulse-scope.test.js",
+      "node frontend/js/__tests__/discover-security.test.js",
+      "node frontend/js/__tests__/discover-tabs.test.js",
+      "node frontend/js/__tests__/discover-description.test.js",
+      "node frontend/js/__tests__/discover-foryou.test.js",
+      "node frontend/js/__tests__/discover-translate.test.js",
+      "node frontend/js/__tests__/environment.test.js",
+      "node frontend/js/__tests__/push-notifications.test.js",
     ];
     // Every pre-existing command is still present, in its original relative order (a genuine
     // ordered-subsequence check, not just an unordered "includes all of" set check).
@@ -337,16 +340,15 @@ async function run() {
     // height project cover placeholder) are the newest additions on top — never a silent removal
     // disguised as a reorder.
     assert.deepStrictEqual(frontendCmds, [
-      "node js/__tests__/date-utils.test.js",
-      "node js/__tests__/expense-model.test.js",
-      "node js/__tests__/expense-render.test.js",
-      "node js/__tests__/expense-receipt-client.test.js",
-      "node js/__tests__/expense-receipt-ui.test.js",
-      "node js/__tests__/google-calendar-ui.test.js",
+      "node frontend/js/__tests__/date-utils.test.js",
+      "node frontend/js/__tests__/expense-model.test.js",
+      "node frontend/js/__tests__/expense-render.test.js",
+      "node frontend/js/__tests__/expense-receipt-client.test.js",
+      "node frontend/js/__tests__/expense-receipt-ui.test.js",
       ...priorFrontendCmds.slice(1),
-      "node js/__tests__/discover-card-actions-layout.test.js",
-      "node js/__tests__/resume-experience-dates.test.js",
-      "node js/__tests__/resume-print-stylesheet.test.js",
+      "node frontend/js/__tests__/discover-card-actions-layout.test.js",
+      "node frontend/js/__tests__/resume-experience-dates.test.js",
+      "node frontend/js/__tests__/resume-print-stylesheet.test.js",
     ]);
 
     assert.strictEqual(pkg.scripts.test, "npm run test:functions && npm run test:frontend");
@@ -360,7 +362,7 @@ async function run() {
     // way test:firestore-rules (a real Firestore Emulator, needing a JDK) is kept out, so the
     // fast/dependency-free `npm test` invariant this file's own history repeatedly documents stays
     // true for anyone/any CI without that heavier tooling installed.
-    assert.strictEqual(pkg.scripts["test:staging-packaging"], "node netlify/functions/__tests__/staging-packaging.test.js");
+    assert.strictEqual(pkg.scripts["test:staging-packaging"], "node backend/netlify/functions/__tests__/staging-packaging.test.js");
   });
 
   await test(".gitignore ignores tailwind.generated.css without disturbing existing entries", () => {
@@ -368,7 +370,7 @@ async function run() {
     assert.ok(gi.includes("/tailwind.generated.css"));
     assert.ok(gi.includes("/site/"));
     assert.ok(gi.includes("node_modules/"));
-    assert.ok(gi.includes("/netlify/functions/lib/deploy-origin.generated.json"));
+    assert.ok(gi.includes("/backend/netlify/functions/lib/deploy-origin.generated.json"));
   });
 
   console.log(`\n${pass} passed, ${fail} failed`);

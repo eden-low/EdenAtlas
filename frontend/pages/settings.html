@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<script src="js/build-info.generated.js"></script>
+  <script>(function(){try{var s=JSON.parse(localStorage.getItem('lfj:settings')||'{}');if(s.theme==='light')document.documentElement.setAttribute('data-theme','light');}catch(e){}})();</script>
+  <meta charset="UTF-8" />
+  <!-- Settings merged into Me (v2.7) — kept as a compatibility redirect for old links/bookmarks. -->
+  <meta http-equiv="refresh" content="0;url=me.html">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Settings | EdenAtlas</title>
+  <link rel="stylesheet" href="tailwind.generated.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
+  <link rel="stylesheet" href="styles.css" />
+  <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" content="#09090e">
+  <script>try{if(JSON.parse(localStorage.getItem('lfj:settings')||'{}').theme==='light')document.querySelector('meta[name="theme-color"]').setAttribute('content','#f5f5f7');}catch(e){}</script>
+  <link rel="apple-touch-icon" href="images/icon-192.png">
+  <link rel="icon" type="image/png" sizes="192x192" href="images/icon-192.png">
+</head>
+<body class="auth-check-pending bg-darkBg text-white font-sans grid-bg min-h-screen pb-12">
+  <header class="hidden max-w-7xl mx-auto px-4 pt-6">
+    <div class="bg-cardBg/80 backdrop-blur-md neon-border-purple rounded-2xl px-6 py-4 flex flex-col md:flex-row items-center justify-between gap-4">
+      <div class="flex items-center gap-3">
+        <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-neonViolet to-neonPurple flex items-center justify-center shadow-lg shadow-neonPurple/20">
+          <i class="fa-solid fa-circle-user text-white text-lg animate-pulse"></i>
+        </div>
+        <div>
+          <span class="font-cyber font-semibold text-lg tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-white to-neonPurple">EdenAtlas</span>
+          <span class="text-[10px] block text-neonPurple font-code font-bold tracking-widest -mt-1">DIGITAL ATLAS</span>
+        </div>
+      </div>
+            <nav class="flex-1 min-w-0 flex flex-wrap items-center justify-center gap-x-4 gap-y-2 text-sm font-cyber font-semibold tracking-wider text-textGray">
+        <a href="home.html" class="hover:text-neonPurple transition-colors flex items-center gap-1.5"><i class="fa-solid fa-house text-xs"></i> <span data-i18n="nav.home">Home</span></a>
+        <a href="resume.html" class="hover:text-neonPurple transition-colors flex items-center gap-1.5"><i class="fa-solid fa-scroll text-xs"></i> <span data-i18n="nav.career">Career</span></a>
+        <a href="gallery.html" class="hover:text-neonPurple transition-colors flex items-center gap-1.5"><i class="fa-solid fa-images text-xs"></i> <span data-i18n="nav.memories">Memories</span></a>
+        <a href="atlas.html" class="hover:text-neonPurple transition-colors flex items-center gap-1.5"><i class="fa-solid fa-map-location-dot text-xs"></i> <span data-i18n="nav.atlas">Atlas</span></a>
+        <a href="timeline.html" class="hover:text-neonPurple transition-colors flex items-center gap-1.5"><i class="fa-solid fa-timeline text-xs"></i> <span data-i18n="nav.journey">Journey</span></a>
+        <a href="dashboard.html" class="hover:text-neonPurple transition-colors flex items-center gap-1.5"><i class="fa-solid fa-chart-line text-xs"></i> <span data-i18n="nav.people">Connections</span></a>
+        <a href="reports.html" class="hover:text-neonPurple transition-colors flex items-center gap-1.5"><i class="fa-solid fa-chart-pie text-xs"></i> <span data-i18n="nav.reports">Reports</span></a>
+        <a href="notifications.html" class="hover:text-neonPurple transition-colors flex items-center gap-1.5"><i class="fa-solid fa-bell text-xs"></i> <span data-i18n="nav.inbox">Inbox</span> <span id="notif-badge" class="hidden px-1.5 py-0.5 rounded-full bg-rose-500 text-white text-[9px] font-bold"></span></a>
+        <a href="me.html" class="hover:text-neonPurple transition-colors flex items-center gap-1.5"><i class="fa-solid fa-circle-user text-xs"></i> <span data-i18n="nav.me">Me</span></a>
+        <a href="journal.html" class="hover:text-neonPurple transition-colors flex items-center gap-1.5"><i class="fa-solid fa-book text-xs"></i> <span data-i18n="nav.journal">Journal</span></a>
+        <a href="expenses.html" class="hover:text-neonPurple transition-colors flex items-center gap-1.5"><i class="fa-solid fa-wallet text-xs"></i> <span data-i18n="nav.finance">Finance</span></a>
+        <a href="calendar.html" class="hover:text-neonPurple transition-colors flex items-center gap-1.5"><i class="fa-solid fa-calendar-days text-xs"></i> <span data-i18n="nav.calendar">Calendar</span></a>
+        <a href="habits.html" class="hover:text-neonPurple transition-colors flex items-center gap-1.5"><i class="fa-solid fa-list-check text-xs"></i> <span data-i18n="nav.habits">Habits</span></a>
+        <a href="discover.html" class="hover:text-neonPurple transition-colors flex items-center gap-1.5"><i class="fa-solid fa-compass text-xs"></i> <span data-i18n="nav.discover">Discover</span></a>
+        <a href="contact.html" class="hover:text-neonPurple transition-colors flex items-center gap-1.5"><i class="fa-solid fa-envelope text-xs"></i> <span data-i18n="nav.contact">Contact</span></a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="max-w-4xl mx-auto px-4 mt-8 space-y-6">
+    <section class="reveal bg-cardBg/90 neon-border-purple rounded-2xl p-6">
+      <h1 class="font-cyber font-semibold text-2xl" data-i18n="settings.title">Settings</h1>
+      <p class="text-textGray mt-2 text-sm">Profile, preferences, and system logs.</p>
+    </section>
+
+    <!-- Profile -->
+    <section class="reveal bg-cardBg/90 neon-border-purple rounded-2xl p-6">
+      <p class="text-[10px] uppercase tracking-[0.2em] text-textGray font-code mb-4">Profile</p>
+      <div class="flex items-center gap-4">
+        <img id="profile-avatar" src="" alt="" class="w-14 h-14 rounded-full border border-borderNeon object-cover hidden">
+        <div class="w-14 h-14 rounded-full bg-neonPurple/10 border border-borderNeon flex items-center justify-center text-neonPurple hidden" id="profile-avatar-fallback">
+          <i class="fa-solid fa-user text-xl"></i>
+        </div>
+        <div>
+          <p id="profile-name" class="font-semibold">&mdash;</p>
+          <p id="profile-email" class="text-xs text-textGray font-code mt-0.5">&mdash;</p>
+        </div>
+      </div>
+      <div class="divide-y divide-borderNeon/60 text-sm mt-5">
+        <div class="flex items-center justify-between py-2.5">
+          <span class="text-textGray">Account created</span>
+          <span id="profile-created" class="font-medium">&mdash;</span>
+        </div>
+        <div class="flex items-center justify-between py-2.5">
+          <span class="text-textGray">Last sign-in</span>
+          <span id="profile-last-login" class="font-medium">&mdash;</span>
+        </div>
+      </div>
+      <div class="mt-5 pt-5 border-t border-borderNeon/40">
+        <label for="username-input" class="text-xs text-textGray block mb-1.5">Username <span class="text-textGray/60">&mdash; lets people find you by @handle in Search People instead of email</span></label>
+        <div class="flex items-center gap-2">
+          <span class="text-textGray font-code">@</span>
+          <input id="username-input" type="text" maxlength="20" placeholder="yourhandle" class="flex-1 bg-darkBg/60 border border-borderNeon rounded-lg px-3 py-2 text-sm text-white placeholder:text-textGray/60 font-code">
+          <button id="save-username-btn" class="px-4 py-2 bg-neonPurple/15 text-neonPurple rounded-xl text-xs font-cyber font-bold tracking-wider hover:bg-neonPurple/25 transition-colors">SAVE</button>
+        </div>
+        <p id="username-status" class="mt-2 text-xs font-code text-textGray"></p>
+      </div>
+      <div class="mt-5 pt-5 border-t border-borderNeon/40 space-y-4">
+        <div>
+          <label for="bio-input" class="text-xs text-textGray block mb-1.5">Bio <span class="text-textGray/60">&mdash; shown on your public profile</span></label>
+          <textarea id="bio-input" rows="2" maxlength="160" placeholder="A short line about you&hellip;" class="w-full bg-darkBg/60 border border-borderNeon rounded-lg px-3 py-2 text-sm text-white placeholder:text-textGray/60"></textarea>
+        </div>
+        <div>
+          <label for="location-input" class="text-xs text-textGray block mb-1.5">Location</label>
+          <input id="location-input" type="text" maxlength="60" placeholder="City, Country" class="w-full bg-darkBg/60 border border-borderNeon rounded-lg px-3 py-2 text-sm text-white placeholder:text-textGray/60">
+        </div>
+        <div class="flex items-center gap-3">
+          <button id="save-about-btn" class="px-4 py-2 bg-neonPurple/15 text-neonPurple rounded-xl text-xs font-cyber font-bold tracking-wider hover:bg-neonPurple/25 transition-colors">SAVE</button>
+          <p id="about-status" class="text-xs font-code text-textGray"></p>
+        </div>
+      </div>
+      <button id="signout-btn" class="mt-5 px-4 py-2 bg-cardBg/70 border border-borderNeon rounded-xl text-xs font-cyber font-bold tracking-wider text-white hover:border-rose-400 hover:text-rose-400 transition-all">
+        <i class="fa-solid fa-arrow-right-from-bracket mr-1.5"></i> SIGN OUT
+      </button>
+    </section>
+
+    <!-- Preferences -->
+    <section class="reveal bg-cardBg/90 neon-border-purple rounded-2xl p-6">
+      <p class="text-[10px] uppercase tracking-[0.2em] text-textGray font-code mb-4">Preferences</p>
+      <div class="divide-y divide-borderNeon/60 text-sm">
+        <div class="flex items-center justify-between py-3 gap-4">
+          <div>
+            <p class="font-medium">Theme</p>
+            <p class="text-xs text-textGray mt-0.5">Applies on next reload.</p>
+          </div>
+          <div id="theme-toggle" class="flex items-center gap-1 bg-darkBg/60 border border-borderNeon rounded-full p-1 text-xs font-code">
+            <button data-theme-choice="dark" class="theme-choice-btn px-3 py-1.5 rounded-full transition-colors">Dark</button>
+            <button data-theme-choice="light" class="theme-choice-btn px-3 py-1.5 rounded-full transition-colors">Light</button>
+          </div>
+        </div>
+        <div class="flex items-center justify-between py-3 gap-4">
+          <div>
+            <p class="font-medium" data-i18n="settings.language">Language</p>
+            <p class="text-xs text-textGray mt-0.5">Applies immediately, syncs across devices.</p>
+          </div>
+          <div id="lang-toggle" class="flex items-center gap-1 bg-darkBg/60 border border-borderNeon rounded-full p-1 text-xs font-code">
+            <button data-lang-choice="en" class="lang-choice-btn px-3 py-1.5 rounded-full transition-colors">EN</button>
+            <button data-lang-choice="zh-CN" class="lang-choice-btn px-3 py-1.5 rounded-full transition-colors">中文</button>
+          </div>
+        </div>
+        <div class="flex items-center justify-between py-3 gap-4">
+          <div class="flex-1">
+            <label for="default-city" class="font-medium block">Default weather city</label>
+            <p class="text-xs text-textGray mt-0.5">Fallback used if location access is denied.</p>
+          </div>
+          <input id="default-city" type="text" placeholder="Kuching,MY" class="w-40 bg-darkBg/60 border border-borderNeon rounded-lg px-3 py-2 text-sm text-white placeholder:text-textGray/60">
+        </div>
+        <div class="flex items-center justify-between py-3 gap-4">
+          <div>
+            <p class="font-medium">Default privacy for new posts</p>
+            <p class="text-xs text-textGray mt-0.5">Pre-selected visibility in Gallery/Journal/Expenses/Timeline forms.</p>
+          </div>
+          <div id="visibility-toggle" class="flex items-center gap-1 bg-darkBg/60 border border-borderNeon rounded-full p-1 text-xs font-code">
+            <button data-visibility-choice="public" class="visibility-choice-btn px-3 py-1.5 rounded-full transition-colors">Public</button>
+            <button data-visibility-choice="private" class="visibility-choice-btn px-3 py-1.5 rounded-full transition-colors">Private</button>
+          </div>
+        </div>
+      </div>
+      <button id="save-preferences-btn" class="mt-5 px-4 py-2 bg-gradient-to-r from-neonViolet to-neonPurple rounded-xl text-xs font-cyber font-bold tracking-wider text-white hover:scale-105 transition-all">
+        SAVE PREFERENCES
+      </button>
+      <p id="preferences-status" class="mt-2 text-xs font-code text-textGray"></p>
+    </section>
+
+    <!-- System Logs (owner only) -->
+    <section id="system-logs-section" class="hidden reveal bg-cardBg/90 neon-border-purple rounded-2xl p-6">
+      <p class="text-[10px] uppercase tracking-[0.2em] text-textGray font-code mb-4">System Logs &mdash; Login History</p>
+      <div id="login-logs-list" class="space-y-2 text-sm"></div>
+      <p id="login-logs-empty" class="hidden text-xs font-code text-textGray py-6 text-center">No login history yet.</p>
+    </section>
+
+    <!-- Whitelist Friend Management (owner only) -->
+    <section id="whitelist-section" class="hidden reveal bg-cardBg/90 neon-border-purple rounded-2xl p-6">
+      <p class="text-[10px] uppercase tracking-[0.2em] text-textGray font-code mb-4">Whitelist &mdash; Friend Management</p>
+      <p class="text-xs text-textGray mb-4">Everyone who has ever signed in. Promote to Friend to give them their own private expenses/journal/photos/timeline/habits space; demote to make them a read-only Viewer again.</p>
+      <div id="whitelist-list" class="space-y-2 text-sm"></div>
+      <p id="whitelist-empty" class="hidden text-xs font-code text-textGray py-6 text-center">No signed-in users yet.</p>
+    </section>
+
+    <!-- Export & Backup -->
+    <section id="export-section" class="hidden reveal bg-cardBg/90 neon-border-purple rounded-2xl p-6">
+      <p class="text-[10px] uppercase tracking-[0.2em] text-textGray font-code mb-4">Export &amp; Backup</p>
+      <p class="text-xs text-textGray mb-4">Downloads your own data.</p>
+      <div class="flex flex-wrap gap-2.5">
+        <button id="export-expenses-btn" class="px-4 py-2 bg-cardBg/70 border border-borderNeon rounded-xl text-xs font-cyber font-bold tracking-wider text-white hover:border-neonPurple transition-all">
+          <i class="fa-solid fa-file-csv mr-1.5"></i> Expenses (CSV)
+        </button>
+        <button id="export-journal-btn" class="px-4 py-2 bg-cardBg/70 border border-borderNeon rounded-xl text-xs font-cyber font-bold tracking-wider text-white hover:border-neonPurple transition-all">
+          <i class="fa-solid fa-file-lines mr-1.5"></i> Journal (Markdown)
+        </button>
+        <button id="export-timeline-btn" class="px-4 py-2 bg-cardBg/70 border border-borderNeon rounded-xl text-xs font-cyber font-bold tracking-wider text-white hover:border-neonPurple transition-all">
+          <i class="fa-solid fa-timeline mr-1.5"></i> Timeline (JSON)
+        </button>
+        <button id="export-gallery-btn" class="px-4 py-2 bg-cardBg/70 border border-borderNeon rounded-xl text-xs font-cyber font-bold tracking-wider text-white hover:border-neonPurple transition-all">
+          <i class="fa-solid fa-images mr-1.5"></i> Gallery Metadata (JSON)
+        </button>
+        <button id="export-backup-btn" class="px-4 py-2 bg-gradient-to-r from-neonViolet to-neonPurple rounded-xl text-xs font-cyber font-bold tracking-wider text-white hover:scale-105 transition-all">
+          <i class="fa-solid fa-box-archive mr-1.5"></i> Full Backup
+        </button>
+      </div>
+      <p id="export-status" class="mt-3 text-xs font-code text-textGray"></p>
+    </section>
+  </main>
+
+  <script type="module" src="js/splash.js"></script>
+    <script type="module" src="js/i18n.js"></script>
+  <footer class="max-w-7xl mx-auto px-4 mt-10 pb-6 text-center">
+    <p class="text-[11px] font-code text-textGray/70" data-i18n="footer.line">EdenAtlas &middot; by Jun &middot; Version 3.2</p>
+  </footer>
+
+  <script src="js/scripts.js" defer></script>
+  <script type="module" src="js/auth-guard.js"></script>
+    <script type="module" src="js/global-search.js"></script>
+    <script type="module" src="js/mobile-nav.js"></script>
+    <script type="module" src="js/sidebar.js"></script>
+  <script type="module" src="js/settings.js"></script>
+  <script type="module" src="js/export.js"></script>
+</body>
+</html>

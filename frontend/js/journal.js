@@ -1,0 +1,576 @@
+import { auth, googleProvider, db, storage, canParticipate } from "./firebase-init.js";
+import { t as i18nT, getLang, init as initI18n } from "./i18n.js";
+import { wirePlaceSearch } from "./location-search.js";
+import { readLocationFields, wireExactLocationControls } from "./location-fields.js";
+import { resolveDisplayName } from "./identity.js";
+import {
+  onAuthStateChanged,
+  signInWithPopup,
+  signOut,
+} from "https://www.gstatic.com/firebasejs/12.15.0/firebase-auth.js";
+import {
+  collection,
+  query,
+  where,
+  getDocs,
+  addDoc,
+  doc,
+  updateDoc,
+  serverTimestamp,
+} from "https://www.gstatic.com/firebasejs/12.15.0/firebase-firestore.js";
+import {
+  ref,
+  uploadBytes,
+  getDownloadURL,
+} from "https://www.gstatic.com/firebasejs/12.15.0/firebase-storage.js";
+
+// Security audit fix: entry.title/content/tags/locationName are Firestore-stored free text —
+// any participant can write them, and journals default to isMineOrPublic (public/connections
+// entries are readable by other signed-in users) — so every interpolation into innerHTML below
+// must be escaped. Same implementation as calendar.js's pre-existing esc(), for consistency.
+function esc(s) {
+  return String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+}
+
+// Follow-up security fix: escaping entry.content *before* marked.parse() (the original fix)
+// neutralized raw <script>/<img onerror> tags, but not a Markdown-generated
+// [text](javascript:...) link — marked.js's own built-in URL sanitizer was removed upstream in
+// v5 (2023), and this app's CDN version was never pinned, so nothing was actually blocking that
+// scheme. Pre-escaping also broke legitimate Markdown (`>` blockquotes, `<url>` autolinks) by
+// mangling the syntax characters before the parser ever saw them. The canonical fix — used here
+// instead — is the standard marked+DOMPurify pairing: let marked.parse() run on the RAW content
+// (so all real Markdown syntax works, including blockquotes/autolinks), then run DOMPurify.
+// sanitize() on the resulting HTML. DOMPurify strips javascript:/data: URIs, on* event-handler
+// attributes, and <script>/<iframe>/<object> by default — no custom config needed, since a
+// narrower-than-default config risks accidentally permitting something DOMPurify's own defaults
+// already block. marked/DOMPurify are both loaded pinned-with-SRI in journal.html (see that
+// file), so window.marked/window.DOMPurify are guaranteed present here.
+function renderMarkdownSafe(content) {
+  return DOMPurify.sanitize(marked.parse(content || ""));
+}
+
+const MOOD_META = {
+  happy: { emoji: "😊", i18nKey: "journal.mood_happy" },
+  calm: { emoji: "😌", i18nKey: "journal.mood_calm" },
+  excited: { emoji: "🎉", i18nKey: "journal.mood_excited" },
+  sad: { emoji: "😔", i18nKey: "journal.mood_sad" },
+  frustrated: { emoji: "😤", i18nKey: "journal.mood_frustrated" },
+  tired: { emoji: "😴", i18nKey: "journal.mood_tired" },
+};
+
+const authControl = document.getElementById("auth-control");
+const accessNote = document.getElementById("journal-access-note");
+const searchInput = document.getElementById("journal-search");
+const journalGrid = document.getElementById("journal-grid");
+const journalEmpty = document.getElementById("journal-empty");
+const journalEmptyCta = document.getElementById("journal-empty-cta");
+const filterTabs = document.querySelectorAll(".filter-tab");
+const privateTab = document.querySelector('.filter-tab[data-filter="private"]');
+const connectionsTab = document.querySelector('.filter-tab[data-filter="connections"]');
+const moodFilterContainer = document.getElementById("mood-filters");
+const newJournalBtn = document.getElementById("new-journal-btn");
+const journalModal = document.getElementById("journal-modal");
+const journalModalClose = document.getElementById("journal-modal-close");
+const journalModalBackdrop = document.getElementById("journal-modal-backdrop");
+const journalForm = document.getElementById("journal-form");
+const journalStatus = document.getElementById("journal-status");
+const moodSelect = document.getElementById("journal-mood");
+const journalEditModal = document.getElementById("journal-edit-modal");
+const journalEditModalClose = document.getElementById("journal-edit-modal-close");
+const journalEditModalBackdrop = document.getElementById("journal-edit-modal-backdrop");
+const journalEditForm = document.getElementById("journal-edit-form");
+const journalEditStatus = document.getElementById("journal-edit-status");
+
+let cachedCollections = null;
+async function loadMyCollectionOptions() {
+  const user = auth.currentUser;
+  if (!user) return [];
+  if (cachedCollections) return cachedCollections;
+  try {
+    const snap = await getDocs(query(collection(db, "collections"), where("uid", "==", user.uid)));
+    cachedCollections = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+  } catch (err) {
+    console.error("[journal] collections fetch failed:", err.code || err);
+    cachedCollections = [];
+  }
+  return cachedCollections;
+}
+
+function collectionLabel(c) {
+  const lang = getLang() === "zh-CN" ? "zh" : "en";
+  return (lang === "zh" ? c.title_zh : c.title_en) || c.title_en || c.title_zh || "Untitled";
+}
+
+async function populateCollectionSelect(selectEl, selectedId) {
+  const cols = await loadMyCollectionOptions();
+  selectEl.innerHTML = `<option value="">${i18nT("common.uncategorized")}</option>` +
+    cols.map((c) => `<option value="${c.id}">${collectionLabel(c)}</option>`).join("");
+  selectEl.value = selectedId || "";
+}
+
+let cachedEntries = [];
+let activeVisibility = "all";
+let activeMood = "all";
+let searchQuery = "";
+const expandedIds = new Set();
+
+// Populate the mood <select> in the compose form and the mood filter chips from one source of
+// truth. Re-run on language change (see eden:langchange listener below) since the labels are
+// baked into these elements' textContent at creation time, not read live via data-i18n.
+function renderMoodOptions() {
+  const prevMoodValue = moodSelect.value;
+  moodSelect.innerHTML = "";
+  moodFilterContainer.querySelectorAll(".mood-tab[data-mood]:not([data-mood='all'])").forEach((b) => b.remove());
+
+  Object.entries(MOOD_META).forEach(([key, meta]) => {
+    const opt = document.createElement("option");
+    opt.value = key;
+    opt.textContent = `${meta.emoji} ${i18nT(meta.i18nKey)}`;
+    moodSelect.appendChild(opt);
+
+    const btn = document.createElement("button");
+    btn.dataset.mood = key;
+    btn.className = "mood-tab px-3 py-1.5 rounded-full hover:text-neonPurple hover:bg-neonPurple/10 transition-colors";
+    btn.textContent = `${meta.emoji} ${i18nT(meta.i18nKey)}`;
+    moodFilterContainer.appendChild(btn);
+  });
+  if (prevMoodValue) moodSelect.value = prevMoodValue;
+}
+// Wait for the dictionary to be ready before the first render — this runs synchronously at
+// module load, ahead of any Firestore fetch, so (unlike postCard/journalCard/etc., which only
+// ever render after an async auth+Firestore round trip has already given i18n.js time to load)
+// it would otherwise have a real chance of painting raw "journal.mood_happy"-style keys.
+initI18n().then(renderMoodOptions);
+
+function formatTimestamp(ts) {
+  if (!ts?.toDate) return "";
+  return ts.toDate().toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
+}
+
+function snippet(text, max = 160) {
+  const flat = text.replace(/[#*_`>~-]/g, "").replace(/\s+/g, " ").trim();
+  return flat.length > max ? `${esc(flat.slice(0, max))}&hellip;` : esc(flat);
+}
+
+function entryKey(entry) {
+  return `${entry.uid}-${entry.createdAt?.toMillis?.() || 0}-${entry.title}`;
+}
+
+const JOURNAL_REMINDER_DAYS = 3;
+
+function todayKey(d = new Date()) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+// Best-effort local reminder: written by each user's own client when they next load this
+// page, deduped per calendar day via localStorage (no backend to compute this server-side).
+async function checkJournalReminder(entries) {
+  const user = auth.currentUser;
+  if (!user || !canParticipate()) return;
+
+  const newestMillis = entries.reduce((latest, e) => Math.max(latest, e.createdAt?.toMillis?.() || 0), 0);
+  const daysSince = newestMillis ? (Date.now() - newestMillis) / (1000 * 60 * 60 * 24) : Infinity;
+  if (daysSince < JOURNAL_REMINDER_DAYS) return;
+
+  const storageKey = "lfj:notifiedJournalReminder";
+  const today = todayKey();
+  if (localStorage.getItem(storageKey) === today) return;
+  localStorage.setItem(storageKey, today);
+
+  try {
+    await addDoc(collection(db, "notifications"), {
+      uid: user.uid,
+      type: "journal_reminder",
+      title: "Journal reminder",
+      message: `No journal entries in ${JOURNAL_REMINDER_DAYS} days.`,
+      read: false,
+      createdAt: serverTimestamp(),
+    });
+  } catch (err) {
+    console.error("[journal] reminder notification failed:", err.code || err);
+  }
+}
+
+function visibilityBadge(visibility) {
+  if (visibility === "private") return { icon: "fa-lock", cls: "border-rose-400/30 bg-rose-400/10 text-rose-400" };
+  if (visibility === "connections") return { icon: "fa-user-group", cls: "border-neonBlue/30 bg-neonBlue/10 text-neonBlue" };
+  return { icon: "fa-globe", cls: "border-emerald-400/30 bg-emerald-400/10 text-emerald-400" };
+}
+
+function journalCard(entry) {
+  const mood = MOOD_META[entry.mood] || null;
+  const vis = visibilityBadge(entry.visibility);
+  const key = entryKey(entry);
+  const expanded = expandedIds.has(key);
+
+  const card = document.createElement("article");
+  card.className = "is-visible bg-cardBg/90 neon-border-purple rounded-2xl overflow-hidden cursor-pointer";
+  card.dataset.key = key;
+  card.dataset.entryId = entry.id; // used by maybeFocusEntryFromQuery() to deep-link from the Atlas Assistant's source chips
+  card.tabIndex = -1; // programmatically focusable (for the deep-link highlight) without joining the normal Tab order
+
+  const tagsHtml = (entry.tags || [])
+    .map((t) => `<span class="text-[10px] font-code px-2 py-0.5 rounded-full border border-borderNeon text-textGray">#${esc(t)}</span>`)
+    .join(" ");
+  const user = auth.currentUser;
+  const isMine = !!user && entry.uid === user.uid;
+
+  card.innerHTML = `
+    ${entry.imageUrl ? `<img src="${esc(entry.imageUrl)}" alt="" class="w-full h-40 object-cover">` : ""}
+    <div class="p-4 space-y-2.5">
+      <div class="flex items-start justify-between gap-3">
+        <h2 class="text-sm font-semibold leading-snug">${mood ? `${mood.emoji} ` : ""}${esc(entry.title)}</h2>
+        <div class="flex items-center gap-1.5 flex-shrink-0">
+          <span class="text-[10px] font-code px-2 py-0.5 rounded-full border ${vis.cls}">
+            <i class="fa-solid ${vis.icon}"></i>
+          </span>
+          ${isMine ? `<button class="edit-entry-btn text-textGray hover:text-neonPurple transition-colors" title="${i18nT("common.edit_metadata")}"><i class="fa-solid fa-pen text-xs"></i></button>` : ""}
+        </div>
+      </div>
+      <div class="text-sm text-textGray leading-relaxed journal-body">${expanded ? renderMarkdownSafe(entry.content) : snippet(entry.content || "")}</div>
+      <div class="flex flex-wrap items-center gap-1.5">${tagsHtml}${entry.locationName ? `<span class="text-[10px] font-code px-2 py-0.5 rounded-full border border-borderNeon text-textGray"><i class="fa-solid fa-location-dot mr-1"></i>${esc(entry.locationName)}</span>` : ""}</div>
+      <p class="text-[11px] text-textGray/70 font-code">${formatTimestamp(entry.createdAt)}</p>
+    </div>`;
+
+  card.addEventListener("click", (event) => {
+    if (event.target.closest("a") || event.target.closest(".edit-entry-btn")) return;
+    if (expandedIds.has(key)) {
+      expandedIds.delete(key);
+    } else {
+      expandedIds.add(key);
+    }
+    renderGrid();
+  });
+
+  const editBtn = card.querySelector(".edit-entry-btn");
+  if (editBtn) {
+    editBtn.addEventListener("click", (event) => {
+      event.stopPropagation();
+      openEditModal(entry);
+    });
+  }
+
+  return card;
+}
+
+function visibleEntries() {
+  const q = searchQuery.trim().toLowerCase();
+  return cachedEntries.filter((e) => {
+    if (activeVisibility !== "all" && e.visibility !== activeVisibility) return false;
+    if (activeMood !== "all" && e.mood !== activeMood) return false;
+    if (!q) return true;
+    const inTitle = e.title?.toLowerCase().includes(q);
+    const inContent = e.content?.toLowerCase().includes(q);
+    const inTags = (e.tags || []).some((t) => t.toLowerCase().includes(q));
+    return inTitle || inContent || inTags;
+  });
+}
+
+function renderGrid() {
+  const visible = visibleEntries();
+  journalGrid.replaceChildren(...visible.map(journalCard));
+  journalEmpty.classList.toggle("hidden", visible.length > 0);
+}
+
+function setVisibilityFilter(filter) {
+  activeVisibility = filter;
+  filterTabs.forEach((btn) => {
+    const active = btn.dataset.filter === filter;
+    btn.classList.toggle("text-white", active);
+    btn.classList.toggle("bg-neonPurple/15", active);
+  });
+  renderGrid();
+}
+
+function setMoodFilter(mood) {
+  activeMood = mood;
+  document.querySelectorAll(".mood-tab").forEach((btn) => {
+    const active = btn.dataset.mood === mood;
+    btn.classList.toggle("text-white", active);
+    btn.classList.toggle("bg-neonPurple/15", active);
+  });
+  renderGrid();
+}
+
+filterTabs.forEach((btn) => btn.addEventListener("click", () => setVisibilityFilter(btn.dataset.filter)));
+moodFilterContainer.addEventListener("click", (event) => {
+  const btn = event.target.closest(".mood-tab");
+  if (btn) setMoodFilter(btn.dataset.mood);
+});
+searchInput.addEventListener("input", (event) => {
+  searchQuery = event.target.value;
+  renderGrid();
+});
+
+setVisibilityFilter("all");
+setMoodFilter("all");
+
+async function fetchVisibleEntries() {
+  const user = auth.currentUser;
+  const entries = new Map();
+
+  try {
+    const publicSnap = await getDocs(query(collection(db, "journals"), where("visibility", "==", "public")));
+    publicSnap.forEach((d) => entries.set(d.id, { id: d.id, ...d.data() }));
+  } catch (err) {
+    console.error("[journal] public query failed:", err.code || err);
+  }
+
+  if (user) {
+    try {
+      const mineSnap = await getDocs(query(collection(db, "journals"), where("uid", "==", user.uid)));
+      mineSnap.forEach((d) => entries.set(d.id, { id: d.id, ...d.data() }));
+    } catch (err) {
+      console.error("[journal] own entries query failed:", err.code || err);
+    }
+  }
+
+  const mayParticipate = canParticipate();
+  privateTab.classList.toggle("hidden", !mayParticipate);
+  connectionsTab.classList.toggle("hidden", !mayParticipate);
+  accessNote.classList.toggle("hidden", mayParticipate);
+  if (!mayParticipate && (activeVisibility === "private" || activeVisibility === "connections")) setVisibilityFilter("all");
+
+  const list = [...entries.values()];
+  list.sort((a, b) => (b.createdAt?.toMillis?.() || 0) - (a.createdAt?.toMillis?.() || 0));
+  cachedEntries = list;
+  renderGrid();
+  if (user) checkJournalReminder(list.filter((e) => e.uid === user.uid));
+}
+
+function renderSignedOut() {
+  authControl.innerHTML = `
+    <button id="auth-signin-btn" class="px-4 py-2 bg-gradient-to-r from-neonViolet to-neonPurple rounded-xl text-xs font-cyber font-bold tracking-wider text-white hover:scale-105 transition-all">
+      <i class="fa-brands fa-google mr-2"></i> SIGN IN
+    </button>`;
+  document.getElementById("auth-signin-btn").addEventListener("click", () => {
+    signInWithPopup(auth, googleProvider).catch((err) => console.error("Sign-in failed", err));
+  });
+  accessNote.classList.add("hidden");
+  privateTab.classList.add("hidden");
+  connectionsTab.classList.add("hidden");
+  newJournalBtn.classList.add("hidden");
+  journalEmptyCta.classList.add("hidden");
+  if (activeVisibility === "private" || activeVisibility === "connections") setVisibilityFilter("all");
+}
+
+async function renderSignedIn(user) {
+  const name = await resolveDisplayName(user);
+  authControl.innerHTML = `
+    <span class="text-xs text-textGray font-code">${i18nT("common.signed_in_as")} <span class="text-white">${name}</span></span>
+    <button id="auth-signout-btn" class="px-4 py-2 bg-cardBg/70 border border-borderNeon rounded-xl text-xs font-cyber font-bold tracking-wider text-white hover:border-neonPurple transition-all">
+      ${i18nT("common.sign_out")}
+    </button>`;
+  document.getElementById("auth-signout-btn").addEventListener("click", () => signOut(auth));
+
+  const mayParticipate = canParticipate();
+  newJournalBtn.classList.toggle("hidden", !mayParticipate);
+  journalEmptyCta.classList.toggle("hidden", !mayParticipate);
+  maybeAutoOpenFromQuickAdd(mayParticipate);
+}
+
+// Mobile Quick Add (js/mobile-nav.js) links here with ?new=1 to jump straight into the form.
+let autoOpenedFromQuickAdd = false;
+function maybeAutoOpenFromQuickAdd(mayParticipate) {
+  if (autoOpenedFromQuickAdd || !mayParticipate) return;
+  if (new URLSearchParams(location.search).get("new") === "1") {
+    autoOpenedFromQuickAdd = true;
+    openModal();
+  }
+}
+
+// Deep-link support (task G): journal.html?entry=<id> — from the Atlas Assistant's source chips
+// (assistant.js). Never trusted as authorization by itself: only ever resolved against
+// `cachedEntries`, already built by fetchVisibleEntries() from Firestore-scoped queries (the
+// signed-in user's own docs + public docs). An id that's missing, belongs to someone else's
+// private content, or doesn't resolve at all simply isn't found — fail safely, no error, no way
+// to tell from the outside whether it exists. The param is always stripped via
+// history.replaceState, whether or not it resolved.
+function maybeFocusEntryFromQuery() {
+  const params = new URLSearchParams(location.search);
+  const targetId = params.get("entry");
+  if (!targetId) return;
+  params.delete("entry");
+  const qs = params.toString();
+  history.replaceState(null, "", location.pathname + (qs ? `?${qs}` : "") + location.hash);
+
+  const entry = cachedEntries.find((e) => e.id === targetId);
+  if (!entry) return;
+
+  // The matching card might not be in the DOM yet if a visibility/mood filter is currently
+  // active (renderGrid() only renders visibleEntries()'s filtered subset) — each setter already
+  // re-renders internally when it actually changes something.
+  if (activeVisibility !== "all" && entry.visibility !== activeVisibility) setVisibilityFilter("all");
+  if (activeMood !== "all" && entry.mood !== activeMood) setMoodFilter("all");
+
+  requestAnimationFrame(() => {
+    const card = journalGrid.querySelector(`[data-entry-id="${CSS.escape(targetId)}"]`);
+    if (!card) return;
+    card.scrollIntoView({ behavior: "smooth", block: "center" });
+    card.setAttribute("aria-label", `${entry.title || i18nT("common.untitled")} — ${i18nT("assistant.opened_from_assistant") !== "assistant.opened_from_assistant" ? i18nT("assistant.opened_from_assistant") : "opened from Atlas Assistant"}`);
+    card.classList.add("eden-deep-link-highlight");
+    card.focus({ preventScroll: true });
+    setTimeout(() => card.classList.remove("eden-deep-link-highlight"), 2500);
+  });
+}
+
+onAuthStateChanged(auth, async (user) => {
+  if (user) {
+    renderSignedIn(user);
+  } else {
+    renderSignedOut();
+  }
+  await fetchVisibleEntries();
+  maybeFocusEntryFromQuery();
+});
+
+function openModal() {
+  journalModal.classList.remove("hidden");
+}
+function closeModal() {
+  journalModal.classList.add("hidden");
+  journalForm.reset();
+  journalStatus.textContent = "";
+}
+
+newJournalBtn.addEventListener("click", () => populateCollectionSelect(document.getElementById("journal-collection")));
+newJournalBtn.addEventListener("click", openModal);
+journalEmptyCta.addEventListener("click", () => { populateCollectionSelect(document.getElementById("journal-collection")); openModal(); });
+journalModalClose.addEventListener("click", closeModal);
+journalModalBackdrop.addEventListener("click", closeModal);
+
+const syncJournalLocation = wireExactLocationControls("journal", i18nT);
+const syncJournalEditLocation = wireExactLocationControls("journal-edit", i18nT);
+wirePlaceSearch("journal", syncJournalLocation);
+const journalEditPlaceSearch = wirePlaceSearch("journal-edit", syncJournalEditLocation);
+
+journalForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const user = auth.currentUser;
+  if (!user || !canParticipate()) return;
+
+  const title = document.getElementById("journal-title").value.trim();
+  const content = document.getElementById("journal-content").value.trim();
+  const mood = moodSelect.value;
+  const tags = document.getElementById("journal-tags").value
+    .split(",")
+    .map((t) => t.trim())
+    .filter(Boolean);
+  const visibility = journalForm.querySelector('input[name="journal-visibility"]:checked').value;
+  const file = document.getElementById("journal-image").files[0];
+  const collectionId = document.getElementById("journal-collection").value || null;
+  if (!title || !content) return;
+
+  journalStatus.textContent = i18nT("common.saving");
+  try {
+    let imageUrl = null;
+    if (file) {
+      const storagePath = `journal/${user.uid}/${visibility}/${Date.now()}-${file.name}`;
+      const fileRef = ref(storage, storagePath);
+      await uploadBytes(fileRef, file);
+      imageUrl = await getDownloadURL(fileRef);
+    }
+
+    const locationFields = readLocationFields("journal");
+    await addDoc(collection(db, "journals"), {
+      title,
+      content,
+      mood,
+      tags,
+      visibility,
+      imageUrl,
+      createdAt: serverTimestamp(),
+      uid: user.uid,
+      collectionId,
+      ...locationFields,
+    });
+
+    await fetchVisibleEntries();
+    // Phase 4 UX: give a "View on Atlas" way out when this entry actually carries valid
+    // coordinates, instead of instantly wiping the success message via closeModal().
+    if (locationFields.latitude != null && locationFields.longitude != null) {
+      journalStatus.replaceChildren(document.createTextNode(`${i18nT("common.saved")} · `));
+      const link = document.createElement("a");
+      link.href = "atlas.html";
+      link.className = "text-neonPurple hover:underline";
+      link.textContent = i18nT("common.view_on_atlas");
+      journalStatus.appendChild(link);
+      setTimeout(closeModal, 2500);
+    } else {
+      journalStatus.textContent = i18nT("common.saved");
+      closeModal();
+    }
+  } catch (err) {
+    console.error("Save failed", err);
+    journalStatus.textContent = i18nT("common.couldnt_save");
+  }
+});
+
+// ---- Edit metadata ----
+
+async function openEditModal(entry) {
+  document.getElementById("journal-edit-id").value = entry.id;
+  document.getElementById("journal-edit-title").value = entry.title || "";
+  document.getElementById("journal-edit-content").value = entry.content || "";
+  document.querySelector(`#journal-edit-form input[name="journal-edit-visibility"][value="${entry.visibility || "public"}"]`).checked = true;
+  document.getElementById("journal-edit-tags").value = (entry.tags || []).join(", ");
+  document.getElementById("journal-edit-location-name").value = entry.locationName || "";
+  document.getElementById("journal-edit-location-address").value = entry.locationAddress || "";
+  document.getElementById("journal-edit-latitude").value = entry.latitude ?? "";
+  document.getElementById("journal-edit-longitude").value = entry.longitude ?? "";
+  const isPlaceResolved = entry.latitude != null && entry.longitude != null && entry.locationPrecision === "place_resolved";
+  document.getElementById("journal-edit-location-precision-hint").value = isPlaceResolved ? "place_resolved" : "";
+  // See gallery.js's openEditModal for why this call matters: without it, a no-op "input"
+  // event during this edit session could be mistaken for a manual rename and silently drop
+  // these valid, already-confirmed coordinates before save.
+  journalEditPlaceSearch.confirmPlace(isPlaceResolved ? entry.locationName : null);
+  syncJournalEditLocation();
+  await populateCollectionSelect(document.getElementById("journal-edit-collection"), entry.collectionId);
+  journalEditStatus.textContent = "";
+  journalEditModal.classList.remove("hidden");
+}
+function closeEditModal() {
+  journalEditModal.classList.add("hidden");
+  journalEditForm.reset();
+  journalEditStatus.textContent = "";
+}
+journalEditModalClose.addEventListener("click", closeEditModal);
+journalEditModalBackdrop.addEventListener("click", closeEditModal);
+
+journalEditForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const user = auth.currentUser;
+  if (!user) return;
+  const id = document.getElementById("journal-edit-id").value;
+  const entry = cachedEntries.find((e) => e.id === id);
+  if (!entry || entry.uid !== user.uid) return;
+
+  const payload = {
+    title: document.getElementById("journal-edit-title").value.trim(),
+    content: document.getElementById("journal-edit-content").value.trim(),
+    visibility: document.querySelector('#journal-edit-form input[name="journal-edit-visibility"]:checked').value,
+    tags: document.getElementById("journal-edit-tags").value.split(",").map((t) => t.trim()).filter(Boolean),
+    collectionId: document.getElementById("journal-edit-collection").value || null,
+    ...readLocationFields("journal-edit"),
+    updatedAt: serverTimestamp(),
+  };
+  try {
+    await updateDoc(doc(db, "journals", id), payload);
+    // Same opt-in switch as atlas.js — verifies exactly what the edit wrote to Firestore.
+    if (localStorage.getItem("eden_atlas_debug") === "1") console.log("[journal:debug] edit saved", id, payload);
+    journalEditStatus.textContent = i18nT("common.saved");
+    await fetchVisibleEntries();
+    closeEditModal();
+  } catch (err) {
+    console.error("[journal] edit save failed:", err.code || err);
+    journalEditStatus.textContent = i18nT("common.couldnt_save");
+  }
+});
+
+// Re-render mood options/chips and cached entries (labels, "Edit metadata" title) whenever the
+// language switcher fires.
+document.addEventListener("eden:langchange", () => {
+  renderMoodOptions();
+  setMoodFilter(activeMood);
+  renderGrid();
+});

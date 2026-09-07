@@ -4,7 +4,7 @@ This document describes the intended shape of a future Agentic AI assistant for 
 is **documentation only**: no AI provider has been chosen or installed, no API key exists
 anywhere in this repo or in Netlify's environment configuration, and no chat/agent endpoint
 exists yet. The only Netlify Function that currently exists is the unauthenticated,
-no-dependency `netlify/functions/health.js` health check — see `netlify.toml` and the
+no-dependency `backend/netlify/functions/health.js` health check — see `netlify.toml` and the
 completion report for this pass.
 
 This repo previously had an AI assistant (`ai.html`/`ai-agent.js`, Gemini via `@google/genai`,
@@ -107,8 +107,8 @@ bug here).
 ## What already exists vs. what's still to build
 
 **Exists today (this pass):**
-- `netlify.toml` — declares `functions = "netlify/functions"`, no secrets, no AI wiring.
-- `netlify/functions/health.js` — unauthenticated, dependency-free liveness check. Does not
+- `netlify.toml` — declares `functions = "backend/netlify/functions"`, no secrets, no AI wiring.
+- `backend/netlify/functions/health.js` — unauthenticated, dependency-free liveness check. Does not
   touch Firestore, Firebase Admin, or any environment variable.
 - `.env.example` — documents the *names* a future AI Function will read from
   `process.env` (`AI_PROVIDER`, `AI_PROVIDER_API_KEY`, `AI_MODEL`,

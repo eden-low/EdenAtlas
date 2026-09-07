@@ -8,33 +8,38 @@ node_modules/
 # deploy, never hand-edited, never committed.
 /site/
 
-# Generated Tailwind CSS output (tailwind.config.js/tailwind-input.css are the tracked source) —
+# Generated Tailwind CSS output (tailwind.config.js and frontend/styles/tailwind-input.css are the tracked source) —
 # rebuilt by `npm run build:css` on every build, never hand-edited, never committed.
 /tailwind.generated.css
 
-# Generated Deploy Preview origin snapshot for netlify/functions/anilist.js (scripts/generate-
+# Generated Deploy Preview origin snapshot for backend/netlify/functions/anilist.js (scripts/generate-
 # deploy-origin.js) — not a secret (an https URL), rebuilt by `npm run build` on every build,
 # never hand-edited, never committed.
+/backend/netlify/functions/lib/deploy-origin.generated.json
+# Ignore stale pre-migration generated artifacts too; generators no longer write these paths.
 /netlify/functions/lib/deploy-origin.generated.json
 
-# Generated build-time environment snapshot for js/environment.js (scripts/generate-build-info.js)
+# Generated build-time environment snapshot for frontend/js/environment.js (scripts/generate-build-info.js)
 # — not a secret, rebuilt by `npm run build` on every build, never hand-edited, never committed.
 # Missing entirely (a fresh checkout with no build run yet) degrades gracefully: the <script> tag
-# 404s harmlessly and js/environment.js's getEnvironment() falls back to ENV.DEVELOPMENT, same
+# 404s harmlessly and frontend/js/environment.js's getEnvironment() falls back to ENV.DEVELOPMENT, same
 # "gitignored generated file, graceful fallback if absent" pattern as deploy-origin.generated.json
 # above.
+/frontend/js/build-info.generated.js
 /js/build-info.generated.js
 
 # Generated public Firebase Web config + VAPID public key for service-worker.js's background FCM
 # handler (scripts/generate-build-info.js) — only ever public values (see that script's header
 # comment for the exact allowlist), never a secret. Same gitignored/graceful-fallback treatment.
+/frontend/js/fcm-config.generated.js
 /js/fcm-config.generated.js
 
 # Generated server-side Netlify CONTEXT/BRANCH snapshot for Netlify Functions' environment
-# isolation (scripts/generate-function-context.js / netlify/functions/lib/build-context.js) — not
+# isolation (scripts/generate-function-context.js / backend/netlify/functions/lib/build-context.js) — not
 # a secret, rebuilt by `npm run build` on every build, never hand-edited, never committed. Missing
 # entirely degrades to {context: null, branch: null, expectedStagingProjectId: null}, treated as
 # "not verifiably Staging" everywhere it's read.
+/backend/netlify/functions/lib/build-context.generated.json
 /netlify/functions/lib/build-context.generated.json
 
 # Environment / secrets (Netlify Functions prep) — never commit real values.
@@ -49,7 +54,7 @@ node_modules/
 .netlify/
 
 # Firebase Admin / service-account credentials — this project only ever uses the public
-# client-side Firebase Web config (firebase-init.js), never Admin SDK credentials in-repo.
+# client-side Firebase Web config (frontend/js/firebase-init.js), never Admin SDK credentials in-repo.
 service-account*.json
 firebase-adminsdk-*.json
 *firebase-adminsdk*.json

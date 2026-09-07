@@ -122,10 +122,13 @@ original build to avoid a risky site-wide route rename (see the Brand & navigati
 
 ## Running locally
 
-No install or build required — just open [index.html](index.html) in a browser (the public Portfolio), or [home.html](home.html) directly if you're signing in to the private app — or serve the folder locally:
+Install dependencies, generate the public `site/` tree, and serve that public root. Product HTML
+source lives in `frontend/pages/`; opening it directly would bypass the source-to-public mapping.
 
 ```powershell
-npx serve .
+npm install
+npm run build
+npx serve site
 ```
 
 ## Deployment: Netlify
@@ -133,16 +136,16 @@ npx serve .
 Production is [https://edenatlas.netlify.app/](https://edenatlas.netlify.app/) — `netlify.toml`
 publishes a generated `site/` directory (never the repo root) built by
 [scripts/build-site.js](scripts/build-site.js), a small dependency-free Node script that copies
-an explicit **allowlist** of product files/directories (every real page, root-level script,
-`js/`/`locales/`/`images/`, `styles.css`, `manifest.json`, `service-worker.js`) while preserving
-every relative path exactly — still buildless in spirit (no bundler, no transpilation, byte-
+an explicit source-to-public mapping from `frontend/` to the existing public paths (`*.html`,
+`js/`, `locales/`, `images/`, `styles.css`, `manifest.json`, `service-worker.js`) — still
+buildless in spirit (no bundler, no transpilation, byte-
 identical copies), just not a bare repo-root publish. Internal docs (`CLAUDE.md`, `README.md`,
 `design-system.md`, `brand-book.md`, `docs/*`), Firebase/Netlify config
 (`firestore.rules`/`storage.rules`/`firebase.json`/`.firebaserc`/`.env*`), and the Netlify
-Functions *source* tree (`netlify/`) are never in that allowlist, so they can't be served no
+Functions *source* tree (`backend/netlify/functions/`) is never mapped, so it can't be served no
 matter what — an earlier redirect-based blacklist approach was replaced after live testing found
 it unreliable; see `scripts/build-site.js`'s and `netlify.toml`'s comments for the full story.
-`functions = "netlify/functions"` reads Function source independently of `publish`, so
+`functions = "backend/netlify/functions"` reads Function source independently of `publish`, so
 `/.netlify/functions/health` and `/.netlify/functions/assistant` (the Owner-only Atlas
 Assistant, see below) work unaffected. Real secrets belong in Netlify's own Project
 configuration → Environment variables — see `.env.example` for the documented variable names
@@ -155,14 +158,14 @@ exactly as buildless as described above.
 A `staging` Git branch, deployed as a Netlify **branch deploy** (a stable URL, not a per-PR Deploy
 Preview) — configured once in the Netlify UI (Site configuration → Build & deploy → Deploy
 contexts → Branch deploys → add `staging`), not in `netlify.toml`, since Netlify already injects
-`CONTEXT=branch-deploy`/`BRANCH=staging` into that build automatically. `js/environment.js`
+`CONTEXT=branch-deploy`/`BRANCH=staging` into that build automatically. `frontend/js/environment.js`
 resolves this into `ENV.STAGING` at build time (via `scripts/generate-build-info.js` →
 `js/build-info.generated.js`, never a hostname guess) and: shows an "⚠ STAGING" banner on every
-page (`auth-guard.js`/`login.html`), sets `X-Robots-Tag: noindex, nofollow` on the whole deploy
+page (`frontend/js/auth-guard.js`/`frontend/pages/login.html`), sets `X-Robots-Tag: noindex, nofollow` on the whole deploy
 (`scripts/build-site.js`), and — the important part — **blocks Discover's Firestore writes**
 (`isStagingWritesUnsafe()`) whenever Staging has no dedicated Firebase project of its own,
 so a staging smoke test can never mutate Production data. CORS needs no extra config: the existing
-Deploy-Preview-origin mechanism (`netlify/functions/lib/deploy-origin.js`) already auto-allows
+Deploy-Preview-origin mechanism (`backend/netlify/functions/lib/deploy-origin.js`) already auto-allows
 whatever origin a branch deploy's own `DEPLOY_PRIME_URL` resolves to. See `netlify.toml`'s
 "Staging" comment block for the exact manual Netlify/Firebase Console steps this repo cannot
 perform on its own (enabling the branch deploy, adding the resulting domain to Firebase
@@ -173,10 +176,10 @@ the six `STAGING_FIREBASE_*` variables in `.env.example`).
 above is a UX safeguard, not a security boundary — Firebase Admin bypasses `firestore.rules`
 entirely, so every Function that initializes Admin (`anilist.js`, `discover-ai.js`, `assistant.js`,
 `weather.js`, `anime-airing-check.js`) needs its OWN isolation, independent of anything the browser
-does. `netlify/functions/lib/firebase-admin.js`'s `enforceDeployContextPolicy()` (built on
+does. `backend/netlify/functions/lib/firebase-admin.js`'s `enforceDeployContextPolicy()` (built on
 `resolveDeployRole()`) is that boundary — it runs first thing inside `initializeFirebaseAdmin()`
 (before even the warm-instance reuse shortcut, so it can't be skipped on a warm container), from a
-build-time snapshot of Netlify's own `CONTEXT`/`BRANCH` (`netlify/functions/lib/build-context.js`
+build-time snapshot of Netlify's own `CONTEXT`/`BRANCH` (`backend/netlify/functions/lib/build-context.js`
 — the server-side twin of `js/environment.js`'s browser-side detection, same "Functions can't read
 CONTEXT/BRANCH at runtime, only at build time" constraint `deploy-origin.js` already worked
 around). Four roles, each with an explicit rule — never an implicit "everything else is fine"
@@ -221,7 +224,7 @@ automatically on a published/Production-context deploy, and are not reachable th
 ordinary deployed URL by an arbitrary caller at all — Netlify invokes this code only via its own
 internal cron trigger (Production), the "Run now" control in the Netlify UI (available on preview/
 branch deploys too, including `staging`), or `netlify functions:invoke` locally.
-`netlify/functions/anime-airing-check.js` therefore has **no request-level authentication check of
+`backend/netlify/functions/anime-airing-check.js` therefore has **no request-level authentication check of
 its own** — an earlier version tried treating the invocation body's `{"next_run": "..."}` field as
 a security signal ("looks like the real scheduler, skip auth") and separately exposed a manual
 Owner-bearer-token HTTP mode in the same file; both are gone. `next_run` is scheduling metadata
@@ -231,8 +234,8 @@ Production may always send for real; pre-production (`staging` or any Deploy Pre
 **enforced dry-run** unless `STAGING_ALLOW_REAL_SEND` is explicitly set AND `ensureFirebaseAdmin()`
 has already proven real, isolated staging credentials are configured; Dev/local invocation always
 stays dry-run, no opt-in exists for it. The actual scheduling/dedup/cleanup LOGIC lives in
-`netlify/functions/lib/airing-check-core.js`'s `runAiringCheck(deps, options)`, independently
-unit/integration-testable with an injected clock (see `netlify/functions/__tests__/
+`backend/netlify/functions/lib/airing-check-core.js`'s `runAiringCheck(deps, options)`, independently
+unit/integration-testable with an injected clock (see `backend/netlify/functions/__tests__/
 airing-check-core.test.js`) — that's how it's verified in this environment, with zero network
 access, dry-run mode running every read for real while skipping every write/send. **The automatic
 cron schedule itself cannot be proven by a branch deploy** — confirming it actually fires on its
@@ -280,7 +283,7 @@ required.
 16. Never point any of the above at Production data — every step above provisions a project
     that is deliberately separate from `lfj-profolio`.
 
-## Atlas Assistant: `assistant.html` + `netlify/functions/assistant.js`
+## Atlas Assistant: `assistant.html` + `backend/netlify/functions/assistant.js`
 
 An Owner-only, read-only AI assistant over the Owner's own Memories/Journal/Journey/Calendar,
 powered by Qwen (Alibaba Cloud Model Studio's OpenAI-compatible Chat Completions API) through a
@@ -290,14 +293,14 @@ never talks to Qwen directly and never sees `DASHSCOPE_API_KEY`; every request i
 ID-token-authenticated call to `/.netlify/functions/assistant`, which re-verifies the token
 server-side, confirms Owner role via two independent signals, and only then runs a bounded (max
 3 rounds) tool-calling loop against six fixed, validated tools
-(`netlify/functions/lib/tools.js`) — the model can never supply a raw collection name, document
+(`backend/netlify/functions/lib/tools.js`) — the model can never supply a raw collection name, document
 path, uid, or query operator. No write path exists anywhere in this feature. Nothing is sent to
 Qwen until the Owner explicitly accepts a bilingual consent notice; per-request data scopes
 (Memories/Journal/Journey/Calendar) default off. Run
-`node netlify/functions/__tests__/assistant.test.js` (or `npm run test:functions`) for the
+`node backend/netlify/functions/__tests__/assistant.test.js` (or `npm run test:functions`) for the
 deterministic, fully-mocked test suite (no real Firebase project or Qwen key needed).
 
-## Discover (anime): `discover.html` + `netlify/functions/anilist.js` + `netlify/functions/discover-ai.js`
+## Discover (anime): `discover.html` + `backend/netlify/functions/anilist.js` + `backend/netlify/functions/discover-ai.js`
 
 An **Owner-only** personal anime tracker — not in the main nav table above (same treatment as
 Atlas Assistant/Constellation: an Owner-scoped feature with its own dedicated section, not a row
@@ -307,7 +310,7 @@ Watching / Completed / Paused / Dropped), and **For You** (Qwen-ranked recommend
 below), each card showing cover, preferred title, AniList's own `averageScore`, format, airing
 status, available episode count, and next-airing info when applicable. Every AniList request goes
 through `/.netlify/functions/anilist` — a fixed operation allowlist (`browse`/`search`/`details`/
-`batch`, `netlify/functions/lib/anilist-operations.js`) that constructs every GraphQL query
+`batch`, `backend/netlify/functions/lib/anilist-operations.js`) that constructs every GraphQL query
 server-side; the browser never supplies a raw query, and `isAdult: false` is force-set into every
 request, never read from the client. The Function reuses `assistant.js`'s exact Owner-
 authorization shape (a server-verified Firebase ID token plus a `users/{uid}.role === "owner"` +
@@ -315,17 +318,17 @@ email double-check) — a Friend or Viewer's request is rejected with `403 owner
 AniList call is ever made, and the page itself is unreachable to them: `discover.html` carries
 `data-owner-only="true"` (the same `auth-guard.js` backstop every other Owner-only page uses), and
 it appears in neither `js/sidebar.js`'s nor `js/mobile-nav.js`'s Friend/Viewer ("Light EdenAtlas")
-link arrays. A short-lived, bounded in-memory cache (`netlify/functions/lib/anilist-cache.js`,
+link arrays. A short-lived, bounded in-memory cache (`backend/netlify/functions/lib/anilist-cache.js`,
 never a persistent catalog store) and My List's batched `id_in` live-refresh (one Function call
 for the whole list, never N+1) keep this from ever hoarding or bulk-copying the AniList catalog.
 Followed titles are stored minimally in a new `followed_anime/{uid}_{anilistId}` collection —
 denormalized title/cover/format/status only, never AniList's description/genres/score/airing
 schedule (those are always fetched live on demand, never persisted) — gated Owner-only end to end
-by `firestore.rules`. Run `node netlify/functions/__tests__/anilist.test.js` (or `npm run
+by `firestore.rules`. Run `node backend/netlify/functions/__tests__/anilist.test.js` (or `npm run
 test:functions`) for the deterministic, fully-mocked test suite.
 
 **Discover AI (Qwen translation + recommendations)**: a **third, separate** Netlify Function,
-`netlify/functions/discover-ai.js` — reuses the same Owner-authorization/CORS pattern but has no
+`backend/netlify/functions/discover-ai.js` — reuses the same Owner-authorization/CORS pattern but has no
 code path to any personal-data collection (Journal/Memories/Finance/Calendar/Profile); it only
 ever reads the Owner's own `followed_anime`, public AniList data through the unmodified
 `anilist-operations.js` sanitizer, and its own rate-limit documents. **Translate to Chinese /
@@ -340,9 +343,9 @@ any hallucinated, followed, or duplicate id is dropped server-side, and every re
 actual data comes from the sanitized AniList object, never from Qwen. Never called on ordinary
 page load; loads once per Discover visit, Refresh always bypasses its 20-minute server cache.
 Independent daily/burst quotas from the Atlas Assistant and from each other (20/day translate,
-10/day recommend — see `netlify/functions/lib/rate-limit.js`'s `collectionName` option). Run
-`node netlify/functions/__tests__/discover-ai.test.js` for its deterministic, fully-mocked suite,
-and `node js/__tests__/discover-foryou.test.js` / `node js/__tests__/discover-translate.test.js`
+10/day recommend — see `backend/netlify/functions/lib/rate-limit.js`'s `collectionName` option). Run
+`node backend/netlify/functions/__tests__/discover-ai.test.js` for its deterministic, fully-mocked suite,
+and `node frontend/js/__tests__/discover-foryou.test.js` / `node frontend/js/__tests__/discover-translate.test.js`
 for the frontend behavior. **Not part of this feature** (see `CLAUDE.md`'s Discover AI history
 entry for the full scope): TV dramas, personal score/notes fields, and any streaming/external
 watch link beyond a single validated "View on AniList" link.
@@ -356,7 +359,7 @@ opening My List. Uses Firebase Cloud Messaging (`js/push-notifications.js`); the
 public key is a public, build-time-injected value (`FIREBASE_VAPID_PUBLIC_KEY`, see
 `.env.example`) — until it's set, the notification UI stays in a disabled "not yet configured"
 state rather than fabricating one. A scheduled Netlify Function,
-`netlify/functions/anime-airing-check.js` (`netlify.toml`'s `[functions."anime-airing-check"]
+`backend/netlify/functions/anime-airing-check.js` (`netlify.toml`'s `[functions."anime-airing-check"]
 schedule`, every 20 minutes — requires Scheduled Functions to be available on the connected
 Netlify account), re-fetches each subscribed title's `nextAiringEpisode` from AniList, sends a
 push once an episode's `airingAt` has passed, and records a deterministic
@@ -368,7 +371,7 @@ airing data comes from AniList only — Qwen is never involved in scheduling.
 
 ## Login gate: `auth-guard.js` + `login.html`
 
-Every page except `login.html` is gated: a single `<script type="module" src="auth-guard.js"></script>` tag checks `onAuthStateChanged` and redirects to `login.html?redirect=<page>` if signed out, or reveals the page once a user is confirmed. `login.html` resolves the signer's role (Owner / Friend / Viewer, cached to `localStorage` as `lfj:userMode`), upserts a `users/{uid}` directory doc, writes a `login_logs` doc, and writes a "new login" notification — all before redirecting into the app. This gate is a UX convenience, not the security boundary — real access control is (and remains) enforced by `firestore.rules`/`storage.rules`.
+Every page except `login.html` is gated: a single `<script type="module" src="js/auth-guard.js"></script>` tag checks `onAuthStateChanged` and redirects to `login.html?redirect=<page>` if signed out, or reveals the page once a user is confirmed. `frontend/pages/login.html` resolves the signer's role (Owner / Friend / Viewer, cached to `localStorage` as `lfj:userMode`), upserts a `users/{uid}` directory doc, writes a `login_logs` doc, and writes a "new login" notification — all before redirecting into the app. This gate is a UX convenience, not the security boundary — real access control is (and remains) enforced by `firestore.rules`/`storage.rules`.
 
 On iPhone, an installed "Add to Home Screen" PWA can't reliably complete Google sign-in inside its own standalone window — `login.html` detects that (`isStandalone()`) and swaps the button for an "Open in Safari to Sign In" link instead, which hands off to real Safari where the normal popup flow works; the installed app picks up the resulting session on next launch.
 
@@ -471,16 +474,16 @@ targets are ≥44px.
 
 ## Tech stack
 
-- HTML5 + [Tailwind CSS](https://tailwindcss.com/) `3.4.19` (pinned exact `devDependency`; compiled locally via `npm run build:css`/`npm run watch:css` from root-level `tailwind.config.js` + `tailwind-input.css` into gitignored `tailwind.generated.css` — single shared config, no per-page CDN script or inline config block)
+- HTML5 + [Tailwind CSS](https://tailwindcss.com/) `3.4.19` (pinned exact `devDependency`; compiled locally via `npm run build:css`/`npm run watch:css` from root-level `tailwind.config.js` + `frontend/styles/tailwind-input.css` into gitignored root `tailwind.generated.css` — single shared config, no per-page CDN script or inline config block)
 - [Chart.js](https://www.chartjs.org/) (loaded via CDN on `resume.html`, `expenses.html`, `dashboard.html`, and `reports.html`) for charts
 - [marked.js](https://marked.js.org/) (loaded via CDN on `journal.html`) for lightweight markdown rendering
 - [Font Awesome 6](https://fontawesome.com/) for icons
 - System font stacks only — no webfont loading
-- [Firebase](https://firebase.google.com/) (Auth, Firestore, Storage) via `firebase-init.js` and each page's own module, loaded as ES modules straight from `gstatic.com` — no npm install, no bundler
+- [Firebase](https://firebase.google.com/) (Auth, Firestore, Storage) via `frontend/js/firebase-init.js` and each page's own module, loaded as ES modules straight from `gstatic.com` — no frontend bundler
 - [OpenWeatherMap](https://openweathermap.org/) Current Weather API for the homepage weather widget
-- Shared custom styles in [styles.css](styles.css); shared behavior in [scripts.js](scripts.js) (scroll-reveal, service-worker registration)
-- A PWA layer: [manifest.json](manifest.json) + [service-worker.js](service-worker.js) (network-first with cache fallback, bypassing Firebase/CDN/weather hosts)
-- [Netlify](https://www.netlify.com/) for hosting (an allowlist-built `site/` publish directory, see [Deployment](#deployment-netlify) above) and [Netlify Functions](https://docs.netlify.com/functions/overview/) for server-side code — `netlify/functions/health.js` (dependency-free liveness check) and `netlify/functions/assistant.js` (the Owner-only Atlas Assistant, using [firebase-admin](https://www.npmjs.com/package/firebase-admin) for server-side auth — the one npm dependency in this repo, scoped to Functions only)
+- Shared custom styles in `frontend/styles/styles.css`; shared behavior in `frontend/js/scripts.js` (scroll-reveal, service-worker registration)
+- A PWA layer: `frontend/manifest.json` + `frontend/service-worker.js` (network-first with cache fallback, bypassing Firebase/CDN/weather hosts)
+- [Netlify](https://www.netlify.com/) for hosting (an allowlist-built `site/` publish directory, see [Deployment](#deployment-netlify) above) and [Netlify Functions](https://docs.netlify.com/functions/overview/) for server-side code — `backend/netlify/functions/health.js` (dependency-free liveness check) and `backend/netlify/functions/assistant.js` (the Owner-only Atlas Assistant, using [firebase-admin](https://www.npmjs.com/package/firebase-admin) for server-side auth — the one npm dependency in this repo, scoped to Functions only)
 - [Qwen](https://www.alibabacloud.com/en/product/modelstudio) (Alibaba Cloud Model Studio, OpenAI-compatible Chat Completions API) powers the Atlas Assistant — see [Atlas Assistant](#atlas-assistant-assistanthtml--netlifyfunctionsassistantjs) above
 
 ## Design system

@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<script src="js/build-info.generated.js"></script>
+  <script>(function(){try{var s=JSON.parse(localStorage.getItem('lfj:settings')||'{}');if(s.theme==='light')document.documentElement.setAttribute('data-theme','light');}catch(e){}})();</script>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Profile | EdenAtlas</title>
+  <link rel="stylesheet" href="tailwind.generated.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
+  <link rel="stylesheet" href="styles.css" />
+  <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" content="#09090e">
+  <script>try{if(JSON.parse(localStorage.getItem('lfj:settings')||'{}').theme==='light')document.querySelector('meta[name="theme-color"]').setAttribute('content','#f5f5f7');}catch(e){}</script>
+  <link rel="apple-touch-icon" href="images/icon-192.png">
+  <link rel="icon" type="image/png" sizes="192x192" href="images/icon-192.png">
+</head>
+<body class="auth-check-pending bg-darkBg text-white font-sans grid-bg min-h-screen pb-12">
+  <header class="hidden max-w-7xl mx-auto px-4 pt-6">
+    <div class="bg-cardBg/80 backdrop-blur-md neon-border-purple rounded-2xl px-6 py-4 flex flex-col md:flex-row items-center justify-between gap-4">
+      <div class="flex items-center gap-3">
+        <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-neonViolet to-neonPurple flex items-center justify-center shadow-lg shadow-neonPurple/20">
+          <i class="fa-solid fa-circle-user text-white text-lg animate-pulse"></i>
+        </div>
+        <div>
+          <span class="font-cyber font-semibold text-lg tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-white to-neonPurple">EdenAtlas</span>
+          <span class="text-[10px] block text-neonPurple font-code font-bold tracking-widest -mt-1">DIGITAL ATLAS</span>
+        </div>
+      </div>
+            <nav class="flex-1 min-w-0 flex flex-wrap items-center justify-center gap-x-4 gap-y-2 text-sm font-cyber font-semibold tracking-wider text-textGray">
+        <a href="home.html" class="hover:text-neonPurple transition-colors flex items-center gap-1.5"><i class="fa-solid fa-house text-xs"></i> <span data-i18n="nav.home">Home</span></a>
+        <a href="resume.html" class="hover:text-neonPurple transition-colors flex items-center gap-1.5"><i class="fa-solid fa-scroll text-xs"></i> <span data-i18n="nav.career">Career</span></a>
+        <a href="gallery.html" class="hover:text-neonPurple transition-colors flex items-center gap-1.5"><i class="fa-solid fa-images text-xs"></i> <span data-i18n="nav.memories">Memories</span></a>
+        <a href="atlas.html" class="hover:text-neonPurple transition-colors flex items-center gap-1.5"><i class="fa-solid fa-map-location-dot text-xs"></i> <span data-i18n="nav.atlas">Atlas</span></a>
+        <a href="timeline.html" class="hover:text-neonPurple transition-colors flex items-center gap-1.5"><i class="fa-solid fa-timeline text-xs"></i> <span data-i18n="nav.journey">Journey</span></a>
+        <a href="dashboard.html" class="hover:text-neonPurple transition-colors flex items-center gap-1.5"><i class="fa-solid fa-chart-line text-xs"></i> <span data-i18n="nav.people">Connections</span></a>
+        <a href="reports.html" class="hover:text-neonPurple transition-colors flex items-center gap-1.5"><i class="fa-solid fa-chart-pie text-xs"></i> <span data-i18n="nav.reports">Reports</span></a>
+        <a href="notifications.html" class="hover:text-neonPurple transition-colors flex items-center gap-1.5"><i class="fa-solid fa-bell text-xs"></i> <span data-i18n="nav.inbox">Inbox</span> <span id="notif-badge" class="hidden px-1.5 py-0.5 rounded-full bg-rose-500 text-white text-[9px] font-bold"></span></a>
+        <a href="me.html" class="hover:text-neonPurple transition-colors flex items-center gap-1.5"><i class="fa-solid fa-circle-user text-xs"></i> <span data-i18n="nav.me">Me</span></a>
+        <a href="journal.html" class="hover:text-neonPurple transition-colors flex items-center gap-1.5"><i class="fa-solid fa-book text-xs"></i> <span data-i18n="nav.journal">Journal</span></a>
+        <a href="expenses.html" class="hover:text-neonPurple transition-colors flex items-center gap-1.5"><i class="fa-solid fa-wallet text-xs"></i> <span data-i18n="nav.finance">Finance</span></a>
+        <a href="calendar.html" class="hover:text-neonPurple transition-colors flex items-center gap-1.5"><i class="fa-solid fa-calendar-days text-xs"></i> <span data-i18n="nav.calendar">Calendar</span></a>
+        <a href="habits.html" class="hover:text-neonPurple transition-colors flex items-center gap-1.5"><i class="fa-solid fa-list-check text-xs"></i> <span data-i18n="nav.habits">Habits</span></a>
+        <a href="discover.html" class="hover:text-neonPurple transition-colors flex items-center gap-1.5"><i class="fa-solid fa-compass text-xs"></i> <span data-i18n="nav.discover">Discover</span></a>
+        <a href="contact.html" class="hover:text-neonPurple transition-colors flex items-center gap-1.5"><i class="fa-solid fa-envelope text-xs"></i> <span data-i18n="nav.contact">Contact</span></a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="max-w-3xl mx-auto px-4 mt-8 space-y-6">
+    <a href="dashboard.html" class="text-xs font-code text-textGray hover:text-neonPurple transition-colors inline-flex items-center gap-1.5">
+      <i class="fa-solid fa-arrow-left"></i> <span data-i18n="profile.back_to_search">Back to Search</span>
+    </a>
+
+    <section id="profile-header" class="reveal bg-cardBg/90 backdrop-blur-sm p-6 rounded-2xl neon-border-purple">
+      <div class="flex items-center gap-4">
+        <div class="skeleton w-16 h-16 rounded-full flex-shrink-0"></div>
+        <div class="space-y-2">
+          <div class="skeleton h-4 w-40"></div>
+          <div class="skeleton h-3 w-24"></div>
+        </div>
+      </div>
+    </section>
+
+    <a id="resume-cta" href="#" class="hidden reveal flex items-center justify-center gap-2 bg-cardBg/90 backdrop-blur-sm px-5 py-3 rounded-2xl neon-border-purple text-sm font-cyber font-bold tracking-wider text-neonPurple hover:scale-105 transition-all">
+      <i class="fa-solid fa-file-lines"></i> <span data-i18n="profile.view_resume">View Resume</span>
+    </a>
+
+    <section id="private-notice" class="hidden reveal bg-cardBg/90 backdrop-blur-sm p-6 rounded-2xl neon-border-purple text-center">
+      <i class="fa-solid fa-lock text-2xl text-textGray"></i>
+      <p class="mt-3 text-sm text-textGray" data-i18n="profile.private_notice">This profile is private.</p>
+    </section>
+
+    <section id="profile-content" class="hidden space-y-6">
+      <div class="reveal bg-cardBg/90 backdrop-blur-sm p-6 rounded-2xl neon-border-purple">
+        <p class="text-[10px] uppercase tracking-[0.2em] text-textGray font-code mb-4" data-i18n="profile.stats">Stats</p>
+        <div id="profile-stats" class="grid grid-cols-2 lg:grid-cols-4 gap-4 text-sm"></div>
+      </div>
+
+      <div id="career-section" class="hidden reveal bg-cardBg/90 backdrop-blur-sm p-6 rounded-2xl neon-border-purple">
+        <p class="text-[10px] uppercase tracking-[0.2em] text-textGray font-code mb-4" data-i18n="profile.career">Career</p>
+        <div id="career-list" class="space-y-3"></div>
+      </div>
+
+      <div class="reveal bg-cardBg/90 backdrop-blur-sm p-6 rounded-2xl neon-border-purple">
+        <div class="flex items-center justify-between mb-4">
+          <p class="text-[10px] uppercase tracking-[0.2em] text-textGray font-code" data-i18n="profile.albums">Albums</p>
+          <button id="album-reset-btn" class="hidden text-[11px] font-code text-neonPurple hover:underline" data-i18n="profile.back_to_all">Back to all</button>
+        </div>
+        <div id="album-tiles" class="grid grid-cols-3 sm:grid-cols-5 gap-2 mb-5"></div>
+        <div id="photo-grid" class="grid grid-cols-3 gap-1"></div>
+        <p id="photo-grid-empty" class="hidden text-center text-xs font-code text-textGray py-10" data-i18n="profile.no_public_photos">No public photos yet.</p>
+      </div>
+
+      <div id="atlas-section" class="hidden reveal bg-cardBg/90 backdrop-blur-sm p-6 rounded-2xl neon-border-purple">
+        <div class="flex items-center justify-between mb-4">
+          <p class="text-[10px] uppercase tracking-[0.2em] text-textGray font-code" data-i18n="profile.public_atlas">Public Atlas</p>
+          <a href="atlas.html" class="text-[11px] font-code text-neonPurple hover:underline" data-i18n="profile.view_on_atlas">View on Atlas</a>
+        </div>
+        <div id="atlas-places-list" class="flex flex-wrap gap-2"></div>
+      </div>
+
+      <div id="timeline-list-section" class="hidden reveal bg-cardBg/90 backdrop-blur-sm p-6 rounded-2xl neon-border-purple">
+        <p class="text-[10px] uppercase tracking-[0.2em] text-textGray font-code mb-4" data-i18n="profile.public_timeline">Journey</p>
+        <div id="timeline-list" class="space-y-2"></div>
+      </div>
+
+      <div id="achievements-section" class="hidden reveal bg-cardBg/90 backdrop-blur-sm p-6 rounded-2xl neon-border-purple">
+        <p class="text-[10px] uppercase tracking-[0.2em] text-textGray font-code mb-4" data-i18n="people.achievements">Achievements</p>
+        <div id="achievements-list" class="grid grid-cols-3 gap-3"></div>
+      </div>
+
+      <div id="recent-activity-section" class="hidden reveal bg-cardBg/90 backdrop-blur-sm p-6 rounded-2xl neon-border-purple">
+        <p class="text-[10px] uppercase tracking-[0.2em] text-textGray font-code mb-4" data-i18n="profile.recent_activity">Recent Activity</p>
+        <div id="recent-activity-list" class="space-y-2"></div>
+      </div>
+
+      <div id="journal-list-section" class="hidden reveal bg-cardBg/90 backdrop-blur-sm p-6 rounded-2xl neon-border-purple">
+        <p class="text-[10px] uppercase tracking-[0.2em] text-textGray font-code mb-4" data-i18n="profile.public_journal">Public Journal</p>
+        <div id="journal-list" class="space-y-2"></div>
+      </div>
+    </section>
+  </main>
+
+  <!-- Photo modal: full image + like/comment, read-only otherwise -->
+  <div id="photo-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4">
+    <div id="photo-modal-backdrop" class="absolute inset-0 bg-darkBg/80 backdrop-blur-sm"></div>
+    <div class="relative w-full max-w-lg bg-cardBg neon-border-purple rounded-2xl overflow-hidden max-h-[90vh] flex flex-col">
+      <button id="photo-modal-close" class="absolute top-3 right-3 z-10 w-8 h-8 rounded-full bg-darkBg/70 text-white hover:text-neonPurple flex items-center justify-center text-xl leading-none">&times;</button>
+      <img id="photo-modal-img" src="" alt="" class="w-full max-h-[50vh] object-cover flex-shrink-0">
+      <div class="p-4 space-y-3 overflow-y-auto">
+        <div id="photo-modal-topline" class="flex items-center justify-between gap-3 text-[11px] font-code text-textGray"></div>
+        <p id="photo-modal-caption" class="text-sm text-white"></p>
+        <p id="photo-modal-meta" class="text-[11px] font-code text-textGray"></p>
+        <div class="flex items-center gap-4 pt-3 border-t border-borderNeon/40">
+          <button id="photo-modal-like-btn" class="flex items-center gap-1.5 text-xs font-code text-textGray hover:text-rose-400 transition-colors">
+            <i class="fa-regular fa-heart"></i> <span id="photo-modal-like-count">0</span>
+          </button>
+        </div>
+        <div id="photo-modal-comments"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Read-only detail modal for journal entries / journey events opened from the previews
+       above — a calm window into a shared item, deliberately no like/comment/edit controls. -->
+  <div id="item-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4">
+    <div id="item-modal-backdrop" class="absolute inset-0 bg-darkBg/80 backdrop-blur-sm"></div>
+    <div class="relative w-full max-w-lg bg-cardBg neon-border-purple rounded-2xl overflow-hidden max-h-[85vh] flex flex-col">
+      <button id="item-modal-close" class="absolute top-3 right-3 z-10 w-8 h-8 rounded-full bg-darkBg/70 text-white hover:text-neonPurple flex items-center justify-center text-xl leading-none">&times;</button>
+      <div id="item-modal-body" class="p-6 overflow-y-auto space-y-3"></div>
+    </div>
+  </div>
+
+  <script type="module" src="js/splash.js"></script>
+    <script type="module" src="js/i18n.js"></script>
+  <footer class="max-w-7xl mx-auto px-4 mt-10 pb-6 text-center">
+    <p class="text-[11px] font-code text-textGray/70" data-i18n="footer.line">EdenAtlas &middot; by Jun &middot; Version 3.2</p>
+  </footer>
+
+  <script src="js/scripts.js" defer></script>
+  <script type="module" src="js/auth-guard.js"></script>
+    <script type="module" src="js/global-search.js"></script>
+    <script type="module" src="js/mobile-nav.js"></script>
+    <script type="module" src="js/sidebar.js"></script>
+  <script type="module" src="js/profile.js"></script>
+</body>
+</html>

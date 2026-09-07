@@ -1,0 +1,5 @@
+{
+  "private": true,
+  "type": "module",
+  "description": "Scopes Node's module resolution for this directory only, so frontend/js/__tests__/*.test.js can import the real browser ES modules directly instead of duplicating their logic. Has zero effect on the browser: pages load these files via script type=module, which ignores package.json entirely. Excluded from the deployed site by scripts/build-site.js's source-directory filter, together with this directory's __tests__/ subfolder."
+}

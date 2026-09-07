@@ -164,19 +164,6 @@ service cloud.firestore {
       allow create: if canParticipate() && request.resource.data.uid == request.auth.uid;
     }
 
-    // Phase 3B.4 canonical Calendar store: Firebase Admin only. Browser clients must use the
-    // authenticated Netlify Function, which derives ownerUid from a verified/revocation-checked
-    // Firebase token and loads every source document server-side. No browser role has direct
-    // read or write access, including the document owner and the site Owner account.
-    match /calendar_events/{canonicalEventId} {
-      allow read, write: if false;
-    }
-
-    // Phase 3B.7 provider mappings contain server-controlled Google identities.
-    match /calendar_event_sync/{mappingId} {
-      allow read, write: if false;
-    }
-
     match /habits/{habitId} {
       allow read: if isMineOrPublic(resource.data);
       allow update, delete: if request.auth != null && resource.data.uid == request.auth.uid;
@@ -197,7 +184,7 @@ service cloud.firestore {
       // every doc has a defined value from day one — the client always writes it explicitly
       // (defaulting to false), never omits it. nextEpisodeSnapshot/scheduleRefreshedAt are
       // deliberately NOT in this client-facing keys().hasOnly() allowlist: they're written only
-      // by the scheduled Netlify Function (netlify/functions/anime-airing-check.js) via Firebase
+      // by the scheduled Netlify Function (backend/netlify/functions/anime-airing-check.js) via Firebase
       // Admin, which bypasses these rules entirely (same as every other Admin-only field in this
       // app — see CLAUDE.md's repeated "Firebase Admin bypasses firestore.rules entirely" note).
       // A client updateDoc() is a partial write, so an update that only touches status/
@@ -424,18 +411,6 @@ service cloud.firestore {
     match /users/{uid} {
       allow read: if request.auth != null;
       allow write: if request.auth != null && request.auth.uid == uid && request.resource.data.uid == uid;
-    }
-
-    // Phase 3A.1: OAuth state and Calendar connection records are server-only. A connection may
-    // contain an encrypted refresh-token envelope, while a state record is itself a one-time
-    // authorization credential. Browser clients must never read or mutate either collection.
-    // Netlify Functions use Firebase Admin and therefore do not depend on client rules for access.
-    match /google_calendar_connections/{uid} {
-      allow read, write: if false;
-    }
-
-    match /google_calendar_oauth_states/{stateHash} {
-      allow read, write: if false;
     }
 
     // v3.2.2: a small denormalized mirror of users/{uid} — {uid, displayName, username,

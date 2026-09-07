@@ -1,13 +1,13 @@
 #!/usr/bin/env node
 // EdenAtlas — build-time Netlify CONTEXT/BRANCH snapshot for Netlify Functions' server-side
-// environment isolation (netlify/functions/lib/firebase-admin.js's
+// environment isolation (backend/netlify/functions/lib/firebase-admin.js's
 // assertProjectMatchesBuildContext()).
 //
 // Same pattern, same reasoning as scripts/generate-deploy-origin.js (read that file's header
 // first): CONTEXT/BRANCH are build-step-only Netlify variables, not available inside a deployed
 // Function's own process.env at runtime — confirmed against Netlify's docs, already cited there.
 // This script runs as part of `npm run build`, BEFORE Netlify bundles Functions with esbuild, so
-// whatever it writes to disk here is already present when netlify/functions/*.js is bundled.
+// whatever it writes to disk here is already present when backend/netlify/functions/*.js is bundled.
 //
 // STAGING_FIREBASE_PROJECT_ID is read here too (not just by scripts/generate-build-info.js's
 // client-side snapshot) so the SERVER side has an independent way to know "what project id should
@@ -22,7 +22,7 @@ const fs = require("fs");
 const path = require("path");
 
 const ROOT = path.resolve(__dirname, "..");
-const OUT_PATH = path.join(ROOT, "netlify", "functions", "lib", "build-context.generated.json");
+const OUT_PATH = path.join(ROOT, "backend", "netlify", "functions", "lib", "build-context.generated.json");
 
 function rawOrNull(value) {
   return typeof value === "string" && value.trim() !== "" ? value.trim() : null;

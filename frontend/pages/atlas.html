@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<script src="js/build-info.generated.js"></script>
+  <script>(function(){try{var s=JSON.parse(localStorage.getItem('lfj:settings')||'{}');if(s.theme==='light')document.documentElement.setAttribute('data-theme','light');}catch(e){}})();</script>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Atlas | EdenAtlas</title>
+  <link rel="stylesheet" href="tailwind.generated.css">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
+  <link rel="stylesheet" href="styles.css" />
+  <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" content="#09090e">
+  <script>try{if(JSON.parse(localStorage.getItem('lfj:settings')||'{}').theme==='light')document.querySelector('meta[name="theme-color"]').setAttribute('content','#f5f5f7');}catch(e){}</script>
+  <link rel="apple-touch-icon" href="images/icon-192.png">
+  <link rel="icon" type="image/png" sizes="192x192" href="images/icon-192.png">
+  <style>
+    #atlas-map { background: #0a0a0e; }
+    .leaflet-popup-content-wrapper { background: #17151f; color: #fff; border: 1px solid #2a2833; border-radius: 12px; }
+    .leaflet-popup-tip { background: #17151f; }
+    .leaflet-control-attribution { background: rgba(23,21,31,0.8) !important; color: #9793ab !important; }
+    .leaflet-control-attribution a { color: #a78bfa !important; }
+  </style>
+</head>
+<body class="auth-check-pending bg-darkBg text-white font-sans grid-bg min-h-screen pb-12">
+  <header class="hidden max-w-7xl mx-auto px-4 pt-6"></header>
+
+  <main class="max-w-6xl mx-auto px-4 mt-8 space-y-6">
+    <section class="reveal bg-cardBg/90 neon-border-purple rounded-2xl p-6">
+      <div class="flex flex-col md:flex-row md:items-start md:justify-between gap-4">
+        <div>
+          <h1 class="font-cyber font-semibold text-2xl" data-i18n="atlas.title">Atlas</h1>
+          <p class="text-textGray mt-2 text-sm" data-i18n="atlas.subtitle">A map of the places your life has touched.</p>
+        </div>
+        <div class="flex items-center gap-2 flex-wrap">
+          <a href="collections.html" class="px-4 py-2 bg-cardBg/70 border border-borderNeon rounded-xl text-xs font-cyber font-bold tracking-wider text-white hover:border-neonPurple transition-all whitespace-nowrap">
+            <i class="fa-solid fa-layer-group mr-1.5"></i> <span data-i18n="nav.collections">Collections</span>
+          </a>
+          <a href="constellation.html" class="px-4 py-2 bg-cardBg/70 border border-borderNeon rounded-xl text-xs font-cyber font-bold tracking-wider text-white hover:border-neonPurple transition-all whitespace-nowrap">
+            <i class="fa-solid fa-star mr-1.5"></i> <span data-i18n="nav.constellation">Constellation</span>
+          </a>
+        </div>
+      </div>
+    </section>
+
+    <section class="reveal bg-cardBg/90 neon-border-purple rounded-2xl p-3 flex flex-wrap items-center justify-between gap-3">
+      <div id="atlas-scope-tabs" class="flex items-center gap-1.5 text-xs font-cyber font-bold tracking-wider text-textGray bg-darkBg/40 rounded-full p-1">
+        <button data-scope="mine" class="scope-tab px-3 py-1.5 rounded-full transition-colors" data-i18n="atlas.my_atlas">My Atlas</button>
+        <button data-scope="connections" class="scope-tab px-3 py-1.5 rounded-full transition-colors" data-i18n="atlas.connections">Connections</button>
+      </div>
+      <p id="atlas-count" class="text-[11px] font-code text-textGray"></p>
+    </section>
+
+    <section class="reveal bg-cardBg/90 neon-border-purple rounded-2xl overflow-hidden">
+      <div id="atlas-map" class="w-full h-[420px] sm:h-[520px]"></div>
+    </section>
+    <p id="atlas-empty" class="hidden text-center text-xs font-code text-textGray py-10" data-i18n="atlas.no_locations">The map will grow as your journey continues.</p>
+
+    <!-- v3.4.1: places recorded by name only — no coordinates required to live in the Atlas -->
+    <section id="saved-places-section" class="hidden reveal bg-cardBg/90 neon-border-purple rounded-2xl p-6">
+      <h2 class="font-cyber font-semibold text-base" data-i18n="atlas.saved_places">Saved Places</h2>
+      <p class="text-[11px] font-code text-textGray mt-0.5 mb-4" data-i18n="atlas.saved_places_hint">Places without map coordinates</p>
+      <div id="saved-places-grid" class="grid sm:grid-cols-2 lg:grid-cols-3 gap-3"></div>
+    </section>
+
+    <section id="location-detail-panel" class="hidden reveal bg-cardBg/90 neon-border-purple rounded-2xl p-6">
+      <div class="flex items-center justify-between mb-3">
+        <h2 id="location-detail-name" class="font-cyber font-semibold text-lg"></h2>
+        <button id="location-detail-close" class="text-textGray hover:text-white text-xl leading-none">&times;</button>
+      </div>
+      <div id="location-detail-counts" class="flex flex-wrap items-center gap-4 text-xs font-code text-textGray mb-4"></div>
+      <div id="location-detail-collections" class="flex flex-wrap items-center gap-1.5 mb-4"></div>
+      <div id="location-detail-photos" class="grid grid-cols-3 sm:grid-cols-6 gap-2"></div>
+    </section>
+  </main>
+
+  <script type="module" src="js/splash.js"></script>
+    <script type="module" src="js/i18n.js"></script>
+  <footer class="max-w-7xl mx-auto px-4 mt-10 pb-6 text-center">
+    <p class="text-[11px] font-code text-textGray/70" data-i18n="footer.line">EdenAtlas &middot; by Jun &middot; Version 3.2</p>
+  </footer>
+
+  <script src="js/scripts.js" defer></script>
+  <script type="module" src="js/auth-guard.js"></script>
+    <script type="module" src="js/global-search.js"></script>
+    <script type="module" src="js/mobile-nav.js"></script>
+    <script type="module" src="js/sidebar.js"></script>
+  <script type="module" src="js/atlas.js"></script>
+</body>
+</html>

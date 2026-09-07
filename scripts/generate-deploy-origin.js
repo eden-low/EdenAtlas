@@ -1,7 +1,7 @@
 #!/usr/bin/env node
-// EdenAtlas — build-time Deploy Preview origin snapshot for netlify/functions/anilist.js.
+// EdenAtlas — build-time Deploy Preview origin snapshot for backend/netlify/functions/anilist.js.
 //
-// Why this exists: netlify/functions/anilist.js's Origin/CORS check was rejecting every request
+// Why this exists: backend/netlify/functions/anilist.js's Origin/CORS check was rejecting every request
 // from a Netlify Deploy Preview (403 origin_not_allowed) even though ALLOWED_ORIGIN correctly
 // allowed production. The obvious fix — read DEPLOY_PRIME_URL/DEPLOY_URL from process.env inside
 // the Function — does not work: verified against Netlify's own docs
@@ -13,10 +13,10 @@
 //
 // The fix: this script runs as part of `npm run build` (see package.json), which Netlify invokes
 // BEFORE it bundles Functions with esbuild — so whatever this script writes to disk is already
-// present when the bundler packages netlify/functions/anilist.js's dependency graph, and ships
+// present when the bundler packages backend/netlify/functions/anilist.js's dependency graph, and ships
 // inside the deployed Function bundle. It captures the two build-time-only URLs' RAW string
 // values exactly as the build saw them (no normalization here — see
-// netlify/functions/anilist.js's normalizeExactOrigin(), which does `new URL(value).origin` and
+// backend/netlify/functions/anilist.js's normalizeExactOrigin(), which does `new URL(value).origin` and
 // is unit-tested against malformed/forged values; keeping validation in one place, in the
 // Function itself, is easier to test than duplicating it here).
 //
@@ -32,7 +32,7 @@ const fs = require("fs");
 const path = require("path");
 
 const ROOT = path.resolve(__dirname, "..");
-const OUT_PATH = path.join(ROOT, "netlify", "functions", "lib", "deploy-origin.generated.json");
+const OUT_PATH = path.join(ROOT, "backend", "netlify", "functions", "lib", "deploy-origin.generated.json");
 
 function rawOrNull(value) {
   return typeof value === "string" && value.trim() !== "" ? value : null;
