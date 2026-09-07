@@ -302,7 +302,8 @@ async function run() {
     const frontendCmds = splitCmds(pkg.scripts["test:frontend"]);
     // "Prior" here means "predates the Discover 'My List' card-actions responsive-overflow fix's
     // own new suite," reconciled by folding every previously-new addition (xss-security.test.js,
-    // auth-pulse-scope.test.js, discover-security.test.js, discover-tabs.test.js,
+    // auth-pulse-scope.test.js, auth-foundation.test.js, auth-ui.test.js, discover-security.test.js,
+    // discover-tabs.test.js,
     // discover-description.test.js, environment.test.js, push-notifications.test.js) into this
     // baseline list — the same "new addition becomes next pass's baseline" convention this
     // assertion has followed every time it was updated before.
@@ -312,6 +313,9 @@ async function run() {
       "node frontend/js/__tests__/home-recent-memories.test.js",
       "node frontend/js/__tests__/xss-security.test.js",
       "node frontend/js/__tests__/auth-pulse-scope.test.js",
+      "node frontend/js/__tests__/auth-foundation.test.js",
+      "node frontend/js/__tests__/auth-ui.test.js",
+      "node frontend/js/__tests__/auth-operation-lock.test.js",
       "node frontend/js/__tests__/discover-security.test.js",
       "node frontend/js/__tests__/discover-tabs.test.js",
       "node frontend/js/__tests__/discover-description.test.js",

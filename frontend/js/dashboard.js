@@ -23,8 +23,8 @@ import {
 const authControl = document.getElementById("auth-control");
 
 // Security audit fix: publicDisplayName(person)/person.bio are Firestore-stored free text any
-// signed-in user can set on their own users/{uid} doc (readable by any signed-in user per
-// firestore.rules), and this page renders every discoverable person's card -- every
+// signed-in user can set on their own public_profiles/{uid} directory doc, and this page
+// renders every discoverable person's card -- every
 // interpolation into innerHTML below must be escaped. Same implementation as calendar.js's
 // pre-existing esc().
 function esc(s) {
@@ -68,10 +68,10 @@ const sentRequestsEmpty = document.getElementById("sent-requests-empty");
 
 async function loadUserDirectory() {
   try {
-    const snap = await getDocs(collection(db, "users"));
+    const snap = await getDocs(collection(db, "public_profiles"));
     allUsers = snap.docs.map((d) => d.data());
   } catch (err) {
-    console.error("[dashboard] users directory fetch failed:", err.code || err);
+    console.error("[dashboard] public profile directory fetch failed:", err.code || err);
     allUsers = [];
   }
 }

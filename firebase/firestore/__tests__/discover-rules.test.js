@@ -165,6 +165,11 @@ async function seedSub(id, data) {
     await setDoc(doc(ctx.firestore(), `push_subscriptions/${id}`), data);
   });
 }
+async function seedPath(pathName, data) {
+  await testEnv.withSecurityRulesDisabled(async (ctx) => {
+    await setDoc(doc(ctx.firestore(), pathName), data);
+  });
+}
 async function seedValidOwnerDoc(overrides = {}) {
   const anilistId = overrides.anilistId ?? 12345;
   const id = followId(OWNER_UID, anilistId);
@@ -473,6 +478,7 @@ async function run() {
     // ---- Public Resume owner identity (public_profiles) ----
 
     await test("a normal user cannot create or update public_profiles role to owner", async () => {
+      await seedPath(`friends/${FRIEND_EMAIL}`, { addedAt: Timestamp.now() });
       const db = friendCtx().firestore();
       const ref = doc(db, "public_profiles", FRIEND_UID);
       await assertFails(setDoc(ref, {
@@ -512,6 +518,7 @@ async function run() {
     });
 
     await test("signed-out Resume owner resolution query returns only the real Owner profile", async () => {
+      await seedPath(`friends/${FRIEND_EMAIL}`, { addedAt: Timestamp.now() });
       await assertSucceeds(setDoc(doc(ownerCtx().firestore(), "public_profiles", OWNER_UID), {
         uid: OWNER_UID, displayName: "Owner", role: "owner", careerVisibility: "public",
       }));

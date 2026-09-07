@@ -8,6 +8,11 @@ service cloud.firestore {
       return request.auth != null
              && exists(/databases/$(database)/documents/friends/$(request.auth.token.email));
     }
+    // Display classification only. The client never chooses its own role: rules derive it from
+    // the verified Firebase identity and the server-owned friends whitelist.
+    function expectedRole() {
+      return isOwner() ? 'owner' : (isFriend() ? 'friend' : 'viewer');
+    }
     // Who may create their own private content (own expenses/journal/photos/etc.) —
     // the owner, or anyone the owner has approved into the friends whitelist.
     function canParticipate() {
@@ -27,11 +32,12 @@ service cloud.firestore {
         || (data.visibility == 'connections' && isAcceptedFriend(data.uid))
       );
     }
-    // Same as isMineOrPublic, plus a fallback to the pre-v2.0 `uploadedBy` field so photos
-    // created before the `uid` rename still read/update correctly without a data migration.
+    // Same as isMineOrPublic, plus uploadedBy compatibility only when canonical uid is absent.
+    // A conflicting uploadedBy value never grants a second user access.
     function isPhotoMineOrPublic(data) {
       return request.auth != null
-             && (data.uid == request.auth.uid || data.uploadedBy == request.auth.uid
+             && (data.uid == request.auth.uid
+                 || (!('uid' in data) && data.uploadedBy == request.auth.uid)
                  || data.visibility == 'public'
                  || (data.visibility == 'connections' && isAcceptedFriend(data.uid)));
     }
@@ -132,14 +138,20 @@ service cloud.firestore {
     // Always-private: personal targets have no "public" story, same shape as expenses. Not one of
     // v3.3's three owner-only modules — Goals stays canParticipate() (Owner or Friend).
     match /goals/{goalId} {
-      allow read, update, delete: if request.auth != null && resource.data.uid == request.auth.uid;
+      allow read, delete: if request.auth != null && resource.data.uid == request.auth.uid;
+      allow update: if request.auth != null
+                    && resource.data.uid == request.auth.uid
+                    && request.resource.data.uid == resource.data.uid;
       allow create: if canParticipate() && request.resource.data.uid == request.auth.uid;
     }
 
     // Always-private (v2.9): messages sealed for the writer's own future self. Same
     // owner-only shape as goals/expenses — never readable via isMineOrPublic(), by design.
     match /time_capsules/{capsuleId} {
-      allow read, update, delete: if request.auth != null && resource.data.uid == request.auth.uid;
+      allow read, delete: if request.auth != null && resource.data.uid == request.auth.uid;
+      allow update: if request.auth != null
+                    && resource.data.uid == request.auth.uid
+                    && request.resource.data.uid == resource.data.uid;
       // v3.3: Owner-only create — see expenses' match block above for the full reasoning.
       allow create: if isOwner() && request.resource.data.uid == request.auth.uid;
     }
@@ -147,26 +159,38 @@ service cloud.firestore {
     // Always-private (v2.9): one-per-day mood/note checkpoint. Doc ID is `${uid}_${dateKey}`
     // (enforced client-side, see index.html) so a same-day save is a merge, not a duplicate.
     match /daily_reflections/{reflectionId} {
-      allow read, update, delete: if request.auth != null && resource.data.uid == request.auth.uid;
+      allow read, delete: if request.auth != null && resource.data.uid == request.auth.uid;
+      allow update: if request.auth != null
+                    && resource.data.uid == request.auth.uid
+                    && request.resource.data.uid == resource.data.uid;
       // v3.3: Owner-only create — see expenses' match block above for the full reasoning.
       allow create: if isOwner() && request.resource.data.uid == request.auth.uid;
     }
 
     match /journals/{journalId} {
       allow read: if isMineOrPublic(resource.data);
-      allow update, delete: if request.auth != null && resource.data.uid == request.auth.uid;
+      allow delete: if request.auth != null && resource.data.uid == request.auth.uid;
+      allow update: if request.auth != null
+                    && resource.data.uid == request.auth.uid
+                    && request.resource.data.uid == resource.data.uid;
       allow create: if canParticipate() && request.resource.data.uid == request.auth.uid;
     }
 
     match /life_events/{eventId} {
       allow read: if isMineOrPublic(resource.data);
-      allow update, delete: if request.auth != null && resource.data.uid == request.auth.uid;
+      allow delete: if request.auth != null && resource.data.uid == request.auth.uid;
+      allow update: if request.auth != null
+                    && resource.data.uid == request.auth.uid
+                    && request.resource.data.uid == resource.data.uid;
       allow create: if canParticipate() && request.resource.data.uid == request.auth.uid;
     }
 
     match /habits/{habitId} {
       allow read: if isMineOrPublic(resource.data);
-      allow update, delete: if request.auth != null && resource.data.uid == request.auth.uid;
+      allow delete: if request.auth != null && resource.data.uid == request.auth.uid;
+      allow update: if request.auth != null
+                    && resource.data.uid == request.auth.uid
+                    && request.resource.data.uid == resource.data.uid;
       allow create: if canParticipate() && request.resource.data.uid == request.auth.uid;
     }
 
@@ -290,7 +314,10 @@ service cloud.firestore {
     // collectionId, same shape/visibility model as journals/life_events/habits.
     match /collections/{collectionId} {
       allow read: if isMineOrPublic(resource.data);
-      allow update, delete: if request.auth != null && resource.data.uid == request.auth.uid;
+      allow delete: if request.auth != null && resource.data.uid == request.auth.uid;
+      allow update: if request.auth != null
+                    && resource.data.uid == request.auth.uid
+                    && request.resource.data.uid == resource.data.uid;
       allow create: if canParticipate() && request.resource.data.uid == request.auth.uid;
     }
 
@@ -327,9 +354,27 @@ service cloud.firestore {
 
     match /photos/{photoId} {
       allow read: if isPhotoMineOrPublic(resource.data);
-      allow update, delete: if request.auth != null
-                             && (resource.data.uid == request.auth.uid || resource.data.uploadedBy == request.auth.uid);
-      allow create: if canParticipate() && request.resource.data.uid == request.auth.uid;
+      // uid is canonical whenever present. uploadedBy is a compatibility owner only for a
+      // genuinely legacy document without uid. Neither ownership field may be changed, added,
+      // or removed by an update.
+      allow update: if request.auth != null
+                    && (resource.data.uid == request.auth.uid
+                        || (!('uid' in resource.data) && resource.data.uploadedBy == request.auth.uid))
+                    && (
+                      (('uid' in resource.data) && request.resource.data.uid == resource.data.uid)
+                      || (!('uid' in resource.data) && !('uid' in request.resource.data))
+                    )
+                    && (
+                      (('uploadedBy' in resource.data)
+                        && request.resource.data.uploadedBy == resource.data.uploadedBy)
+                      || (!('uploadedBy' in resource.data) && !('uploadedBy' in request.resource.data))
+                    );
+      allow delete: if request.auth != null
+                    && (resource.data.uid == request.auth.uid
+                        || (!('uid' in resource.data) && resource.data.uploadedBy == request.auth.uid));
+      allow create: if canParticipate()
+                    && request.resource.data.uid == request.auth.uid
+                    && !('uploadedBy' in request.resource.data);
 
       match /likes/{uid} {
         allow read: if canReadPost(photoId);
@@ -362,7 +407,13 @@ service cloud.firestore {
       allow create: if request.auth != null && request.auth.uid == fromUid && fromUid != toUid
                     && request.resource.data.fromUid == fromUid
                     && request.resource.data.toUid == toUid
-                    && request.resource.data.status == 'pending';
+                    && request.resource.data.status == 'pending'
+                    && request.resource.data.keys().hasOnly([
+                      'fromUid', 'toUid', 'status', 'fromDisplayName', 'fromUsername',
+                      'fromPhotoURL', 'createdAt', 'updatedAt'
+                    ])
+                    && request.resource.data.createdAt == request.time
+                    && request.resource.data.updatedAt == request.time;
       allow update: if request.auth != null && (
         (request.auth.uid == toUid && resource.data.status == 'pending'
           && request.resource.data.status in ['accepted', 'declined'])
@@ -378,7 +429,12 @@ service cloud.firestore {
         // back to pending to request again.
         || (request.auth.uid == fromUid && resource.data.status == 'accepted'
           && request.resource.data.status == 'pending')
-      );
+      )
+      && request.resource.data.fromUid == resource.data.fromUid
+      && request.resource.data.toUid == resource.data.toUid
+      && request.resource.data.createdAt == resource.data.createdAt
+      && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'updatedAt'])
+      && request.resource.data.updatedAt == request.time;
       allow delete: if false;
     }
 
@@ -405,31 +461,117 @@ service cloud.firestore {
       allow write: if isOwner();
     }
 
-    // Lightweight directory doc per signed-in user, upserted on every login — powers
-    // "search other users' public content." Holds no private data, but DOES hold `email`, so
-    // (unlike public_profiles below) it stays auth-required rather than world-readable.
-    match /users/{uid} {
-      allow read: if request.auth != null;
-      allow write: if request.auth != null && request.auth.uid == uid && request.resource.data.uid == uid;
+    // Private account record. Public discovery uses public_profiles; Firestore cannot hide only
+    // the email field while returning the rest of a users/{uid} document.
+    function validPrivateUserIdentity(data, uid) {
+      return data.uid == uid
+             && data.email == request.auth.token.email
+             && data.role == expectedRole();
+    }
+    function validPrivateUserFields(data) {
+      return data.keys().hasOnly([
+        'uid', 'email', 'photoURL', 'role', 'displayName', 'createdAt', 'username',
+        'bio', 'location', 'careerVisibility', 'lang'
+      ])
+      && (!('careerVisibility' in data)
+          || data.careerVisibility in ['private', 'connections', 'public'])
+      && (!('lang' in data) || data.lang in ['en', 'zh-CN']);
     }
 
-    // v3.2.2: a small denormalized mirror of users/{uid} — {uid, displayName, username,
-    // photoURL, role, careerVisibility} only, deliberately never `email` — world-readable so an
-    // unauthenticated HR visitor hitting resume.html?u=... can resolve the resume owner's name/
-    // avatar/@handle and default-owner lookup (`where role == 'owner'`) without needing to read
-    // the (auth-required, email-bearing) users/{uid} doc. Kept in sync by whichever flow already
-    // writes the source field on users/{uid} (login.html, me.js's username save, career.js's
-    // Resume Visibility control) — see CLAUDE.md's "EdenAtlas v3.2.2" bullet.
+    match /users/{uid} {
+      allow read: if request.auth != null && request.auth.uid == uid;
+      allow create: if request.auth != null
+                    && request.auth.uid == uid
+                    && validPrivateUserIdentity(request.resource.data, uid)
+                    && validPrivateUserFields(request.resource.data);
+      allow update: if request.auth != null
+                    && request.auth.uid == uid
+                    && resource.data.uid == uid
+                    && request.resource.data.uid == resource.data.uid
+                    && validPrivateUserIdentity(request.resource.data, uid)
+                    && request.resource.data.diff(resource.data).addedKeys().hasOnly([
+                      'email', 'photoURL', 'role', 'displayName', 'createdAt', 'username',
+                      'bio', 'location', 'careerVisibility', 'lang'
+                    ])
+                    && request.resource.data.diff(resource.data).changedKeys().hasOnly([
+                      'email', 'photoURL', 'role', 'displayName', 'createdAt', 'username',
+                      'bio', 'location', 'careerVisibility', 'lang'
+                    ])
+                    && (!('careerVisibility' in request.resource.data)
+                        || request.resource.data.careerVisibility in ['private', 'connections', 'public'])
+                    && (!('lang' in request.resource.data)
+                        || request.resource.data.lang in ['en', 'zh-CN'])
+                    && (
+                      (('createdAt' in resource.data)
+                        && request.resource.data.createdAt == resource.data.createdAt)
+                      || (!('createdAt' in resource.data)
+                          && (!('createdAt' in request.resource.data)
+                              || request.resource.data.createdAt == request.time))
+                    );
+      allow delete: if false;
+    }
+
+    // Explicit public presentation mirror used by People/Profile and anonymous Resume routing.
+    // It never contains email, authentication metadata, credentials, or admin flags.
+    function validPublicProfileValues(data, uid) {
+      return data.uid == uid
+             && (!('displayName' in data) || data.displayName is string)
+             && (!('username' in data) || data.username is string)
+             && (!('photoURL' in data) || data.photoURL is string)
+             && (!('bio' in data) || data.bio is string)
+             && (!('location' in data) || data.location is string)
+             && (!('careerVisibility' in data)
+                 || data.careerVisibility in ['private', 'connections', 'public'])
+             // Kept only for existing People/Resume routing. This is display metadata, never an
+             // authorization source, and every attempted change is derived by expectedRole().
+             && (!('role' in data) || data.role == expectedRole());
+    }
+
     match /public_profiles/{uid} {
       allow read: if true;
-      allow write: if request.auth != null
-                   && request.auth.uid == uid
-                   && request.resource.data.uid == uid
-                   && (
-                     !request.resource.data.keys().hasAny(['role'])
-                     || request.resource.data.role in ['friend', 'viewer']
-                     || (request.resource.data.role == 'owner' && isOwner())
-                   );
+      allow create: if request.auth != null
+                    && request.auth.uid == uid
+                    && request.resource.data.keys().hasOnly([
+                      'uid', 'displayName', 'username', 'photoURL', 'bio', 'location',
+                      'careerVisibility', 'createdAt', 'role'
+                    ])
+                    && validPublicProfileValues(request.resource.data, uid)
+                    && (!('createdAt' in request.resource.data)
+                        || request.resource.data.createdAt == request.time);
+      allow update: if request.auth != null
+                    && request.auth.uid == uid
+                    && resource.data.uid == uid
+                    && request.resource.data.uid == resource.data.uid
+                    && request.resource.data.diff(resource.data).addedKeys().hasOnly([
+                      'displayName', 'username', 'photoURL', 'bio', 'location',
+                      'careerVisibility', 'createdAt', 'role'
+                    ])
+                    && request.resource.data.diff(resource.data).changedKeys().hasOnly([
+                      'displayName', 'username', 'photoURL', 'bio', 'location',
+                      'careerVisibility', 'createdAt', 'role'
+                    ])
+                    && (!('displayName' in request.resource.data)
+                        || request.resource.data.displayName is string)
+                    && (!('username' in request.resource.data)
+                        || request.resource.data.username is string)
+                    && (!('photoURL' in request.resource.data)
+                        || request.resource.data.photoURL is string)
+                    && (!('bio' in request.resource.data)
+                        || request.resource.data.bio is string)
+                    && (!('location' in request.resource.data)
+                        || request.resource.data.location is string)
+                    && (!('careerVisibility' in request.resource.data)
+                        || request.resource.data.careerVisibility in ['private', 'connections', 'public'])
+                    && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['role'])
+                        || request.resource.data.role == expectedRole())
+                    && (
+                      (('createdAt' in resource.data)
+                        && request.resource.data.createdAt == resource.data.createdAt)
+                      || (!('createdAt' in resource.data)
+                          && (!('createdAt' in request.resource.data)
+                              || request.resource.data.createdAt == request.time))
+                    );
+      allow delete: if false;
     }
 
     // Reservation doc per @username, doc ID = the lowercase handle itself — "first writer
@@ -440,7 +582,11 @@ service cloud.firestore {
     // and an unauthenticated resume.html?u=username visitor needs to resolve it to a uid.
     match /usernames/{username} {
       allow read: if true;
-      allow create: if request.auth != null && request.resource.data.uid == request.auth.uid;
+      allow create: if request.auth != null
+                    && username.matches('^[a-z0-9_.]{3,24}$')
+                    && request.resource.data.uid == request.auth.uid
+                    && request.resource.data.keys().hasOnly(['uid', 'createdAt'])
+                    && request.resource.data.createdAt == request.time;
       allow update: if false;
       allow delete: if request.auth != null && resource.data.uid == request.auth.uid;
     }
@@ -455,15 +601,33 @@ service cloud.firestore {
     // still self-written by whoever's client observed the triggering condition — see the one
     // cross-user exception (friend_request/friend_accepted) in the create rule below.
     match /notifications/{notificationId} {
-      allow read, update: if request.auth != null && resource.data.uid == request.auth.uid;
+      allow read: if request.auth != null && resource.data.uid == request.auth.uid;
+      allow update: if request.auth != null
+                    && resource.data.uid == request.auth.uid
+                    && request.resource.data.uid == resource.data.uid
+                    && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['read'])
+                    && request.resource.data.read is bool;
       // v3.2: a friend_request/friend_accepted notification is the one exception to "always
       // self-written" — the sender writes directly into the recipient's inbox, self-attested via
       // fromUid == caller (no cross-user data leak beyond what the friend-request flow already
       // exposes: display name/username/photo, never email).
       allow create: if request.auth != null && (
         request.auth.uid == request.resource.data.uid
-        || (request.resource.data.type in ['friend_request', 'friend_accepted']
-            && request.resource.data.fromUid == request.auth.uid)
+        || (request.resource.data.fromUid == request.auth.uid
+            && request.resource.data.uid != request.auth.uid
+            && request.resource.data.keys().hasOnly([
+              'uid', 'type', 'fromUid', 'title', 'message', 'read', 'createdAt'
+            ])
+            && request.resource.data.read == false
+            && request.resource.data.createdAt == request.time
+            && (
+              (request.resource.data.type == 'friend_request'
+                && exists(/databases/$(database)/documents/friend_requests/$(request.resource.data.uid)/incoming/$(request.auth.uid))
+                && get(/databases/$(database)/documents/friend_requests/$(request.resource.data.uid)/incoming/$(request.auth.uid)).data.status == 'pending')
+              || (request.resource.data.type == 'friend_accepted'
+                && exists(/databases/$(database)/documents/friend_requests/$(request.auth.uid)/incoming/$(request.resource.data.uid))
+                && get(/databases/$(database)/documents/friend_requests/$(request.auth.uid)/incoming/$(request.resource.data.uid)).data.status == 'accepted')
+            ))
       );
       allow delete: if false;
     }

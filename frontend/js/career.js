@@ -177,12 +177,13 @@ async function resolveOwnerUidFallback() {
   return null;
 }
 
-// Signed in: read the richer users/{uid} doc (auth-required, has careerVisibility as the source
-// of truth). Signed out: fall back to the world-readable public_profiles/{uid} mirror.
+// The signed-in user may read their own private users/{uid} record. Every cross-user or signed-
+// out lookup uses the world-readable public_profiles/{uid} mirror instead.
 async function fetchPersonForTarget(uid) {
   const user = auth.currentUser;
   try {
-    const snap = await getDoc(doc(db, user ? "users" : "public_profiles", uid));
+    const collectionName = user?.uid === uid ? "users" : "public_profiles";
+    const snap = await getDoc(doc(db, collectionName, uid));
     return snap.exists() ? snap.data() : null;
   } catch (err) {
     console.error("[career] person fetch failed:", err.code || err);

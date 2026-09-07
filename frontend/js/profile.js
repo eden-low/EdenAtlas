@@ -665,7 +665,8 @@ function renderComments(post, comments) {
 // ---- Role gate + load ----
 //
 // Viewer -> only the Owner's profile is visible. Friend/Owner -> the Owner's and any Friend's
-// profile is visible. This is a UI-level gate against the public `role` field on users/{uid}
+// profile is visible. This is a UI-level gate against the non-authoritative public `role`
+// classification on public_profiles/{uid}
 // (see login.html), not a firestore.rules change — the underlying public-content read rules
 // intentionally stay open to any signed-in user (that's what powers the main Gallery/Journal/
 // Timeline/Habits feeds showing everyone's public posts), so this only affects what Search
@@ -724,7 +725,8 @@ async function loadProfile() {
 
   let person;
   try {
-    const snap = await getDoc(doc(db, "users", targetUid));
+    const collectionName = auth.currentUser?.uid === targetUid ? "users" : "public_profiles";
+    const snap = await getDoc(doc(db, collectionName, targetUid));
     if (!snap.exists()) {
       headerEl.innerHTML = `<p class="text-sm text-textGray">${i18nT("profile.user_not_found")}</p>`;
       return;

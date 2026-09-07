@@ -225,7 +225,7 @@ async function loadConnectionsClusters() {
   const me = auth.currentUser;
   let allowedUids = new Set();
   try {
-    const usersSnap = await getDocs(collection(db, "users"));
+    const usersSnap = await getDocs(collection(db, "public_profiles"));
     const mode = getUserMode();
     usersSnap.forEach((d) => {
       const u = d.data();
@@ -237,7 +237,7 @@ async function loadConnectionsClusters() {
       }
     });
   } catch (err) {
-    console.error("[atlas] users fetch failed:", err.code || err);
+    console.error("[atlas] public profile fetch failed:", err.code || err);
   }
 
   const [photos, journals, events] = await Promise.all([

@@ -30,13 +30,82 @@
       <div class="w-16 h-16 mx-auto flex items-center justify-center eden-logo-plate">
         <img src="images/logo-mark.png" alt="EdenAtlas" class="w-full h-full object-contain">
       </div>
-      <h1 class="font-cyber font-semibold text-2xl mt-6 text-transparent bg-clip-text bg-gradient-to-r from-white to-neonPurple">EdenAtlas</h1>
-      <p class="text-textGray text-sm mt-3" data-i18n="login.tagline">Your life, beautifully organized.</p>
+      <h1 id="auth-title" class="font-cyber font-semibold text-2xl mt-6 text-transparent bg-clip-text bg-gradient-to-r from-white to-neonPurple" data-i18n="login.welcome">Welcome to EdenAtlas</h1>
+      <p id="auth-subtitle" class="text-textGray text-sm mt-3" data-i18n="login.login_subtitle">Sign in to continue your atlas.</p>
 
-      <button id="signin-btn" class="mt-9 w-full px-6 py-3.5 bg-gradient-to-r from-neonViolet to-neonPurple rounded-full text-sm font-semibold tracking-wide text-white hover:scale-[1.02] active:scale-[0.99] transition-transform duration-200 flex items-center justify-center gap-3">
-        <i class="fa-brands fa-google"></i> <span data-i18n="login.continue_google">Continue with Google</span>
-      </button>
-      <p id="signin-status" class="mt-4 text-xs font-code text-textGray"></p>
+      <div id="auth-entry-panel">
+        <button id="signin-btn" type="button" class="mt-8 w-full px-6 py-3.5 bg-gradient-to-r from-neonViolet to-neonPurple rounded-full text-sm font-semibold tracking-wide text-white hover:scale-[1.02] active:scale-[0.99] disabled:opacity-60 disabled:hover:scale-100 transition-transform duration-200 flex items-center justify-center gap-3">
+          <i class="fa-brands fa-google"></i> <span data-i18n="login.continue_google">Continue with Google</span>
+        </button>
+
+        <div class="my-6 flex items-center gap-3" aria-hidden="true">
+          <span class="h-px flex-1 bg-borderNeon/70"></span>
+          <span class="text-[10px] uppercase tracking-[0.2em] text-textGray" data-i18n="login.or">or</span>
+          <span class="h-px flex-1 bg-borderNeon/70"></span>
+        </div>
+
+        <form id="email-auth-form" class="space-y-4 text-left" novalidate>
+          <div>
+            <label for="auth-email" class="block text-xs font-medium text-textGray mb-1.5" data-i18n="login.email">Email</label>
+            <input id="auth-email" name="email" type="email" inputmode="email" autocomplete="email" required class="w-full rounded-xl border border-borderNeon bg-darkBg/70 px-4 py-3 text-sm text-white outline-none transition-colors focus:border-neonPurple" placeholder="you@example.com" data-i18n-placeholder="login.email_placeholder">
+          </div>
+          <div>
+            <label for="auth-password" class="block text-xs font-medium text-textGray mb-1.5" data-i18n="login.password">Password</label>
+            <input id="auth-password" name="password" type="password" autocomplete="current-password" required minlength="6" class="w-full rounded-xl border border-borderNeon bg-darkBg/70 px-4 py-3 text-sm text-white outline-none transition-colors focus:border-neonPurple">
+          </div>
+          <div id="confirm-password-field" class="hidden">
+            <label for="auth-confirm-password" class="block text-xs font-medium text-textGray mb-1.5" data-i18n="login.confirm_password">Confirm password</label>
+            <input id="auth-confirm-password" name="confirmPassword" type="password" autocomplete="new-password" minlength="6" class="w-full rounded-xl border border-borderNeon bg-darkBg/70 px-4 py-3 text-sm text-white outline-none transition-colors focus:border-neonPurple">
+          </div>
+          <button id="email-submit-btn" type="submit" class="w-full rounded-full border border-neonPurple/70 px-6 py-3 text-sm font-semibold text-white hover:bg-neonPurple/15 disabled:opacity-60 transition-colors" data-i18n="login.log_in">Log In</button>
+        </form>
+
+        <button id="forgot-password-btn" type="button" class="mt-4 text-xs text-neonPurple hover:text-white transition-colors" data-i18n="login.forgot_password">Forgot password?</button>
+        <p class="mt-6 text-xs text-textGray">
+          <span id="auth-mode-prompt" data-i18n="login.no_account">Don't have an account?</span>
+          <button id="auth-mode-toggle" type="button" class="ml-1 font-semibold text-neonPurple hover:text-white transition-colors" data-i18n="login.sign_up">Sign Up</button>
+        </p>
+      </div>
+
+      <section id="verification-panel" class="hidden mt-8" aria-labelledby="verification-title">
+        <div class="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-neonPurple/15 text-neonPurple">
+          <i class="fa-regular fa-envelope text-xl"></i>
+        </div>
+        <h2 id="verification-title" class="font-cyber text-lg text-white" data-i18n="login.verify_title">Please verify your email</h2>
+        <p id="verification-copy" class="mt-3 text-sm leading-relaxed text-textGray"></p>
+        <div class="mt-6 space-y-3">
+          <button id="resend-verification-btn" type="button" class="w-full rounded-full border border-neonPurple/70 px-5 py-3 text-sm font-semibold text-white hover:bg-neonPurple/15 disabled:opacity-60 transition-colors" data-i18n="login.resend_verification">Resend verification email</button>
+          <button id="check-verification-btn" type="button" class="w-full rounded-full bg-gradient-to-r from-neonViolet to-neonPurple px-5 py-3 text-sm font-semibold text-white hover:scale-[1.01] disabled:opacity-60 transition-transform" data-i18n="login.check_verification">I've verified — check again</button>
+          <button id="verification-logout-btn" type="button" class="text-xs text-textGray hover:text-white transition-colors" data-i18n="login.log_out">Log out</button>
+        </div>
+      </section>
+
+      <section id="account-link-panel" class="hidden mt-8" aria-labelledby="account-link-title">
+        <div class="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-amber-400/10 text-amber-300">
+          <i class="fa-solid fa-link text-lg"></i>
+        </div>
+        <h2 id="account-link-title" class="font-cyber text-lg text-white" data-i18n="login.link_title">Confirm account linking</h2>
+        <p id="account-link-copy" class="mt-3 text-sm leading-relaxed text-textGray"></p>
+        <div id="authenticated-link-actions" class="hidden mt-6 space-y-3">
+          <button id="confirm-google-link-btn" type="button" class="w-full rounded-full bg-gradient-to-r from-neonViolet to-neonPurple px-5 py-3 text-sm font-semibold text-white disabled:opacity-60" data-i18n="login.link_google">Link Google to this account</button>
+          <button id="continue-without-link-btn" type="button" class="text-xs text-textGray hover:text-white transition-colors" data-i18n="login.continue_without_link">Continue without linking</button>
+        </div>
+        <div id="email-link-actions" class="hidden mt-6 space-y-3 text-left">
+          <div>
+            <label for="link-email-password" class="block text-xs font-medium text-textGray mb-1.5" data-i18n="login.new_password">New password</label>
+            <input id="link-email-password" type="password" autocomplete="new-password" minlength="6" class="w-full rounded-xl border border-borderNeon bg-darkBg/70 px-4 py-3 text-sm text-white outline-none focus:border-neonPurple">
+          </div>
+          <div>
+            <label for="link-email-confirm-password" class="block text-xs font-medium text-textGray mb-1.5" data-i18n="login.confirm_password">Confirm password</label>
+            <input id="link-email-confirm-password" type="password" autocomplete="new-password" minlength="6" class="w-full rounded-xl border border-borderNeon bg-darkBg/70 px-4 py-3 text-sm text-white outline-none focus:border-neonPurple">
+          </div>
+          <button id="confirm-email-link-btn" type="button" class="w-full rounded-full bg-gradient-to-r from-neonViolet to-neonPurple px-5 py-3 text-sm font-semibold text-white disabled:opacity-60" data-i18n="login.link_email">Add email/password to this account</button>
+          <button id="continue-without-email-link-btn" type="button" class="block w-full text-center text-xs text-textGray hover:text-white transition-colors" data-i18n="login.continue_without_link">Continue without linking</button>
+        </div>
+        <button id="dismiss-link-btn" type="button" class="mt-4 text-xs text-textGray hover:text-white transition-colors" data-i18n="login.back_to_login">Back to login</button>
+      </section>
+
+      <p id="signin-status" role="status" aria-live="polite" class="mt-4 min-h-4 text-xs font-code text-textGray"></p>
 
       <p class="mt-7 text-[11px] text-textGray/70 leading-relaxed" data-i18n="login.privacy">Your data stays private — only you decide what to share.</p>
 
@@ -67,9 +136,24 @@
   <script src="js/scripts.js" defer></script>
   <script type="module">
     import { auth, googleProvider, db, isOwner, USER_MODE_KEY } from "./js/firebase-init.js";
+    import { AUTH_ERROR, normalizeAuthError } from "./js/auth-errors.js";
+    import { AUTH_FORM_ERROR, validateEmailAuthInput } from "./js/auth-form-validation.js";
+    import { AUTH_OPERATION_PHASE, createAuthOperationLock } from "./js/auth-operation-lock.js";
+    import {
+      getSignInMethodsForConflict,
+      linkEmailPasswordToCurrentUser,
+      linkGoogleSignInErrorToCurrentUser,
+      refreshCurrentUser,
+      registerWithEmailPassword,
+      requestPasswordReset,
+      requiresEmailVerification,
+      sendCurrentUserVerificationEmail,
+      signInWithEmailPassword,
+    } from "./js/auth-client.js";
+    import { init as initI18n, t as i18nT } from "./js/i18n.js";
     import { mountNonProductionBanner } from "./js/environment.js";
     import {
-      onAuthStateChanged, signInWithPopup, signInWithRedirect, getRedirectResult,
+      onAuthStateChanged, signInWithPopup, signInWithRedirect, getRedirectResult, signOut,
     } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-auth.js";
     import { addDoc, collection, doc, getDoc, setDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-firestore.js";
 
@@ -77,12 +161,201 @@
     // login.html is the one page that doesn't load auth-guard.js (see that file's own header
     // comment), so it calls the shared implementation directly here instead.
     mountNonProductionBanner();
+    const i18nReady = initI18n();
 
     const signinBtn = document.getElementById("signin-btn");
     const statusEl = document.getElementById("signin-status");
+    const authTitle = document.getElementById("auth-title");
+    const authSubtitle = document.getElementById("auth-subtitle");
+    const authEntryPanel = document.getElementById("auth-entry-panel");
+    const emailAuthForm = document.getElementById("email-auth-form");
+    const emailInput = document.getElementById("auth-email");
+    const passwordInput = document.getElementById("auth-password");
+    const confirmPasswordField = document.getElementById("confirm-password-field");
+    const confirmPasswordInput = document.getElementById("auth-confirm-password");
+    const emailSubmitBtn = document.getElementById("email-submit-btn");
+    const forgotPasswordBtn = document.getElementById("forgot-password-btn");
+    const authModePrompt = document.getElementById("auth-mode-prompt");
+    const authModeToggle = document.getElementById("auth-mode-toggle");
+    const verificationPanel = document.getElementById("verification-panel");
+    const verificationCopy = document.getElementById("verification-copy");
+    const resendVerificationBtn = document.getElementById("resend-verification-btn");
+    const checkVerificationBtn = document.getElementById("check-verification-btn");
+    const verificationLogoutBtn = document.getElementById("verification-logout-btn");
+    const accountLinkPanel = document.getElementById("account-link-panel");
+    const accountLinkCopy = document.getElementById("account-link-copy");
+    const authenticatedLinkActions = document.getElementById("authenticated-link-actions");
+    const confirmGoogleLinkBtn = document.getElementById("confirm-google-link-btn");
+    const continueWithoutLinkBtn = document.getElementById("continue-without-link-btn");
+    const emailLinkActions = document.getElementById("email-link-actions");
+    const linkEmailPasswordInput = document.getElementById("link-email-password");
+    const linkEmailConfirmInput = document.getElementById("link-email-confirm-password");
+    const confirmEmailLinkBtn = document.getElementById("confirm-email-link-btn");
+    const continueWithoutEmailLinkBtn = document.getElementById("continue-without-email-link-btn");
+    const dismissLinkBtn = document.getElementById("dismiss-link-btn");
     const loginCard = document.getElementById("login-card");
     const loginLoading = document.getElementById("login-loading");
     const loginLoadingInner = document.getElementById("login-loading-inner");
+
+    let authMode = "login";
+    let pendingGoogleLinkError = null;
+    let pendingEmailLinkAddress = null;
+    let resendCooldownTimer = null;
+    let resendCooldownUntil = 0;
+
+    const authActionControls = [
+      signinBtn,
+      emailSubmitBtn,
+      forgotPasswordBtn,
+      authModeToggle,
+      resendVerificationBtn,
+      checkVerificationBtn,
+      verificationLogoutBtn,
+      confirmGoogleLinkBtn,
+      continueWithoutLinkBtn,
+      confirmEmailLinkBtn,
+      continueWithoutEmailLinkBtn,
+      dismissLinkBtn,
+    ];
+
+    function renderAuthOperationState({ phase }) {
+      const locked = phase !== AUTH_OPERATION_PHASE.IDLE;
+      authActionControls.forEach((control) => { control.disabled = locked; });
+      if (!locked && Date.now() < resendCooldownUntil) resendVerificationBtn.disabled = true;
+      loginCard.toggleAttribute("inert", phase === AUTH_OPERATION_PHASE.COMPLETING);
+      loginCard.setAttribute("aria-busy", locked ? "true" : "false");
+    }
+
+    const authOperation = createAuthOperationLock(renderAuthOperationState);
+    renderAuthOperationState(authOperation.snapshot());
+
+    function setStatus(message = "", tone = "neutral") {
+      statusEl.textContent = message;
+      statusEl.classList.toggle("text-rose-300", tone === "error");
+      statusEl.classList.toggle("text-emerald-300", tone === "success");
+      statusEl.classList.toggle("text-textGray", tone === "neutral");
+    }
+
+    function clearPrimaryPasswords() {
+      passwordInput.value = "";
+      confirmPasswordInput.value = "";
+    }
+
+    function clearLinkPasswords() {
+      linkEmailPasswordInput.value = "";
+      linkEmailConfirmInput.value = "";
+    }
+
+    function showEntry(mode = authMode) {
+      authMode = mode;
+      authEntryPanel.classList.remove("hidden");
+      verificationPanel.classList.add("hidden");
+      accountLinkPanel.classList.add("hidden");
+      authenticatedLinkActions.classList.add("hidden");
+      emailLinkActions.classList.add("hidden");
+      confirmPasswordField.classList.toggle("hidden", mode !== "signup");
+      confirmPasswordInput.required = mode === "signup";
+      passwordInput.autocomplete = mode === "signup" ? "new-password" : "current-password";
+      authTitle.textContent = i18nT(mode === "signup" ? "login.create_title" : "login.welcome");
+      authSubtitle.textContent = i18nT(mode === "signup" ? "login.signup_subtitle" : "login.login_subtitle");
+      emailSubmitBtn.textContent = i18nT(mode === "signup" ? "login.create_account" : "login.log_in");
+      authModePrompt.textContent = i18nT(mode === "signup" ? "login.have_account" : "login.no_account");
+      authModeToggle.textContent = i18nT(mode === "signup" ? "login.log_in" : "login.sign_up");
+      clearPrimaryPasswords();
+      clearLinkPasswords();
+      setStatus();
+      document.body.classList.remove("auth-check-pending");
+    }
+
+    function showVerification(user, message = "") {
+      authEntryPanel.classList.add("hidden");
+      accountLinkPanel.classList.add("hidden");
+      verificationPanel.classList.remove("hidden");
+      authTitle.textContent = i18nT("login.verify_title");
+      authSubtitle.textContent = i18nT("login.verification_subtitle");
+      verificationCopy.textContent = i18nT("login.verify_body", { email: user.email || i18nT("login.your_email") });
+      setStatus(message);
+      document.body.classList.remove("auth-check-pending");
+    }
+
+    function providerDescription(methods) {
+      if (methods.includes("password")) return i18nT("login.provider_password");
+      if (methods.includes("google.com")) return i18nT("login.provider_google");
+      return i18nT("login.provider_existing");
+    }
+
+    async function showGoogleConflict(error, authenticated = false) {
+      pendingGoogleLinkError = error;
+      authEntryPanel.classList.add("hidden");
+      verificationPanel.classList.add("hidden");
+      accountLinkPanel.classList.remove("hidden");
+      authenticatedLinkActions.classList.toggle("hidden", !authenticated);
+      emailLinkActions.classList.add("hidden");
+      dismissLinkBtn.classList.toggle("hidden", authenticated);
+      authTitle.textContent = i18nT("login.link_title");
+      authSubtitle.textContent = i18nT("login.link_subtitle");
+      const methodsResult = await getSignInMethodsForConflict(error);
+      const methods = methodsResult.ok ? methodsResult.signInMethods : [];
+      accountLinkCopy.textContent = authenticated
+        ? i18nT("login.link_confirm_body")
+        : i18nT("login.provider_conflict_body", { provider: providerDescription(methods) });
+      setStatus();
+      document.body.classList.remove("auth-check-pending");
+      authOperation.release();
+    }
+
+    function showEmailLinkConfirmation() {
+      authEntryPanel.classList.add("hidden");
+      verificationPanel.classList.add("hidden");
+      accountLinkPanel.classList.remove("hidden");
+      authenticatedLinkActions.classList.add("hidden");
+      emailLinkActions.classList.remove("hidden");
+      dismissLinkBtn.classList.add("hidden");
+      authTitle.textContent = i18nT("login.link_title");
+      authSubtitle.textContent = i18nT("login.link_subtitle");
+      accountLinkCopy.textContent = i18nT("login.link_email_confirm_body");
+      clearLinkPasswords();
+      setStatus();
+      document.body.classList.remove("auth-check-pending");
+      authOperation.release();
+    }
+
+    function validateEmailForm() {
+      const result = validateEmailAuthInput({
+        mode: authMode,
+        email: emailInput.value,
+        password: passwordInput.value,
+        confirmation: confirmPasswordInput.value,
+      });
+      if (result.ok) return result;
+      const messageKey = {
+        [AUTH_FORM_ERROR.REQUIRED]: "login.required_fields",
+        [AUTH_FORM_ERROR.INVALID_EMAIL]: "login.invalid_email",
+        [AUTH_FORM_ERROR.PASSWORD_TOO_SHORT]: "login.password_too_short",
+        [AUTH_FORM_ERROR.PASSWORD_MISMATCH]: "login.password_mismatch",
+      }[result.error] || "login.required_fields";
+      return { ok: false, message: i18nT(messageKey) };
+    }
+
+    function startResendCooldown(seconds = 30) {
+      if (resendCooldownTimer) clearInterval(resendCooldownTimer);
+      resendCooldownUntil = Date.now() + (seconds * 1000);
+      let remaining = seconds;
+      renderAuthOperationState(authOperation.snapshot());
+      resendVerificationBtn.textContent = i18nT("login.resend_cooldown", { seconds: remaining });
+      resendCooldownTimer = setInterval(() => {
+        remaining -= 1;
+        if (remaining <= 0) {
+          clearInterval(resendCooldownTimer);
+          resendCooldownTimer = null;
+          resendCooldownUntil = 0;
+          resendVerificationBtn.textContent = i18nT("login.resend_verification");
+          renderAuthOperationState(authOperation.snapshot());
+          return;
+        }
+        resendVerificationBtn.textContent = i18nT("login.resend_cooldown", { seconds: remaining });
+      }, 1000);
+    }
 
     function shortDevice(ua) {
       if (!ua) return "an unknown device";
@@ -99,6 +372,9 @@
     // existing auth-check-pending -> body opacity transition, so the whole hop reads as one
     // continuous motion rather than a page-load jump.
     function transitionToApp(target) {
+      // Navigation is a terminal handoff for this page. Once entered, release() deliberately
+      // cannot make the controls actionable again, even while the visual transition runs.
+      authOperation.handoffToNavigation();
       loginCard.classList.add("opacity-0");
       loginLoading.classList.remove("hidden");
       requestAnimationFrame(() => loginLoadingInner.classList.remove("opacity-0"));
@@ -118,21 +394,23 @@
       return window.matchMedia("(display-mode: standalone)").matches || window.navigator.standalone === true;
     }
 
-    // Guards against onAuthStateChanged racing an in-flight interactive sign-in (popup or a
-    // just-returned redirect), which would otherwise double-run the login-logging/notification
-    // writes below or navigate away mid-write. Reset per page load; a signInWithRedirect
-    // round trip is a fresh page load, so this doesn't need to persist across that hop — the
-    // redirectCheckPromise below is what identifies "this session load IS the sign-in".
-    let signingIn = false;
-
+    // redirectCheckPromise identifies a just-returned redirect. The shared authOperation lock
+    // also prevents onAuthStateChanged from racing an interactive popup/form operation.
     // getRedirectResult resolves with the just-completed sign-in exactly once, on the page load
     // immediately following signInWithRedirect's round trip — null on every other load (a plain
     // session restore, or no pending redirect at all). Always safe to call. Caught here (never
     // left to reject inside onAuthStateChanged) so a transient failure surfaces as a normal
     // "try again" message instead of leaving the page stuck on auth-check-pending.
-    const redirectCheckPromise = getRedirectResult(auth).catch((err) => {
-      console.error("[login] redirect sign-in failed:", err);
-      statusEl.textContent = "Sign-in failed — please try again.";
+    const redirectCheckPromise = getRedirectResult(auth).catch(async (err) => {
+      await i18nReady;
+      const safeError = normalizeAuthError(err);
+      console.error("[login] redirect sign-in failed:", safeError.category);
+      if (safeError.category === AUTH_ERROR.ACCOUNT_LINK_REQUIRED) {
+        await showGoogleConflict(err);
+      } else {
+        setStatus(safeError.message, "error");
+        document.body.classList.remove("auth-check-pending");
+      }
       return null;
     });
 
@@ -180,9 +458,11 @@
     async function upsertUserProfile(user, mode) {
       const userRef = doc(db, "users", user.uid);
       let isNewUser = true;
+      let existingData = {};
       try {
         const existing = await getDoc(userRef);
         isNewUser = !existing.exists();
+        existingData = existing.data() || {};
       } catch (err) {
         console.error("[login] users profile existence check failed:", err);
       }
@@ -197,17 +477,21 @@
       } catch (err) {
         console.error("[login] users profile upsert failed:", err);
       }
-      // v3.2.2: a world-readable mirror (no `email`) so an unauthenticated HR visitor on
-      // resume.html?u=... can resolve who they're looking at without reading the auth-required
-      // users/{uid} doc — see firestore.rules' public_profiles match block. `username` and
-      // `careerVisibility` are intentionally omitted here; they're merged in separately by
-      // whichever flow owns them (me.js's username save, career.js's Resume Visibility control).
+      // World-readable presentation-only mirror. The private users/{uid} record is own-user
+      // only; People/Profile/Resume must never require cross-user access to its email or account
+      // metadata. `role` is a non-authoritative directory classification and Rules independently
+      // derive its permitted value from the verified identity/whitelist.
       try {
         await setDoc(doc(db, "public_profiles", user.uid), {
           uid: user.uid,
           photoURL: user.photoURL || "",
           role: mode.toLowerCase(),
-          ...(isNewUser ? { displayName: user.displayName || "" } : {}),
+          displayName: existingData.displayName || user.displayName || "",
+          ...(existingData.username ? { username: existingData.username } : {}),
+          ...(existingData.bio ? { bio: existingData.bio } : {}),
+          ...(existingData.location ? { location: existingData.location } : {}),
+          ...(existingData.careerVisibility ? { careerVisibility: existingData.careerVisibility } : {}),
+          ...(isNewUser ? { createdAt: serverTimestamp() } : {}),
         }, { merge: true });
       } catch (err) {
         console.error("[login] public_profiles upsert failed:", err);
@@ -254,14 +538,47 @@
       transitionToApp(getRedirectTarget());
     }
 
+    async function prepareVerificationState(user, message = "") {
+      const mode = await resolveUserMode(user);
+      localStorage.setItem(USER_MODE_KEY, mode);
+      await upsertUserProfile(user, mode);
+      showVerification(user, message);
+      authOperation.release();
+    }
+
+    async function continueAuthenticatedUser(user) {
+      if (requiresEmailVerification(user)) {
+        await prepareVerificationState(user);
+        return;
+      }
+      if (pendingGoogleLinkError) {
+        await showGoogleConflict(pendingGoogleLinkError, true);
+        return;
+      }
+      if (pendingEmailLinkAddress) {
+        const hasPasswordProvider = (user.providerData || []).some((provider) => provider.providerId === "password");
+        const sameAuthenticatedEmail = user.email?.toLowerCase() === pendingEmailLinkAddress.toLowerCase();
+        if (!hasPasswordProvider && sameAuthenticatedEmail) {
+          showEmailLinkConfirmation();
+          return;
+        }
+        pendingEmailLinkAddress = null;
+      }
+      await completeFreshSignIn(user);
+    }
+
     onAuthStateChanged(auth, async (user) => {
+      await i18nReady;
       const redirectResult = await redirectCheckPromise;
       if (user) {
-        if (signingIn) return;
+        if (!authOperation.begin("auth-state-change")) return;
+        if (requiresEmailVerification(user)) {
+          await prepareVerificationState(user);
+          return;
+        }
         if (redirectResult && redirectResult.user && redirectResult.user.uid === user.uid) {
           // This page load IS a standalone-PWA redirect sign-in completing — treat it as a
           // fresh interactive sign-in (log + notify), not a silent session restore.
-          signingIn = true;
           await completeFreshSignIn(user);
           return;
         }
@@ -273,11 +590,14 @@
         transitionToApp(getRedirectTarget());
         return;
       }
-      document.body.classList.remove("auth-check-pending");
+      if (pendingGoogleLinkError) return;
+      showEntry("login");
     });
 
     signinBtn.addEventListener("click", async () => {
-      statusEl.textContent = "";
+      if (!authOperation.begin("google-sign-in")) return;
+      setStatus();
+      clearPrimaryPasswords();
 
       if (isStandalone()) {
         // Navigates away immediately; this page instance ends here. The rest of the sign-in
@@ -285,24 +605,254 @@
         // the browser returns from Google and getRedirectResult picks up the result above.
         try {
           await signInWithRedirect(auth, googleProvider);
+          authOperation.handoffToNavigation();
         } catch (err) {
-          console.error("[login] redirect initiation failed:", err);
-          statusEl.textContent = "Sign-in failed — please try again.";
+          const safeError = normalizeAuthError(err);
+          console.error("[login] redirect initiation failed:", safeError.category);
+          if (safeError.category === AUTH_ERROR.ACCOUNT_LINK_REQUIRED) {
+            await showGoogleConflict(err);
+          } else {
+            setStatus(safeError.message, "error");
+            authOperation.release();
+          }
         }
         return;
       }
 
-      signingIn = true;
       let user;
       try {
         ({ user } = await signInWithPopup(auth, googleProvider));
       } catch (err) {
-        signingIn = false;
-        console.error("[login] sign-in failed:", err);
-        statusEl.textContent = "Sign-in failed — please try again.";
+        const safeError = normalizeAuthError(err);
+        console.error("[login] sign-in failed:", safeError.category);
+        if (safeError.category === AUTH_ERROR.ACCOUNT_LINK_REQUIRED) {
+          await showGoogleConflict(err);
+        } else {
+          setStatus(safeError.message, "error");
+          authOperation.release();
+        }
         return;
       }
 
+      await continueAuthenticatedUser(user);
+    });
+
+    authModeToggle.addEventListener("click", () => {
+      if (authOperation.isActive()) return;
+      showEntry(authMode === "login" ? "signup" : "login");
+    });
+
+    emailAuthForm.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      if (!authOperation.begin(authMode === "signup" ? "email-sign-up" : "email-sign-in")) return;
+      setStatus();
+      const form = validateEmailForm();
+      if (!form.ok) {
+        clearPrimaryPasswords();
+        setStatus(form.message, "error");
+        authOperation.release();
+        return;
+      }
+
+      const result = authMode === "signup"
+        ? await registerWithEmailPassword(form.email, form.password)
+        : await signInWithEmailPassword(form.email, form.password);
+      clearPrimaryPasswords();
+
+      if (!result.ok) {
+        if (result.error.category === AUTH_ERROR.EMAIL_IN_USE) {
+          // Remember only the address and linking intent. The password is cleared immediately
+          // and must be entered again after Firebase authenticates the existing Google account.
+          pendingEmailLinkAddress = form.email;
+          setStatus(i18nT("login.email_in_use_guidance"), "error");
+        } else {
+          setStatus(result.error.message, "error");
+        }
+        authOperation.release();
+        return;
+      }
+
+      const user = auth.currentUser;
+      if (!user) {
+        setStatus(normalizeAuthError(null).message, "error");
+        authOperation.release();
+        return;
+      }
+
+      if (authMode === "signup") {
+        const verificationMessage = result.verificationSent
+          ? i18nT("login.verification_sent")
+          : (result.verificationError?.message || i18nT("login.verification_send_failed"));
+        await prepareVerificationState(user, verificationMessage);
+      } else {
+        await continueAuthenticatedUser(user);
+      }
+    });
+
+    forgotPasswordBtn.addEventListener("click", async () => {
+      if (!authOperation.begin("password-reset")) return;
+      setStatus();
+      const email = emailInput.value.trim();
+      if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+        clearPrimaryPasswords();
+        setStatus(i18nT("login.reset_email_required"), "error");
+        emailInput.focus();
+        authOperation.release();
+        return;
+      }
+      clearPrimaryPasswords();
+      const result = await requestPasswordReset(email);
+      // A missing account receives the same response as a real account to avoid unnecessary
+      // account enumeration in the UI.
+      if (result.ok || result.error.category === AUTH_ERROR.INVALID_CREDENTIAL) {
+        setStatus(i18nT("login.reset_sent"), "success");
+      } else {
+        setStatus(result.error.message, "error");
+      }
+      authOperation.release();
+    });
+
+    resendVerificationBtn.addEventListener("click", async () => {
+      if (!authOperation.begin("verification-resend")) return;
+      setStatus();
+      const result = await sendCurrentUserVerificationEmail();
+      if (result.ok) {
+        setStatus(i18nT("login.verification_resent"), "success");
+        startResendCooldown();
+      } else {
+        setStatus(result.error.message, "error");
+      }
+      authOperation.release();
+    });
+
+    checkVerificationBtn.addEventListener("click", async () => {
+      if (!authOperation.begin("verification-refresh")) return;
+      setStatus();
+      const result = await refreshCurrentUser();
+      if (!result.ok) {
+        setStatus(result.error.message, "error");
+        authOperation.release();
+        return;
+      }
+      const user = auth.currentUser;
+      if (requiresEmailVerification(user)) {
+        setStatus(i18nT("login.verification_pending"), "error");
+        authOperation.release();
+        return;
+      }
+      await continueAuthenticatedUser(user);
+    });
+
+    verificationLogoutBtn.addEventListener("click", async () => {
+      if (!authOperation.begin("verification-logout")) return;
+      pendingGoogleLinkError = null;
+      pendingEmailLinkAddress = null;
+      clearPrimaryPasswords();
+      clearLinkPasswords();
+      try {
+        await signOut(auth);
+        showEntry("login");
+      } catch (err) {
+        setStatus(normalizeAuthError(err).message, "error");
+      }
+      authOperation.release();
+    });
+
+    dismissLinkBtn.addEventListener("click", () => {
+      if (authOperation.isActive()) return;
+      // Keep the pending Google credential in memory while the user authenticates with their
+      // existing method. A reload safely discards it; it is never persisted.
+      showEntry("login");
+      setStatus(i18nT("login.authenticate_before_link"));
+    });
+
+    confirmGoogleLinkBtn.addEventListener("click", async () => {
+      if (!authOperation.begin("google-account-link")) return;
+      const currentUid = auth.currentUser?.uid;
+      if (!currentUid || !pendingGoogleLinkError) {
+        setStatus(i18nT("login.link_session_expired"), "error");
+        authOperation.release();
+        return;
+      }
+      const result = await linkGoogleSignInErrorToCurrentUser(pendingGoogleLinkError, { confirmed: true });
+      if (!result.ok) {
+        setStatus(result.error.message, "error");
+        authOperation.release();
+        return;
+      }
+      if (auth.currentUser?.uid !== currentUid || result.user?.uid !== currentUid) {
+        setStatus(i18nT("login.link_identity_error"), "error");
+        authOperation.release();
+        return;
+      }
+      pendingGoogleLinkError = null;
+      await completeFreshSignIn(auth.currentUser);
+    });
+
+    continueWithoutLinkBtn.addEventListener("click", async () => {
+      if (!authOperation.begin("continue-without-google-link")) return;
+      const user = auth.currentUser;
+      if (!user) {
+        showEntry("login");
+        authOperation.release();
+        return;
+      }
+      pendingGoogleLinkError = null;
+      await completeFreshSignIn(user);
+    });
+
+    confirmEmailLinkBtn.addEventListener("click", async () => {
+      if (!authOperation.begin("email-account-link")) return;
+      const user = auth.currentUser;
+      const currentUid = user?.uid;
+      const password = linkEmailPasswordInput.value;
+      const confirmation = linkEmailConfirmInput.value;
+      clearLinkPasswords();
+      if (!user || !currentUid || !pendingEmailLinkAddress) {
+        setStatus(i18nT("login.link_session_expired"), "error");
+        authOperation.release();
+        return;
+      }
+      if (user.email?.toLowerCase() !== pendingEmailLinkAddress.toLowerCase()) {
+        setStatus(i18nT("login.link_identity_error"), "error");
+        authOperation.release();
+        return;
+      }
+      if (password.length < 6) {
+        setStatus(i18nT("login.password_too_short"), "error");
+        authOperation.release();
+        return;
+      }
+      if (password !== confirmation) {
+        setStatus(i18nT("login.password_mismatch"), "error");
+        authOperation.release();
+        return;
+      }
+      const result = await linkEmailPasswordToCurrentUser(pendingEmailLinkAddress, password, { confirmed: true });
+      if (!result.ok) {
+        setStatus(result.error.message, "error");
+        authOperation.release();
+        return;
+      }
+      if (auth.currentUser?.uid !== currentUid || result.user?.uid !== currentUid) {
+        setStatus(i18nT("login.link_identity_error"), "error");
+        authOperation.release();
+        return;
+      }
+      pendingEmailLinkAddress = null;
+      await completeFreshSignIn(auth.currentUser);
+    });
+
+    continueWithoutEmailLinkBtn.addEventListener("click", async () => {
+      if (!authOperation.begin("continue-without-email-link")) return;
+      const user = auth.currentUser;
+      if (!user) {
+        showEntry("login");
+        authOperation.release();
+        return;
+      }
+      pendingEmailLinkAddress = null;
+      clearLinkPasswords();
       await completeFreshSignIn(user);
     });
   </script>

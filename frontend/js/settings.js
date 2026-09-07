@@ -143,6 +143,7 @@ saveUsernameBtn.addEventListener("click", async () => {
     // (a deliberate guard, not just an update — see login.html's upsert for the same pattern),
     // so this can't be a bare `{ username: next }` merge.
     await setDoc(doc(db, "users", user.uid), { uid: user.uid, username: next }, { merge: true });
+    await setDoc(doc(db, "public_profiles", user.uid), { uid: user.uid, username: next }, { merge: true });
     currentUsername = next;
     usernameStatus.textContent = t("common.saved");
   } catch (err) {
@@ -177,6 +178,11 @@ saveAboutBtn.addEventListener("click", async () => {
   saveAboutBtn.disabled = true;
   try {
     await setDoc(doc(db, "users", user.uid), {
+      uid: user.uid,
+      bio: bioInput.value.trim(),
+      location: locationInput.value.trim(),
+    }, { merge: true });
+    await setDoc(doc(db, "public_profiles", user.uid), {
       uid: user.uid,
       bio: bioInput.value.trim(),
       location: locationInput.value.trim(),

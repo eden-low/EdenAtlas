@@ -309,6 +309,11 @@ saveAboutBtn.addEventListener("click", async () => {
       bio: bioInput.value.trim(),
       location: locationInput.value.trim(),
     }, { merge: true });
+    await setDoc(doc(db, "public_profiles", user.uid), {
+      uid: user.uid,
+      bio: bioInput.value.trim(),
+      location: locationInput.value.trim(),
+    }, { merge: true });
     aboutStatus.textContent = t("common.saved");
     renderHeader(user);
   } catch (err) {

@@ -148,8 +148,8 @@ function searchableUsers(users) {
 
 async function loadAll() {
   const [usersSnap, photos, journals, life_events, habits, expenses] = await Promise.all([
-    getDocs(collection(db, "users")).catch((err) => {
-      console.error("[global-search] users query failed:", err.code || err);
+    getDocs(collection(db, "public_profiles")).catch((err) => {
+      console.error("[global-search] public profile query failed:", err.code || err);
       return { docs: [] };
     }),
     fetchMineOrPublic("photos"),

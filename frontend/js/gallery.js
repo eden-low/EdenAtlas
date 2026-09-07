@@ -156,9 +156,11 @@ function formatTimestamp(ts) {
   return ts.toDate().toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
 }
 
-// Recognizes ownership on both current (`uid`) and legacy pre-v2.0 (`uploadedBy`) posts.
+// Canonical uid is authoritative. uploadedBy is consulted only for a pre-v2.0 document that has
+// no uid, matching firestore.rules and preventing a conflicting legacy field from granting a
+// second user owner controls.
 function isMyPost(post, user) {
-  return !!user && (post.uid === user.uid || post.uploadedBy === user.uid);
+  return !!user && (post.uid ? post.uid === user.uid : post.uploadedBy === user.uid);
 }
 
 function visibilityBadge(visibility) {
@@ -344,10 +346,9 @@ function checkLikeNotifications(posts) {
 
 // Shared ownership-merge/dedup helper: every "all of my own photos" fetch in this file (the
 // normal feed's "mine" half, and the Trash view) goes through this one function instead of
-// each re-implementing its own uid+uploadedBy merge. Ownership is recognized on either the
-// current `uid` field or the legacy pre-v2.0 `uploadedBy` field (firestore.rules'
-// isPhotoMineOrPublic() accepts either) — a doc that happens to carry both is still only
-// returned once, deduped by Firestore document ID via the Map.
+// each re-implementing its own uid+uploadedBy merge. Canonical uid wins whenever both fields
+// exist; uploadedBy is only a compatibility lookup for documents that predate uid. Results are
+// deduped by Firestore document ID via the Map.
 async function fetchOwnPosts(uid) {
   const map = new Map();
   try {
@@ -359,7 +360,10 @@ async function fetchOwnPosts(uid) {
   // Legacy posts from before the uploadedBy -> uid rename (no data migration was run).
   try {
     const legacySnap = await getDocs(query(collection(db, "photos"), where("uploadedBy", "==", uid)));
-    legacySnap.forEach((d) => map.set(d.id, { id: d.id, ...d.data() }));
+    legacySnap.forEach((d) => {
+      const data = d.data();
+      if (!("uid" in data)) map.set(d.id, { id: d.id, ...data });
+    });
   } catch (err) {
     console.error("[gallery] legacy own posts query failed:", err.code || err);
   }

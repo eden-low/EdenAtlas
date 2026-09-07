@@ -41,7 +41,7 @@ const markAllBtn = document.getElementById("mark-all-read-btn");
 
 let cachedNotifs = [];
 
-// fromUid -> users/{uid} doc data (or null if missing/failed), for LINKED_TYPES notifications
+// fromUid -> public_profiles/{uid} data (or null if missing/failed), for LINKED_TYPES notifications
 // only — lets the actor's avatar/name/@username link straight to profile.html, same
 // u=username-preferred / uid-fallback resolution dashboard.js's personCard() uses.
 const actorCache = new Map();
@@ -50,7 +50,7 @@ async function fetchActor(uid) {
   if (actorCache.has(uid)) return actorCache.get(uid);
   let data = null;
   try {
-    const snap = await getDoc(doc(db, "users", uid));
+    const snap = await getDoc(doc(db, "public_profiles", uid));
     if (snap.exists()) data = snap.data();
   } catch (err) {
     console.error("[notifications] actor fetch failed:", err.code || err);
