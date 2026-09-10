@@ -35,7 +35,7 @@ let fail = 0;
 function context(uid, email) {
   return uid == null
     ? testEnv.unauthenticatedContext()
-    : testEnv.authenticatedContext(uid, { email });
+    : testEnv.authenticatedContext(uid, { email, email_verified: true });
 }
 function ownerDb() { return context(OWNER_UID, OWNER_EMAIL).firestore(); }
 function otherDb() { return context(OTHER_UID, "other@example.com").firestore(); }

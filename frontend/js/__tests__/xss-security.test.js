@@ -25,6 +25,7 @@ import { fileURLToPath } from "node:url";
 import { JSDOM } from "jsdom";
 import { marked } from "marked";
 import createDOMPurify from "dompurify";
+import { createLoginLogRow } from "../login-log-dom.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, "..", "..", "..");
@@ -76,6 +77,8 @@ const CAREER_SRC = readSrc(path.join(FRONTEND_JS, "career.js"));
 const GLOBAL_SEARCH_SRC = readSrc(path.join(FRONTEND_JS, "global-search.js"));
 const ATLAS_SRC = readSrc(path.join(FRONTEND_JS, "atlas.js"));
 const IDENTITY_SRC = readSrc(path.join(FRONTEND_JS, "identity.js"));
+const ME_SRC = readSrc(path.join(FRONTEND_JS, "me.js"));
+const SETTINGS_SRC = readSrc(path.join(FRONTEND_JS, "settings.js"));
 const JOURNAL_HTML = readSrc(path.join("frontend", "pages", "journal.html"));
 
 // ---- A single real jsdom window, reused for both DOMPurify (needs a `window` to attach to)
@@ -402,7 +405,75 @@ await test("atlas.js escapes cluster.name before passing it to marker.bindToolti
 });
 
 // ==================================================================================
-// Section F -- Architectural invariant: escaping/sanitization must happen at RENDER time only,
+// Section F -- Owner login-log and whitelist administration. Both current Me and the legacy
+// Settings surface display persisted, user-controlled login metadata. Plain text DOM construction
+// is the security boundary; malformed legacy emails must never become actionable dataset values.
+// ==================================================================================
+
+function loadNormalizeActionableEmail(src) {
+  const fnSrc = extractFunctionSource(src, "normalizeActionableEmail");
+  const sandbox = {};
+  vm.createContext(sandbox);
+  vm.runInContext(`${fnSrc}\nglobalThis.normalizeActionableEmail = normalizeActionableEmail;`, sandbox);
+  return sandbox.normalizeActionableEmail;
+}
+
+await test("login-log hostile values are rendered as inert text on both Owner surfaces", () => {
+  const payload = '<img src=x onerror="globalThis.pwned=1"><script>alert(1)</script>';
+  for (const [name, src] of [["me.js", ME_SRC], ["settings.js", SETTINGS_SRC]]) {
+    assert.ok(src.includes("createLoginLogRow(document, row"), `${name} must use the shared inert renderer`);
+    assert.ok(!src.includes("${row.email}"), `${name} must not interpolate login email into HTML`);
+  }
+  const row = createLoginLogRow(window.document, {
+    email: payload,
+    device: payload,
+    loginTime: payload,
+  }, {
+    shortDevice: (value) => value,
+    formatTime: (value) => value,
+    unknownUser: "Unknown user",
+  });
+  assert.strictEqual(row.querySelectorAll("script,img,[onerror],[onclick]").length, 0);
+  assert.strictEqual(row.querySelectorAll("[data-email],[data-action]").length, 0);
+  assert.strictEqual(row.children[0].children[0].textContent, payload);
+  assert.strictEqual(row.children[0].children[1].textContent, payload);
+  assert.strictEqual(row.children[1].textContent, payload);
+});
+
+await test("malformed historical login-log field types remain inert through the real renderer", () => {
+  const row = createLoginLogRow(window.document, {
+    email: { toString: () => '<svg onload="alert(1)">' },
+    device: ["<script>alert(1)</script>"],
+    loginTime: null,
+  }, {
+    shortDevice: (value) => String(value ?? "Unknown device").slice(0, 40),
+    formatTime: () => "—",
+    unknownUser: "Invalid login record",
+  });
+  assert.strictEqual(row.querySelectorAll("script,svg,[onload]").length, 0);
+  assert.strictEqual(row.querySelector("p").textContent, "Invalid login record");
+  assert.strictEqual(row.querySelectorAll("[data-email],[href]").length, 0);
+});
+
+await test("malformed whitelist emails never become actionable dataset targets", () => {
+  const attacks = [
+    'victim@example.com\" data-action="promote',
+    "<script>@example.com",
+    "javascript:@example.com",
+    "friend@example.com/../../owner",
+    "two words@example.com",
+  ];
+  for (const [name, src] of [["me.js", ME_SRC], ["settings.js", SETTINGS_SRC]]) {
+    const normalize = loadNormalizeActionableEmail(src);
+    attacks.forEach((value) => assert.strictEqual(normalize(value), null, `${name}: ${value}`));
+    assert.strictEqual(normalize(" Friend@Example.com "), "friend@example.com");
+    assert.match(src, /\b(?:action|button)\.dataset\.email = emailLower/, `${name} must assign only normalized email to dataset`);
+    assert.ok(!src.includes("data-email=\"${emailLower}"), `${name} must not build action attributes with HTML`);
+  }
+});
+
+// ==================================================================================
+// Section G -- Architectural invariant: escaping/sanitization must happen at RENDER time only,
 // never get written back into Firestore -- otherwise a value would be double-escaped on its
 // next render (e.g. "&amp;amp;" instead of "&amp;"), or a `visibility:"connections"` doc's
 // stored title would literally contain HTML entities forever. This is a structural code-shape

@@ -9,6 +9,7 @@ import {
   sendPasswordResetEmail,
   sendEmailVerification,
   reload,
+  getIdToken,
   fetchSignInMethodsForEmail,
   EmailAuthProvider,
   GoogleAuthProvider,
@@ -92,6 +93,7 @@ export async function refreshCurrentUser() {
   if (!user) return Object.freeze({ ok: false, error: authError(AUTH_ERROR.NOT_AUTHENTICATED) });
   try {
     await reload(user);
+    await getIdToken(auth.currentUser, true);
     return success(auth.currentUser);
   } catch (error) {
     return failure(error);

@@ -15,9 +15,9 @@ import {
   doc,
   setDoc,
   updateDoc,
-  deleteDoc,
   addDoc,
   serverTimestamp,
+  runTransaction,
 } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-firestore.js";
 
 const authControl = document.getElementById("auth-control");
@@ -168,8 +168,8 @@ async function loadSentRequestsAndHeal() {
   }));
 }
 
-// Prune my own friendships mirror when the other side has removed theirs (Remove Friend can only
-// delete the remover's own half — see firestore.rules — so the removed side self-prunes here).
+// Compatibility cleanup for historical one-sided removals. Current Remove Friend deletes both
+// mirrors atomically, but an older client may still have removed only its own half.
 async function pruneStaleFriendships() {
   const user = auth.currentUser;
   if (!user) return;
@@ -177,13 +177,38 @@ async function pruneStaleFriendships() {
     try {
       const reciprocal = await getDoc(doc(db, "friendships", friendUid, "friends", user.uid));
       if (!reciprocal.exists()) {
-        await deleteDoc(doc(db, "friendships", user.uid, "friends", friendUid));
-        myFriendUids.delete(friendUid);
+        await revokeFriendshipState(friendUid);
       }
     } catch (err) {
       console.error("[dashboard] friendship prune failed:", err.code || err);
     }
   }));
+}
+
+async function revokeFriendshipState(friendUid) {
+  const user = auth.currentUser;
+  if (!user) return;
+  const requestRefs = [
+    doc(db, "friend_requests", user.uid, "incoming", friendUid),
+    doc(db, "friend_requests", friendUid, "incoming", user.uid),
+  ];
+  const friendshipRefs = [
+    doc(db, "friendships", user.uid, "friends", friendUid),
+    doc(db, "friendships", friendUid, "friends", user.uid),
+  ];
+  await runTransaction(db, async (transaction) => {
+    // Firestore retries if either request changes after these reads. Thus an accepted proof is
+    // cancelled in the same commit as both live authorization mirrors are deleted, and a stale
+    // self-heal can never observe the old accepted proof after the prune has committed.
+    const requestSnapshots = await Promise.all(requestRefs.map((requestRef) => transaction.get(requestRef)));
+    requestSnapshots.forEach((snapshot, index) => {
+      if (snapshot.exists() && snapshot.data().status === "accepted") {
+        transaction.update(requestRefs[index], { status: "cancelled", updatedAt: serverTimestamp() });
+      }
+    });
+    friendshipRefs.forEach((friendshipRef) => transaction.delete(friendshipRef));
+  });
+  myFriendUids.delete(friendUid);
 }
 
 function relationshipState(person) {
@@ -286,8 +311,7 @@ async function removeFriend(friendUid) {
   const user = auth.currentUser;
   if (!user) return;
   try {
-    await deleteDoc(doc(db, "friendships", user.uid, "friends", friendUid));
-    myFriendUids.delete(friendUid);
+    await revokeFriendshipState(friendUid);
     renderBrowseSections();
   } catch (err) {
     console.error("[dashboard] remove friend failed:", err.code || err);

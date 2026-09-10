@@ -2,9 +2,9 @@
 // routing change; portfolio.html is now just a redirect stub to index.html, no longer this
 // script's own page). Fully public — no auth-guard, no private-app sidebar/mobile-nav. Reads the
 // Career CMS (career_projects / career_experiences)
-// anonymously via each doc's public read rule (firestore.rules' isCareerReadable → a
-// `visibility == 'public'` career doc is readable with NO request.auth), and falls back to the
-// curated, user-verified content below when the CMS has nothing to show yet.
+// anonymously only when the Owner's canonical public_profiles careerVisibility is `public` and
+// each item is also public. The static curated fallback below is intentionally public content;
+// it is bundled with the site and is not protected by Firestore Rules.
 //
 // Source-of-truth policy: the Career CMS is authoritative. The FALLBACK_* data here is only
 // rendered when the CMS returns no matching public items — the same "graceful fallback to the
@@ -309,9 +309,28 @@ function renderAll() {
 }
 
 // ==================== CMS load (supersedes fallbacks when present) ====================
-async function fetchPublic(name) {
+async function resolvePublicCareerOwner() {
   try {
-    const snap = await getDocs(query(collection(db, name), where("visibility", "==", "public")));
+    const snap = await getDocs(query(
+      collection(db, "public_profiles"),
+      where("role", "==", "owner"),
+      where("careerVisibility", "==", "public")
+    ));
+    return snap.empty ? null : snap.docs[0].id;
+  } catch (err) {
+    console.error("[portfolio] public Career owner lookup failed:", err.code || err);
+    return null;
+  }
+}
+
+async function fetchPublic(name, ownerUid) {
+  if (!ownerUid) return [];
+  try {
+    const snap = await getDocs(query(
+      collection(db, name),
+      where("uid", "==", ownerUid),
+      where("visibility", "==", "public")
+    ));
     return snap.docs.map((d) => ({ id: d.id, ...d.data() }));
   } catch (err) {
     console.error(`[portfolio] ${name} public fetch failed:`, err.code || err);
@@ -320,9 +339,10 @@ async function fetchPublic(name) {
 }
 
 async function loadCms() {
+  const ownerUid = await resolvePublicCareerOwner();
   const [projDocs, expDocs] = await Promise.all([
-    fetchPublic("career_projects"),
-    fetchPublic("career_experiences"),
+    fetchPublic("career_projects", ownerUid),
+    fetchPublic("career_experiences", ownerUid),
   ]);
 
   // Only PUBLIC docs are ever fetched (query filters visibility=='public'), so a private CMS

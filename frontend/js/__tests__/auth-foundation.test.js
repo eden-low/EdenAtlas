@@ -7,6 +7,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, "..", "..", "..");
 const CLIENT_SOURCE = fs.readFileSync(path.join(ROOT, "frontend", "js", "auth-client.js"), "utf8");
 const LOGIN_SOURCE = fs.readFileSync(path.join(ROOT, "frontend", "pages", "login.html"), "utf8");
+const FIREBASE_INIT_SOURCE = fs.readFileSync(path.join(ROOT, "frontend", "js", "firebase-init.js"), "utf8");
 const { AUTH_ERROR, normalizeAuthError } = await import("../auth-errors.js");
 
 let pass = 0;
@@ -96,6 +97,27 @@ await test("existing Google popup, redirect, redirect-result, persistence, and a
   assert.ok(LOGIN_SOURCE.includes("const safeError = normalizeAuthError(err)"));
   assert.ok(LOGIN_SOURCE.includes("safeError.category"));
   assert.ok(LOGIN_SOURCE.includes("safeError.message"));
+});
+
+await test("verification refresh forces a fresh ID token before role resolution", () => {
+  assert.ok(CLIENT_SOURCE.includes("await reload(user)"));
+  assert.ok(CLIENT_SOURCE.includes("await getIdToken(auth.currentUser, true)"));
+  assert.ok(LOGIN_SOURCE.includes("const result = await refreshCurrentUser()"));
+  assert.ok(LOGIN_SOURCE.includes("await continueAuthenticatedUser(user)"));
+});
+
+await test("unverified email identities fail back to Viewer before whitelist role lookup", () => {
+  const resolver = LOGIN_SOURCE.indexOf("async function resolveUserMode(user)");
+  const verificationGate = LOGIN_SOURCE.indexOf('if (user?.emailVerified !== true) return "VIEWER"', resolver);
+  const friendLookup = LOGIN_SOURCE.indexOf('getDoc(doc(db, "friends", user.email.toLowerCase()))', resolver);
+  assert.ok(verificationGate >= 0, "missing unverified Viewer fallback");
+  assert.ok(friendLookup > verificationGate, "whitelist lookup must occur after verified-email gate");
+});
+
+await test("email-derived Owner and participant UI gates also require verified Firebase state", () => {
+  assert.ok(FIREBASE_INIT_SOURCE.includes("user.emailVerified === true"));
+  assert.ok(FIREBASE_INIT_SOURCE.includes("auth.currentUser?.emailVerified !== true"));
+  assert.ok(FIREBASE_INIT_SOURCE.includes("localStorage.getItem(USER_MODE_KEY)"));
 });
 
 console.log(`\n${pass} passed, ${fail} failed`);

@@ -294,6 +294,7 @@ async function run() {
       "node backend/netlify/functions/__tests__/expense-receipt-validation.test.js",
       "node backend/netlify/functions/__tests__/qwen-vision.test.js",
       "node backend/netlify/functions/__tests__/expense-receipt-ai.test.js",
+      "node backend/netlify/functions/__tests__/career-policy-transition.test.js",
       "node backend/netlify/functions/__tests__/airing-check-core.test.js",
       "node backend/netlify/functions/__tests__/anime-airing-check.test.js",
       "node backend/netlify/functions/__tests__/staging-isolation-wiring.test.js",
@@ -312,6 +313,8 @@ async function run() {
       "node frontend/js/__tests__/reflection.test.js",
       "node frontend/js/__tests__/home-recent-memories.test.js",
       "node frontend/js/__tests__/xss-security.test.js",
+      "node frontend/js/__tests__/time-capsule-security.test.js",
+      "node frontend/js/__tests__/career-privacy.test.js",
       "node frontend/js/__tests__/auth-pulse-scope.test.js",
       "node frontend/js/__tests__/auth-foundation.test.js",
       "node frontend/js/__tests__/auth-ui.test.js",
@@ -349,7 +352,9 @@ async function run() {
       "node frontend/js/__tests__/expense-render.test.js",
       "node frontend/js/__tests__/expense-receipt-client.test.js",
       "node frontend/js/__tests__/expense-receipt-ui.test.js",
-      ...priorFrontendCmds.slice(1),
+      ...priorFrontendCmds.slice(1, 6),
+      "node frontend/js/__tests__/object-url-lifecycle.test.js",
+      ...priorFrontendCmds.slice(6),
       "node frontend/js/__tests__/discover-card-actions-layout.test.js",
       "node frontend/js/__tests__/resume-experience-dates.test.js",
       "node frontend/js/__tests__/resume-print-stylesheet.test.js",
@@ -359,11 +364,11 @@ async function run() {
     assert.strictEqual(pkg.scripts["test:generate-build-info"], "node scripts/__tests__/generate-build-info.test.js");
     assert.strictEqual(
       pkg.scripts["test:all"],
-      "npm run test && npm run test:firestore-rules && npm run test:tailwind-migration && npm run test:generate-build-info && npm run test:staging-packaging"
+      "npm run test && npm run test:firestore-rules && npm run test:storage-rules && npm run test:tailwind-migration && npm run test:generate-build-info && npm run test:staging-packaging"
     );
     // test:staging-packaging is a real, heavy Netlify Function-packaging test (real esbuild via
     // @netlify/zip-it-and-ship-it) — deliberately kept OUT of `test`/`test:functions`, the same
-    // way test:firestore-rules (a real Firestore Emulator, needing a JDK) is kept out, so the
+    // way the Firestore/Storage rules suites (real Emulators, needing a JDK) are kept out, so the
     // fast/dependency-free `npm test` invariant this file's own history repeatedly documents stays
     // true for anyone/any CI without that heavier tooling installed.
     assert.strictEqual(pkg.scripts["test:staging-packaging"], "node backend/netlify/functions/__tests__/staging-packaging.test.js");

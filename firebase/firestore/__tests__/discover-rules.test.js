@@ -111,13 +111,13 @@ function ctxFor(uid, claims) {
   return uid == null ? testEnv.unauthenticatedContext() : testEnv.authenticatedContext(uid, claims);
 }
 function ownerCtx(uid = OWNER_UID) {
-  return ctxFor(uid, { email: OWNER_EMAIL });
+  return ctxFor(uid, { email: OWNER_EMAIL, email_verified: true });
 }
 function friendCtx() {
-  return ctxFor(FRIEND_UID, { email: FRIEND_EMAIL });
+  return ctxFor(FRIEND_UID, { email: FRIEND_EMAIL, email_verified: true });
 }
 function viewerCtx() {
-  return ctxFor(VIEWER_UID, { email: VIEWER_EMAIL });
+  return ctxFor(VIEWER_UID, { email: VIEWER_EMAIL, email_verified: true });
 }
 
 function followId(uid, anilistId) {
@@ -337,7 +337,7 @@ async function run() {
 
     await test("Owner-uid/token-email mismatch: matching uid alone with a non-owner email is not isOwner()", async () => {
       const { id } = await seedValidOwnerDoc({ anilistId: 1300 });
-      const db = ctxFor(OWNER_UID, { email: "not-the-owner@example.com" }).firestore();
+      const db = ctxFor(OWNER_UID, { email: "not-the-owner@example.com", email_verified: true }).firestore();
       await assertFails(getDoc(doc(db, "followed_anime", id)));
       await assertFails(updateDoc(doc(db, "followed_anime", id), { status: "watching", updatedAt: serverTimestamp() }));
       await assertFails(deleteDoc(doc(db, "followed_anime", id)));
@@ -509,7 +509,7 @@ async function run() {
       const db = ownerCtx().firestore();
       const ref = doc(db, "public_profiles", OWNER_UID);
       await assertSucceeds(setDoc(ref, {
-        uid: OWNER_UID, displayName: "Owner", role: "owner", careerVisibility: "public",
+        uid: OWNER_UID, displayName: "Owner", role: "owner",
       }));
       await assertSucceeds(updateDoc(ref, { displayName: "Updated Owner" }));
       const snap = await getDoc(ref);
@@ -520,7 +520,7 @@ async function run() {
     await test("signed-out Resume owner resolution query returns only the real Owner profile", async () => {
       await seedPath(`friends/${FRIEND_EMAIL}`, { addedAt: Timestamp.now() });
       await assertSucceeds(setDoc(doc(ownerCtx().firestore(), "public_profiles", OWNER_UID), {
-        uid: OWNER_UID, displayName: "Owner", role: "owner", careerVisibility: "public",
+        uid: OWNER_UID, displayName: "Owner", role: "owner",
       }));
       await assertSucceeds(setDoc(doc(friendCtx().firestore(), "public_profiles", FRIEND_UID), {
         uid: FRIEND_UID, displayName: "Friend", role: "friend", careerVisibility: "public",

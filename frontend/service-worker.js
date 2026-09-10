@@ -160,7 +160,13 @@
 // remove the retired Calendar adapter from precache, and keep the deployed Expense AI assets.
 // v49 (source-tree migration): all browser modules now publish under js/; public page and asset
 // paths otherwise remain unchanged.
-const CACHE = "eden-shell-v49";
+// v51 (Phase 5 P0-1 Storage lookup-limit closure): refresh career.js so global Career policy
+// transitions atomically update every item authorization snapshot used by Storage Rules.
+// v50 (Phase 5 P0-1 closure): cache the shared protected-attachment identity/lifecycle modules
+// used by Career and Time Capsule so an updated shell never loads a stale privacy implementation.
+// v53 (Phase 5 P0-1 replay protection): refresh the precached career.js so installed clients use
+// the server-issued two-step transition capability instead of the retired browser-issued request.
+const CACHE = "eden-shell-v53";
 
 const PRECACHE = [
   "index.html", "home.html", "resume.html", "gallery.html", "journal.html", "expenses.html",
@@ -170,10 +176,12 @@ const PRECACHE = [
   "styles.css", "tailwind.generated.css", "js/scripts.js", "js/firebase-init.js", "js/auth-guard.js", "js/global-search.js",
   "js/gallery.js", "js/expenses.js", "js/journal.js", "js/timeline.js", "js/dashboard.js", "js/settings.js",
   "js/habits.js", "js/notifications.js", "js/export.js", "js/calendar.js", "js/insights.js",
-  "js/profile.js", "js/career.js", "js/atlas.js", "js/portfolio.js", "js/project.js", "js/assistant.js", "js/discover.js",
+  "js/profile.js", "js/career.js", "js/object-url-lifecycle.js", "js/atlas.js", "js/portfolio.js", "js/project.js", "js/assistant.js", "js/discover.js",
   "js/i18n.js", "js/mobile-nav.js", "js/sidebar.js", "js/splash.js", "js/location-search.js",
   "js/location-fields.js", "js/memory-filters.js", "js/resume-data.js",
   "js/date-utils.js", "js/reflection.js", "js/weather-client.js",
+  "js/storage-url-policy.js", "js/capsule-attachment-lifecycle.js",
+  "js/login-log-dom.js",
   "js/expense-model.js", "js/expense-render.js", "js/expense-receipt-client.js",
   "js/environment.js", "js/push-notifications.js", "js/build-info.generated.js",
   "locales/en.json", "locales/zh-CN.json",

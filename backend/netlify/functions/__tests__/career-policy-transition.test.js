@@ -1,0 +1,334 @@
+"use strict";
+
+const assert = require("node:assert");
+const {
+  createHandler, beginPolicyTransition, completePolicyTransition, PolicyTransitionError,
+  generateServerCapability, hashSecret, markerMatches, LOCK_TTL_MS, CAREER_COLLECTIONS,
+} = require("../career-policy-transition.js");
+
+const OWNER_UID = "owner-policy-uid";
+const OWNER_EMAIL = "jjun8647@gmail.com";
+const ORIGIN = "https://edenatlas.netlify.app";
+const NOW = 1_800_000;
+const DELETE = Symbol("delete");
+const CAP_A = Object.freeze({
+  transitionId: "11111111-1111-4111-8111-111111111111",
+  transitionSecret: "A".repeat(43),
+});
+const CAP_B = Object.freeze({
+  transitionId: "22222222-2222-4222-8222-222222222222",
+  transitionSecret: "B".repeat(43),
+});
+let pass = 0; let fail = 0;
+
+async function test(name, fn) {
+  try { await fn(); pass++; console.log(`  ok  - ${name}`); }
+  catch (error) { fail++; console.log(`FAIL  - ${name}`); console.log(`        ${error.stack || error.message}`); }
+}
+function timestamp(ms) { return { toMillis: () => ms, toJSON: () => ({ milliseconds: ms }) }; }
+function fakeDb(initial = {}) {
+  const docs = new Map(Object.entries(initial));
+  const ref = (path) => ({ path });
+  let transactionTail = Promise.resolve();
+  const db = {
+    docs,
+    collection(name) {
+      return {
+        doc(id) { return ref(`${name}/${id}`); },
+        where(field, op, value) { return { query: true, collection: name, field, op, value }; },
+      };
+    },
+    runTransaction(callback) {
+      const execute = async () => {
+        const writes = [];
+        const transaction = {
+          async get(target) {
+            if (target.query) {
+              const found = [];
+              for (const [path, data] of docs) {
+                if (path.startsWith(`${target.collection}/`) && data[target.field] === target.value) {
+                  found.push({ ref: ref(path), data: () => ({ ...data }) });
+                }
+              }
+              return { docs: found };
+            }
+            const data = docs.get(target.path);
+            return { exists: data !== undefined, data: () => ({ ...data }) };
+          },
+          set(target, data, options) { writes.push({ kind: "set", target, data, merge: options?.merge }); },
+          update(target, data) { writes.push({ kind: "update", target, data }); },
+        };
+        const result = await callback(transaction);
+        for (const write of writes) {
+          const before = docs.get(write.target.path) || {};
+          const next = write.kind === "set" && !write.merge ? {} : { ...before };
+          for (const [key, value] of Object.entries(write.data)) {
+            if (value === DELETE) delete next[key]; else next[key] = value;
+          }
+          docs.set(write.target.path, next);
+        }
+        return result;
+      };
+      const result = transactionTail.then(execute, execute);
+      transactionTail = result.catch(() => {});
+      return result;
+    },
+  };
+  return db;
+}
+const FieldValue = { delete: () => DELETE, serverTimestamp: () => "SERVER_TIMESTAMP" };
+const Timestamp = { fromMillis: timestamp };
+function beginArgs(db, targetVisibility, capability = CAP_A, nowMs = NOW) {
+  return {
+    db, Timestamp, uid: OWNER_UID, targetVisibility, nowMs,
+    generateCapability: () => ({ ...capability }),
+  };
+}
+function completeArgs(db, targetVisibility, capability = CAP_A, nowMs = NOW + 1) {
+  return {
+    db, FieldValue, Timestamp, uid: OWNER_UID, targetVisibility, nowMs,
+    transitionId: capability.transitionId,
+    transitionSecret: capability.transitionSecret,
+  };
+}
+function profile(visibility = "private", version = 7) {
+  return { uid: OWNER_UID, role: "owner", careerVisibility: visibility, careerPolicyVersion: version };
+}
+function handlerDeps(overrides = {}) {
+  return {
+    env: { FIREBASE_PROJECT_ID: "test", FIREBASE_SERVICE_ACCOUNT: "test", ALLOWED_ORIGIN: ORIGIN },
+    ensureFirebaseAdmin: async () => {},
+    verifyIdToken: async () => ({ uid: OWNER_UID, email: OWNER_EMAIL, email_verified: true }),
+    getUserDoc: async () => ({ role: "owner", email: OWNER_EMAIL }),
+    nowMs: () => NOW,
+    beginTransition: async () => ({ ...CAP_A, sourceCareerVisibility: "private", sourceCareerPolicyVersion: 7 }),
+    completeTransition: async () => ({ careerVisibility: "public", careerPolicyVersion: 8 }),
+    ...overrides,
+  };
+}
+function request(body, overrides = {}) {
+  return {
+    httpMethod: "POST",
+    headers: { origin: ORIGIN, authorization: "Bearer token" },
+    body: JSON.stringify(body),
+    ...overrides,
+  };
+}
+async function begin(db, target, capability = CAP_A, nowMs = NOW) {
+  return beginPolicyTransition(beginArgs(db, target, capability, nowMs));
+}
+async function complete(db, target, capability = CAP_A, nowMs = NOW + 1) {
+  return completePolicyTransition(completeArgs(db, target, capability, nowMs));
+}
+
+async function run() {
+  await test("BEGIN accepts only a target and capability identity is generated by the server", async () => {
+    let observed;
+    const response = await createHandler(handlerDeps({
+      beginTransition: async (args) => { observed = args; return { ...CAP_A }; },
+    }))(request({ action: "begin", careerVisibility: "public" }));
+    assert.strictEqual(response.statusCode, 200);
+    assert.deepStrictEqual(Object.keys(observed).sort(), ["nowMs", "targetVisibility", "uid"]);
+    assert.strictEqual(observed.targetVisibility, "public");
+    assert.deepStrictEqual(JSON.parse(response.body), { ok: true, ...CAP_A });
+
+    for (const extra of [
+      { sourcePolicy: "private" }, { sourcePolicyVersion: 7 },
+      { transitionId: CAP_A.transitionId }, { transitionSecret: CAP_A.transitionSecret },
+    ]) {
+      const denied = await createHandler(handlerDeps())(request({ action: "begin", careerVisibility: "public", ...extra }));
+      assert.strictEqual(denied.statusCode, 400);
+    }
+  });
+
+  await test("server capability generator uses unique UUIDs and 256-bit base64url secrets", () => {
+    const first = generateServerCapability();
+    const second = generateServerCapability();
+    assert.match(first.transitionId, /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
+    assert.match(first.transitionSecret, /^[A-Za-z0-9_-]{43}$/);
+    assert.notStrictEqual(first.transitionId, second.transitionId);
+    assert.notStrictEqual(first.transitionSecret, second.transitionSecret);
+  });
+
+  await test("authenticated verified Owner and exact origin are mandatory for both operations", async () => {
+    const beginBody = { action: "begin", careerVisibility: "public" };
+    assert.strictEqual((await createHandler(handlerDeps({
+      verifyIdToken: async () => ({ uid: OWNER_UID, email: OWNER_EMAIL, email_verified: false }),
+    }))(request(beginBody))).statusCode, 403);
+    assert.strictEqual((await createHandler(handlerDeps({
+      getUserDoc: async () => ({ role: "viewer", email: OWNER_EMAIL }),
+    }))(request(beginBody))).statusCode, 403);
+    assert.strictEqual((await createHandler(handlerDeps())(request(beginBody, {
+      headers: { origin: "https://evil.example", authorization: "Bearer token" },
+    }))).statusCode, 403);
+    assert.strictEqual((await createHandler(handlerDeps())(request({ action: "unknown", careerVisibility: "public" }))).statusCode, 400);
+  });
+
+  await test("private v7 to public v8 succeeds once and exact completion replay is denied", async () => {
+    const db = fakeDb({ [`public_profiles/${OWNER_UID}`]: profile() });
+    await begin(db, "public");
+    assert.deepStrictEqual(await complete(db, "public"), { careerVisibility: "public", careerPolicyVersion: 8 });
+    await assert.rejects(complete(db, "public"), (error) => error.code === "transition_already_consumed");
+    const saved = db.docs.get(`public_profiles/${OWNER_UID}`);
+    assert.strictEqual(saved.careerPolicyVersion, 8);
+    assert.strictEqual(saved.careerPolicyTransition, undefined);
+    assert.strictEqual(saved.careerPolicyLastConsumed.id, CAP_A.transitionId);
+    assert.strictEqual(saved.careerPolicyLastConsumed.secretHash, hashSecret(CAP_A.transitionSecret));
+    assert.ok(!JSON.stringify(saved).includes(CAP_A.transitionSecret));
+  });
+
+  await test("old private-to-public capability stays denied after a later restrictive transition", async () => {
+    const db = fakeDb({ [`public_profiles/${OWNER_UID}`]: profile() });
+    await begin(db, "public", CAP_A, NOW);
+    await complete(db, "public", CAP_A, NOW + 1);
+    await begin(db, "private", CAP_B, NOW + 2);
+    await complete(db, "private", CAP_B, NOW + 3);
+    await assert.rejects(complete(db, "public", CAP_A, NOW + 4), (error) => error.code === "transition_not_active");
+    const saved = db.docs.get(`public_profiles/${OWNER_UID}`);
+    assert.strictEqual(saved.careerVisibility, "private");
+    assert.strictEqual(saved.careerPolicyVersion, 9);
+  });
+
+  await test("same capability with a different target is denied without consuming it", async () => {
+    const db = fakeDb({ [`public_profiles/${OWNER_UID}`]: profile() });
+    await begin(db, "public");
+    await assert.rejects(complete(db, "connections"), (error) => error.code === "transition_target_mismatch");
+    assert.strictEqual(db.docs.get(`public_profiles/${OWNER_UID}`).careerVisibility, "private");
+    assert.ok(db.docs.get(`public_profiles/${OWNER_UID}`).careerPolicyTransition);
+  });
+
+  await test("different ID with same secret and same ID with different secret are denied", async () => {
+    const db = fakeDb({ [`public_profiles/${OWNER_UID}`]: profile() });
+    await begin(db, "public");
+    await assert.rejects(complete(db, "public", { ...CAP_A, transitionId: CAP_B.transitionId }),
+      (error) => error.code === "transition_capability_mismatch");
+    await assert.rejects(complete(db, "public", { ...CAP_A, transitionSecret: CAP_B.transitionSecret }),
+      (error) => error.code === "transition_capability_mismatch");
+    assert.strictEqual(db.docs.get(`public_profiles/${OWNER_UID}`).careerPolicyVersion, 7);
+  });
+
+  await test("two concurrent BEGIN operations from one source version allow only one capability", async () => {
+    const db = fakeDb({ [`public_profiles/${OWNER_UID}`]: profile() });
+    const results = await Promise.allSettled([
+      begin(db, "public", CAP_A),
+      begin(db, "connections", CAP_B),
+    ]);
+    assert.strictEqual(results.filter((entry) => entry.status === "fulfilled").length, 1);
+    const rejected = results.find((entry) => entry.status === "rejected");
+    assert.strictEqual(rejected.reason.code, "transition_in_progress");
+    assert.strictEqual(db.docs.get(`public_profiles/${OWNER_UID}`).careerPolicyVersion, 7);
+  });
+
+  await test("expired capability is denied and a fresh server capability may replace its stale lock", async () => {
+    const db = fakeDb({ [`public_profiles/${OWNER_UID}`]: profile() });
+    await begin(db, "public", CAP_A, NOW);
+    await assert.rejects(complete(db, "public", CAP_A, NOW + LOCK_TTL_MS),
+      (error) => error.code === "transition_expired");
+    assert.strictEqual(db.docs.get(`public_profiles/${OWNER_UID}`).careerVisibility, "private");
+    await begin(db, "connections", CAP_B, NOW + LOCK_TTL_MS + 1);
+    assert.deepStrictEqual(await complete(db, "connections", CAP_B, NOW + LOCK_TTL_MS + 2), {
+      careerVisibility: "connections", careerPolicyVersion: 8,
+    });
+  });
+
+  await test("source profile state is bound and cannot change before completion", async () => {
+    const db = fakeDb({ [`public_profiles/${OWNER_UID}`]: profile() });
+    await begin(db, "public");
+    const saved = db.docs.get(`public_profiles/${OWNER_UID}`);
+    saved.careerPolicyVersion = 6;
+    await assert.rejects(complete(db, "public"), (error) => error.code === "transition_source_changed");
+    assert.strictEqual(db.docs.get(`public_profiles/${OWNER_UID}`).careerVisibility, "private");
+  });
+
+  await test("complete transition atomically advances all four Career collection snapshots", async () => {
+    const initial = {
+      [`public_profiles/${OWNER_UID}`]: profile("connections", 3),
+      [`users/${OWNER_UID}`]: { uid: OWNER_UID },
+    };
+    CAREER_COLLECTIONS.forEach((name) => { initial[`${name}/item`] = {
+      uid: OWNER_UID, visibility: "public", careerVisibility: "connections", careerPolicyVersion: 3,
+    }; });
+    const db = fakeDb(initial);
+    await begin(db, "public");
+    assert.deepStrictEqual(await complete(db, "public"), { careerVisibility: "public", careerPolicyVersion: 4 });
+    for (const name of CAREER_COLLECTIONS) {
+      assert.strictEqual(db.docs.get(`${name}/item`).careerPolicyVersion, 4);
+      assert.strictEqual(db.docs.get(`${name}/item`).careerVisibility, "public");
+    }
+  });
+
+  await test("stale or omitted item state rejects completion and preserves the safe source policy", async () => {
+    const db = fakeDb({
+      [`public_profiles/${OWNER_UID}`]: profile("private", 7),
+      [`career_projects/stale`]: {
+        uid: OWNER_UID, visibility: "public", careerVisibility: "public", careerPolicyVersion: 6,
+      },
+    });
+    await begin(db, "public");
+    await assert.rejects(complete(db, "public"), (error) => error.code === "stale_career_snapshot");
+    const saved = db.docs.get(`public_profiles/${OWNER_UID}`);
+    assert.strictEqual(saved.careerVisibility, "private");
+    assert.strictEqual(saved.careerPolicyVersion, 7);
+    assert.ok(saved.careerPolicyTransition, "failed completion must retain the active fail-closed lock");
+  });
+
+  await test("canonical initialization is private v1 and arbitrary first policy is rejected", async () => {
+    const legacy = { uid: OWNER_UID, role: "owner", careerVisibility: "public" };
+    const rejected = fakeDb({ [`public_profiles/${OWNER_UID}`]: legacy });
+    await assert.rejects(begin(rejected, "public"), (error) => error.code === "career_policy_initialization_required");
+    const db = fakeDb({ [`public_profiles/${OWNER_UID}`]: legacy });
+    await begin(db, "private");
+    assert.deepStrictEqual(await complete(db, "private"), { careerVisibility: "private", careerPolicyVersion: 1 });
+  });
+
+  await test("498 Career items complete but 499 fail closed without a partial policy change", async () => {
+    const makeDb = (count) => {
+      const initial = { [`public_profiles/${OWNER_UID}`]: profile() };
+      for (let index = 0; index < count; index++) initial[`career_projects/item-${index}`] = {
+        uid: OWNER_UID, visibility: "private", careerVisibility: "private", careerPolicyVersion: 7,
+      };
+      return fakeDb(initial);
+    };
+    const atLimit = makeDb(498);
+    await begin(atLimit, "connections");
+    await complete(atLimit, "connections");
+    assert.strictEqual(atLimit.docs.get(`public_profiles/${OWNER_UID}`).careerPolicyVersion, 8);
+
+    const overLimit = makeDb(499);
+    await begin(overLimit, "connections");
+    await assert.rejects(complete(overLimit, "connections"), (error) => error.code === "career_policy_batch_limit");
+    assert.strictEqual(overLimit.docs.get(`public_profiles/${OWNER_UID}`).careerPolicyVersion, 7);
+    assert.strictEqual(overLimit.docs.get("career_projects/item-0").careerPolicyVersion, 7);
+  });
+
+  await test("completion handler requires the exact server-issued capability fields", async () => {
+    let observed;
+    const response = await createHandler(handlerDeps({
+      completeTransition: async (args) => { observed = args; return { careerVisibility: "public", careerPolicyVersion: 8 }; },
+    }))(request({
+      action: "complete", careerVisibility: "public",
+      transitionId: CAP_A.transitionId, transitionSecret: CAP_A.transitionSecret,
+    }));
+    assert.strictEqual(response.statusCode, 200);
+    assert.strictEqual(observed.transitionId, CAP_A.transitionId);
+    assert.strictEqual(observed.transitionSecret, CAP_A.transitionSecret);
+    assert.strictEqual(observed.uid, OWNER_UID);
+  });
+
+  await test("marker ownership requires exact UID, server ID, and server-secret hash", () => {
+    const marker = { ownerUid: OWNER_UID, id: CAP_A.transitionId, secretHash: hashSecret(CAP_A.transitionSecret) };
+    assert.strictEqual(markerMatches(marker, {
+      uid: OWNER_UID, transitionId: CAP_A.transitionId, secretHash: marker.secretHash,
+    }), true);
+    assert.strictEqual(markerMatches(marker, {
+      uid: "other", transitionId: CAP_A.transitionId, secretHash: marker.secretHash,
+    }), false);
+    assert.strictEqual(markerMatches(marker, {
+      uid: OWNER_UID, transitionId: CAP_A.transitionId, secretHash: hashSecret(CAP_B.transitionSecret),
+    }), false);
+  });
+
+  console.log(`\nCareer policy transition tests: ${pass} passed, ${fail} failed`);
+  if (fail) process.exitCode = 1;
+}
+run();

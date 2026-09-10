@@ -1,7 +1,6 @@
-// Reusable public case-study renderer (project.html?slug=...). Fully public — reads the Career
-// CMS anonymously (career_projects public read rule) and merges each field over a curated,
-// user-verified fallback: the Owner's CMS content wins field-by-field, and the fallback fills any
-// gap so a case study is never blank. Same source-of-truth policy as portfolio.js.
+// Reusable public case-study renderer (project.html?slug=...). It reads CMS data only when the
+// Owner's canonical global Career policy and the item are both public. The bundled, curated
+// fallback remains intentionally public and fills gaps without claiming Firestore protection.
 import { db } from "./firebase-init.js";
 import { init as i18nInit, getLang, setLang, t } from "./i18n.js";
 import { collection, query, where, getDocs } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-firestore.js";
@@ -249,7 +248,18 @@ function render() {
 async function fetchCmsProject() {
   if (!slug) return null;
   try {
-    const snap = await getDocs(query(collection(db, "career_projects"), where("visibility", "==", "public")));
+    const ownerSnap = await getDocs(query(
+      collection(db, "public_profiles"),
+      where("role", "==", "owner"),
+      where("careerVisibility", "==", "public")
+    ));
+    if (ownerSnap.empty) return null;
+    const ownerUid = ownerSnap.docs[0].id;
+    const snap = await getDocs(query(
+      collection(db, "career_projects"),
+      where("uid", "==", ownerUid),
+      where("visibility", "==", "public")
+    ));
     const match = snap.docs.map((d) => ({ id: d.id, ...d.data() })).find((p) => (p.slug || "").trim().toLowerCase() === slug);
     return match || null;
   } catch (err) {

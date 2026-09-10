@@ -66,6 +66,16 @@ await test("verification UI supports resend, Firebase refresh, and logout", () =
   assert.ok(LOGIN_SOURCE.includes("requiresEmailVerification(user)"));
   assert.ok(LOGIN_SOURCE.includes("await signOut(auth)"));
   assert.ok(CLIENT_SOURCE.includes("await reload(user)"));
+  assert.ok(CLIENT_SOURCE.includes("await getIdToken(auth.currentUser, true)"));
+  assert.ok(LOGIN_SOURCE.includes("await continueAuthenticatedUser(user)"));
+});
+
+await test("unverified whitelisted Email/Password users remain Viewer in the UI", () => {
+  const resolver = LOGIN_SOURCE.indexOf("async function resolveUserMode(user)");
+  const gate = LOGIN_SOURCE.indexOf('if (user?.emailVerified !== true) return "VIEWER"', resolver);
+  const whitelistRead = LOGIN_SOURCE.indexOf('getDoc(doc(db, "friends", user.email.toLowerCase()))', resolver);
+  assert.ok(gate >= 0);
+  assert.ok(whitelistRead > gate);
 });
 
 await test("Google popup, redirect, PWA detection, and redirect result remain intact", () => {

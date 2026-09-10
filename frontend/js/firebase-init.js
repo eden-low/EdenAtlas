@@ -122,7 +122,9 @@ export const storage = getStorage(app);
 export const OWNER_EMAIL = "jjun8647@gmail.com";
 
 export function isOwner(user) {
-  return !!user && user.email === OWNER_EMAIL;
+  return !!user
+    && user.emailVerified === true
+    && user.email?.toLowerCase() === OWNER_EMAIL;
 }
 
 // Role is decided once at login time (see login.html) and cached here — real enforcement is
@@ -134,6 +136,7 @@ export function getUserMode() {
 }
 
 export function canParticipate() {
+  if (auth.currentUser?.emailVerified !== true) return false;
   const mode = getUserMode();
   return mode === "OWNER" || mode === "FRIEND";
 }

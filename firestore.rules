@@ -1,12 +1,19 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
+    function hasVerifiedEmail() {
+      return request.auth != null
+             && request.auth.token.email is string
+             && request.auth.token.email.size() > 0
+             && request.auth.token.email.size() <= 254
+             && request.auth.token.email_verified == true;
+    }
     function isOwner() {
-      return request.auth != null && request.auth.token.email == 'jjun8647@gmail.com';
+      return hasVerifiedEmail() && request.auth.token.email.lower() == 'jjun8647@gmail.com';
     }
     function isFriend() {
-      return request.auth != null
-             && exists(/databases/$(database)/documents/friends/$(request.auth.token.email));
+      return hasVerifiedEmail()
+             && exists(/databases/$(database)/documents/friends/$(request.auth.token.email.lower()));
     }
     // Display classification only. The client never chooses its own role: rules derive it from
     // the verified Firebase identity and the server-owned friends whitelist.
@@ -22,7 +29,7 @@ service cloud.firestore {
     // legacy isFriend() whitelist role-check above (kept a different name to avoid shadowing it).
     // True once `ownerUid` has accepted the caller into friendships/{ownerUid}/friends/{caller}.
     function isAcceptedFriend(ownerUid) {
-      return request.auth != null
+      return hasVerifiedEmail()
              && exists(/databases/$(database)/documents/friendships/$(ownerUid)/friends/$(request.auth.uid));
     }
     function isMineOrPublic(data) {
@@ -147,13 +154,106 @@ service cloud.firestore {
 
     // Always-private (v2.9): messages sealed for the writer's own future self. Same
     // owner-only shape as goals/expenses — never readable via isMineOrPublic(), by design.
+    function validCapsuleCore(data) {
+      return data.uid is string && data.uid.size() > 0 && data.uid.size() <= 128
+        && data.title is string && data.title.size() > 0 && data.title.size() <= 120
+        && data.message is string && data.message.size() > 0 && data.message.size() <= 10000
+        && data.openAt is timestamp
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp
+        && data.status in ['sealed', 'opened']
+        && data.visibility == 'private';
+    }
+    function validNewCapsuleAttachment(data, capsuleId) {
+      return (data.attachmentPath == null && data.attachmentType == null)
+        || (data.attachmentPath is string
+            && data.attachmentPath == 'capsules/' + data.uid + '/' + capsuleId
+            && data.attachmentType in ['image', 'file']);
+    }
+    function validCapsuleSchema(data, capsuleId) {
+      return data.keys().hasOnly([
+          'uid', 'title', 'message', 'openAt', 'createdAt', 'updatedAt',
+          'status', 'visibility', 'attachmentPath', 'attachmentType'
+        ])
+        && data.keys().hasAll([
+          'uid', 'title', 'message', 'openAt', 'createdAt', 'updatedAt',
+          'status', 'visibility', 'attachmentPath', 'attachmentType'
+        ])
+        && validCapsuleCore(data)
+        && validNewCapsuleAttachment(data, capsuleId);
+    }
+    // Exact legacy shape emitted by the pre-P0 client. It is recognized only as the source of a
+    // one-way transition into the canonical schema below; no legacy create is allowed.
+    function validLegacyCapsuleSchema(data) {
+      return data.keys().hasOnly([
+          'uid', 'title', 'message', 'openAt', 'createdAt', 'updatedAt',
+          'status', 'visibility', 'attachmentUrl', 'attachmentType'
+        ])
+        && data.keys().hasAll([
+          'uid', 'title', 'message', 'openAt', 'createdAt', 'updatedAt',
+          'status', 'visibility', 'attachmentUrl', 'attachmentType'
+        ])
+        && validCapsuleCore(data)
+        && (data.attachmentUrl == null || data.attachmentUrl is string)
+        && (data.attachmentType == null || data.attachmentType in ['image', 'file']);
+    }
+    function validCapsuleStatusTransition(before, after) {
+      return (before.status == 'sealed' && after.status == 'sealed')
+        || (before.status == 'sealed' && after.status == 'opened'
+            && before.openAt <= request.time
+            && after.title == before.title
+            && after.message == before.message
+            && after.openAt == before.openAt)
+        || (before.status == 'opened' && after.status == 'opened'
+            && after.title == before.title
+            && after.message == before.message
+            && after.openAt == before.openAt);
+    }
+
     match /time_capsules/{capsuleId} {
       allow read, delete: if request.auth != null && resource.data.uid == request.auth.uid;
+      allow create: if isOwner()
+                    && request.resource.data.uid == request.auth.uid
+                    && validCapsuleSchema(request.resource.data, capsuleId)
+                    && request.resource.data.status == 'sealed'
+                    && request.resource.data.createdAt == request.time
+                    && request.resource.data.updatedAt == request.time;
       allow update: if request.auth != null
                     && resource.data.uid == request.auth.uid
-                    && request.resource.data.uid == resource.data.uid;
-      // v3.3: Owner-only create — see expenses' match block above for the full reasoning.
-      allow create: if isOwner() && request.resource.data.uid == request.auth.uid;
+                    && request.resource.data.uid == resource.data.uid
+                    && request.resource.data.createdAt == resource.data.createdAt
+                    && request.resource.data.visibility == resource.data.visibility
+                    && validCapsuleSchema(request.resource.data, capsuleId)
+                    && request.resource.data.updatedAt == request.time
+                    && (
+                      (resource.data.status == 'sealed'
+                        && request.resource.data.status == 'sealed'
+                        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+                          'title', 'message', 'openAt', 'updatedAt'
+                        ]))
+                      || (resource.data.status == 'sealed'
+                        && request.resource.data.status == 'opened'
+                        && resource.data.openAt <= request.time
+                        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+                          'status', 'updatedAt'
+                        ]))
+                    );
+      // Bounded compatibility: an exact legacy document may become canonical once. The URL is
+      // removed, a canonical own-document object identity (or explicit null) replaces it, and
+      // all identity/private fields remain immutable. It can never transition back to legacy.
+      allow update: if request.auth != null
+                    && resource.data.uid == request.auth.uid
+                    && validLegacyCapsuleSchema(resource.data)
+                    && validCapsuleSchema(request.resource.data, capsuleId)
+                    && request.resource.data.uid == resource.data.uid
+                    && request.resource.data.createdAt == resource.data.createdAt
+                    && request.resource.data.visibility == resource.data.visibility
+                    && request.resource.data.updatedAt == request.time
+                    && validCapsuleStatusTransition(resource.data, request.resource.data)
+                    && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+                      'title', 'message', 'openAt', 'status', 'updatedAt',
+                      'attachmentUrl', 'attachmentPath', 'attachmentType'
+                    ]);
     }
 
     // Always-private (v2.9): one-per-day mood/note checkpoint. Doc ID is `${uid}_${dateKey}`
@@ -321,35 +421,85 @@ service cloud.firestore {
       allow create: if canParticipate() && request.resource.data.uid == request.auth.uid;
     }
 
-    // Career CMS (resume.html, nav-labeled "Career"): unlike the rest of the app, this is not
-    // a per-uid multi-tenant space — the page has always been about one person — so writes are
-    // Owner-only, not canParticipate()-gated. HR/Friends/Viewers only ever read public items.
-    // v3.2.2: a `visibility == 'public'` career doc is readable with NO auth requirement at all
-    // (unlike isMineOrPublic(), which always requires request.auth != null) — this is what lets
-    // an unauthenticated HR visitor open a public resume link. Connections-tier and private items
-    // still fall through to isMineOrPublic(), which is unchanged and still auth-required. The
-    // page-level `users/{uid}.careerVisibility` toggle (private/connections/public) that gates
-    // whether resume.html even attempts to show the page is enforced client-side only (career.js),
-    // the same UI-level-gate-over-open-item-rules pattern profile.html's canViewProfile() already
-    // uses — see CLAUDE.md's "EdenAtlas v3.2.2" bullet for the documented tradeoff.
+    // Career CMS: the canonical global policy lives on public_profiles/{uid}. It is intersected
+    // with each item's visibility so an item can narrow, but never broaden, global access.
+    function hasValidCareerVisibility(uid) {
+      return exists(/databases/$(database)/documents/public_profiles/$(uid))
+        && get(/databases/$(database)/documents/public_profiles/$(uid)).data.careerVisibility
+          in ['private', 'connections', 'public'];
+    }
+    function careerVisibility(uid) {
+      return get(/databases/$(database)/documents/public_profiles/$(uid)).data.careerVisibility;
+    }
     function isCareerReadable(data) {
-      return data.visibility == 'public' || isMineOrPublic(data);
+      return (request.auth != null && data.uid == request.auth.uid)
+        || (hasValidCareerVisibility(data.uid) && (
+          (careerVisibility(data.uid) == 'public' && data.visibility == 'public')
+          || (careerVisibility(data.uid) in ['connections', 'public']
+              && data.visibility in ['public', 'connections']
+              && isAcceptedFriend(data.uid))
+        ));
+    }
+    // Storage authorization consumes this bounded per-item snapshot plus, only for connection
+    // reads, the live friendship document. Every client Career write must match the effective
+    // profile exactly. Policy fields and the transition lock on public_profiles are server-only;
+    // the privileged transition endpoint updates the profile and every item atomically.
+    function validCareerPolicySnapshot(data) {
+      return data.careerVisibility in ['private', 'connections', 'public']
+        && data.careerPolicyVersion is int
+        && data.careerPolicyVersion >= 1
+        && existsAfter(/databases/$(database)/documents/public_profiles/$(data.uid))
+        && !('careerPolicyTransition' in
+          getAfter(/databases/$(database)/documents/public_profiles/$(data.uid)).data)
+        && getAfter(/databases/$(database)/documents/public_profiles/$(data.uid)).data.careerVisibility
+          == data.careerVisibility
+        && getAfter(/databases/$(database)/documents/public_profiles/$(data.uid)).data.careerPolicyVersion
+          == data.careerPolicyVersion;
+    }
+    function careerPolicyIsUnlocked(uid) {
+      return existsAfter(/databases/$(database)/documents/public_profiles/$(uid))
+        && !('careerPolicyTransition' in
+          getAfter(/databases/$(database)/documents/public_profiles/$(uid)).data);
     }
     match /career_experiences/{id} {
       allow read: if isCareerReadable(resource.data);
-      allow create, update, delete: if isOwner();
+      allow create: if isOwner() && request.resource.data.uid == request.auth.uid
+                    && validCareerPolicySnapshot(request.resource.data);
+      allow update: if isOwner() && resource.data.uid == request.auth.uid
+                    && request.resource.data.uid == resource.data.uid
+                    && validCareerPolicySnapshot(request.resource.data);
+      allow delete: if isOwner() && resource.data.uid == request.auth.uid
+                    && careerPolicyIsUnlocked(resource.data.uid);
     }
     match /career_projects/{id} {
       allow read: if isCareerReadable(resource.data);
-      allow create, update, delete: if isOwner();
+      allow create: if isOwner() && request.resource.data.uid == request.auth.uid
+                    && validCareerPolicySnapshot(request.resource.data);
+      allow update: if isOwner() && resource.data.uid == request.auth.uid
+                    && request.resource.data.uid == resource.data.uid
+                    && validCareerPolicySnapshot(request.resource.data);
+      allow delete: if isOwner() && resource.data.uid == request.auth.uid
+                    && careerPolicyIsUnlocked(resource.data.uid);
     }
     match /career_certificates/{id} {
       allow read: if isCareerReadable(resource.data);
-      allow create, update, delete: if isOwner();
+      allow create: if isOwner() && request.resource.data.uid == request.auth.uid
+                    && validCareerPolicySnapshot(request.resource.data);
+      allow update: if isOwner() && resource.data.uid == request.auth.uid
+                    && request.resource.data.uid == resource.data.uid
+                    && validCareerPolicySnapshot(request.resource.data);
+      allow delete: if isOwner() && resource.data.uid == request.auth.uid
+                    && careerPolicyIsUnlocked(resource.data.uid);
     }
     match /career_awards/{id} {
       allow read: if isCareerReadable(resource.data);
-      allow create, update, delete: if isOwner();
+      allow create: if isOwner() && request.resource.data.uid == request.auth.uid
+                    && validCareerPolicySnapshot(request.resource.data);
+      allow update: if isOwner() && resource.data.uid == request.auth.uid
+                    && request.resource.data.uid == resource.data.uid
+                    && validCareerPolicySnapshot(request.resource.data);
+      allow delete: if isOwner() && resource.data.uid == request.auth.uid
+                    && careerPolicyIsUnlocked(resource.data.uid);
     }
 
     match /photos/{photoId} {
@@ -423,12 +573,16 @@ service cloud.firestore {
         // fires when no doc exists yet), so the original sender may reset it back to pending.
         || (request.auth.uid == fromUid && resource.data.status in ['declined', 'cancelled']
           && request.resource.data.status == 'pending')
-        // Re-send after a later unfriend: removeFriend() only deletes the friendships/ mirror
-        // docs, never this request doc (per spec, user data is never deleted), so a former
-        // friend's request can still read 'accepted' here -- the original sender may reset it
-        // back to pending to request again.
+        // Re-send after a later unfriend: removeFriend() atomically marks the accepted request
+        // cancelled while deleting both friendship mirrors. The original sender may then reset
+        // it to pending for a new consent cycle.
         || (request.auth.uid == fromUid && resource.data.status == 'accepted'
           && request.resource.data.status == 'pending')
+        // Either participant may end an accepted relationship. Revoking the request's accepted
+        // state in the same batch as both mirror deletes prevents historical self-heal logic from
+        // recreating Storage authorization after removal.
+        || (request.auth.uid in [fromUid, toUid] && resource.data.status == 'accepted'
+          && request.resource.data.status == 'cancelled')
       )
       && request.resource.data.fromUid == resource.data.fromUid
       && request.resource.data.toUid == resource.data.toUid
@@ -451,13 +605,16 @@ service cloud.firestore {
           && get(/databases/$(database)/documents/friend_requests/$(friendUid)/incoming/$(uid)).data.status == 'accepted')
       );
       allow update: if false;
-      allow delete: if request.auth != null && request.auth.uid == uid;
+      // Either participant may revoke the relationship. This lets one atomic client batch remove
+      // both mirrors, so Storage's single canonical owner->viewer lookup cannot remain stale.
+      allow delete: if request.auth != null
+                    && (request.auth.uid == uid || request.auth.uid == friendUid);
     }
 
     // Whitelist of approved friends, keyed by lowercase email (owner can approve someone
     // before they've ever signed in — a uid wouldn't exist yet at that point).
     match /friends/{email} {
-      allow read: if isOwner() || (request.auth != null && request.auth.token.email == email);
+      allow read: if isOwner() || (hasVerifiedEmail() && request.auth.token.email.lower() == email);
       allow write: if isOwner();
     }
 
@@ -520,8 +677,15 @@ service cloud.firestore {
              && (!('photoURL' in data) || data.photoURL is string)
              && (!('bio' in data) || data.bio is string)
              && (!('location' in data) || data.location is string)
-             && (!('careerVisibility' in data)
-                 || data.careerVisibility in ['private', 'connections', 'public'])
+              && (!('careerVisibility' in data)
+                  || data.careerVisibility in ['private', 'connections', 'public'])
+              && (!('careerPolicyVersion' in data)
+                  || (data.careerPolicyVersion is int && data.careerPolicyVersion >= 1))
+              // Both capability records are exclusively Admin-managed. The active record contains
+              // only a server-generated secret hash; the consumed record makes successful
+              // completion explicitly one-time. Neither may originate in a client profile write.
+              && !('careerPolicyTransition' in data)
+              && !('careerPolicyLastConsumed' in data)
              // Kept only for existing People/Resume routing. This is display metadata, never an
              // authorization source, and every attempted change is derived by expectedRole().
              && (!('role' in data) || data.role == expectedRole());
@@ -533,9 +697,13 @@ service cloud.firestore {
                     && request.auth.uid == uid
                     && request.resource.data.keys().hasOnly([
                       'uid', 'displayName', 'username', 'photoURL', 'bio', 'location',
-                      'careerVisibility', 'createdAt', 'role'
+                      'careerVisibility', 'careerPolicyVersion',
+                      'createdAt', 'role'
                     ])
                     && validPublicProfileValues(request.resource.data, uid)
+                    && (expectedRole() != 'owner'
+                        || (!('careerVisibility' in request.resource.data)
+                            && !('careerPolicyVersion' in request.resource.data)))
                     && (!('createdAt' in request.resource.data)
                         || request.resource.data.createdAt == request.time);
       allow update: if request.auth != null
@@ -544,11 +712,13 @@ service cloud.firestore {
                     && request.resource.data.uid == resource.data.uid
                     && request.resource.data.diff(resource.data).addedKeys().hasOnly([
                       'displayName', 'username', 'photoURL', 'bio', 'location',
-                      'careerVisibility', 'createdAt', 'role'
+                      'careerVisibility', 'careerPolicyVersion',
+                      'createdAt', 'role'
                     ])
                     && request.resource.data.diff(resource.data).changedKeys().hasOnly([
                       'displayName', 'username', 'photoURL', 'bio', 'location',
-                      'careerVisibility', 'createdAt', 'role'
+                      'careerVisibility', 'careerPolicyVersion',
+                      'createdAt', 'role'
                     ])
                     && (!('displayName' in request.resource.data)
                         || request.resource.data.displayName is string)
@@ -560,8 +730,16 @@ service cloud.firestore {
                         || request.resource.data.bio is string)
                     && (!('location' in request.resource.data)
                         || request.resource.data.location is string)
-                    && (!('careerVisibility' in request.resource.data)
-                        || request.resource.data.careerVisibility in ['private', 'connections', 'public'])
+                    // These fields form one server-managed authorization state machine. Clients
+                    // cannot acquire, replace, clear, or finalize a transition, including through
+                    // a merge that changes only the public profile.
+                    && !request.resource.data.diff(resource.data).affectedKeys().hasAny([
+                      'careerPolicyTransition', 'careerPolicyLastConsumed'
+                    ])
+                    && (expectedRole() != 'owner'
+                        || !request.resource.data.diff(resource.data).affectedKeys().hasAny([
+                          'careerVisibility', 'careerPolicyVersion'
+                        ]))
                     && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['role'])
                         || request.resource.data.role == expectedRole())
                     && (
@@ -593,7 +771,25 @@ service cloud.firestore {
 
     match /login_logs/{logId} {
       allow read: if isOwner();
-      allow create: if request.auth != null && request.auth.uid == request.resource.data.uid;
+      allow create: if request.auth != null
+                    && request.auth.token.email is string
+                    && request.resource.data.keys().hasOnly([
+                      'uid', 'email', 'loginTime', 'device', 'page'
+                    ])
+                    && request.resource.data.keys().hasAll([
+                      'uid', 'email', 'loginTime', 'device', 'page'
+                    ])
+                    && request.resource.data.uid == request.auth.uid
+                    && request.resource.data.email is string
+                    && request.resource.data.email == request.auth.token.email
+                    && request.resource.data.email.size() > 0
+                    && request.resource.data.email.size() <= 254
+                    && request.resource.data.device is string
+                    && request.resource.data.device.size() <= 512
+                    && request.resource.data.page is string
+                    && request.resource.data.page == 'login'
+                    && request.resource.data.page.size() <= 32
+                    && request.resource.data.loginTime == request.time;
       allow update, delete: if false;
     }
 

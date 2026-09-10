@@ -1,5 +1,6 @@
 import { auth, db, isOwner, OWNER_EMAIL } from "./firebase-init.js";
 import { getLang, setLang, init as initI18n, t } from "./i18n.js";
+import { createLoginLogRow } from "./login-log-dom.js";
 import { onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-auth.js";
 import {
   collection,
@@ -35,12 +36,21 @@ function formatTimestamp(ts) {
 
 function shortDevice(ua) {
   if (!ua) return "Unknown device";
+  ua = String(ua);
   if (/iPhone|iPad/.test(ua)) return "iOS · " + (/Safari/.test(ua) ? "Safari" : "Browser");
   if (/Android/.test(ua)) return "Android · " + (/Chrome/.test(ua) ? "Chrome" : "Browser");
   if (/Windows/.test(ua)) return "Windows · " + (/Edg\//.test(ua) ? "Edge" : /Chrome/.test(ua) ? "Chrome" : /Firefox/.test(ua) ? "Firefox" : "Browser");
   if (/Macintosh/.test(ua)) return "macOS · " + (/Chrome/.test(ua) ? "Chrome" : /Safari/.test(ua) ? "Safari" : "Browser");
   if (/Linux/.test(ua)) return "Linux · Browser";
   return ua.slice(0, 40);
+}
+
+function normalizeActionableEmail(value) {
+  if (typeof value !== "string") return null;
+  const email = value.trim().toLowerCase();
+  if (!email || email.length > 254) return null;
+  if (!/^[a-z0-9.!#$%&'*+=?^_`{|}~-]+@[a-z0-9-]+(?:\.[a-z0-9-]+)+$/i.test(email)) return null;
+  return email;
 }
 
 // ---- Profile ----
@@ -275,17 +285,11 @@ async function loadSystemLogs() {
 
   empty.classList.toggle("hidden", rows.length > 0);
   list.replaceChildren(
-    ...rows.map((row) => {
-      const el = document.createElement("div");
-      el.className = "flex items-center justify-between border-b border-borderNeon/40 py-2.5 last:border-0";
-      el.innerHTML = `
-        <div>
-          <p class="font-medium">${row.email}</p>
-          <p class="text-xs text-textGray font-code mt-0.5">${shortDevice(row.device)}</p>
-        </div>
-        <span class="text-xs text-textGray font-code">${formatTimestamp(row.loginTime)}</span>`;
-      return el;
-    })
+    ...rows.map((row) => createLoginLogRow(document, row, {
+      shortDevice,
+      formatTime: formatTimestamp,
+      unknownUser: "Unknown user",
+    }))
   );
 }
 
@@ -313,7 +317,7 @@ async function loadWhitelistManagement() {
   const users = new Map();
   logsSnap.forEach((d) => {
     const data = d.data();
-    const email = (data.email || "").toLowerCase();
+    const email = normalizeActionableEmail(data.email);
     if (!email) return;
     const existing = users.get(email);
     const loginMillis = data.loginTime?.toMillis?.() || 0;
@@ -330,23 +334,49 @@ async function loadWhitelistManagement() {
 
   list.replaceChildren(
     ...rows.map((row) => {
-      const emailLower = row.email.toLowerCase();
+      const emailLower = normalizeActionableEmail(row.email);
+      if (!emailLower) {
+        const inert = document.createElement("div");
+        inert.className = "border-b border-borderNeon/40 py-2.5 last:border-0 text-sm text-textGray";
+        inert.textContent = typeof row.email === "string" ? row.email : "Malformed legacy login record";
+        return inert;
+      }
       const isTheOwner = emailLower === OWNER_EMAIL.toLowerCase();
       const isFriend = isTheOwner || friendEmails.has(emailLower);
 
       const el = document.createElement("div");
       el.className = "flex items-center justify-between gap-4 border-b border-borderNeon/40 py-2.5 last:border-0";
-      el.innerHTML = `
-        <div>
-          <p class="font-medium">${row.email}${isTheOwner ? ' <span class="text-[10px] text-neonPurple font-code">(owner)</span>' : ""}</p>
-          <p class="text-xs text-textGray font-code mt-0.5">Last login ${formatTimestamp(row.lastLogin)}</p>
-        </div>
-        <div class="flex items-center gap-2 shrink-0">
-          <span class="px-2 py-0.5 rounded-full border text-[10px] font-code ${isFriend ? "border-emerald-400/30 bg-emerald-400/10 text-emerald-400" : "border-borderNeon bg-darkBg/60 text-textGray"}">
-            ${isFriend ? "Friend" : "Viewer"}
-          </span>
-          ${isTheOwner ? "" : `<button data-email="${emailLower}" data-action="${isFriend ? "demote" : "promote"}" class="whitelist-toggle-btn px-3 py-1.5 rounded-lg text-xs font-cyber font-bold tracking-wider ${isFriend ? "bg-rose-400/10 text-rose-400 hover:bg-rose-400/20" : "bg-neonPurple/10 text-neonPurple hover:bg-neonPurple/20"} transition-colors">${isFriend ? "Demote" : "Promote"}</button>`}
-        </div>`;
+      const details = document.createElement("div");
+      const emailLine = document.createElement("p");
+      emailLine.className = "font-medium";
+      emailLine.textContent = row.email;
+      if (isTheOwner) {
+        const ownerBadge = document.createElement("span");
+        ownerBadge.className = "text-[10px] text-neonPurple font-code";
+        ownerBadge.textContent = " (owner)";
+        emailLine.appendChild(ownerBadge);
+      }
+      const lastLogin = document.createElement("p");
+      lastLogin.className = "text-xs text-textGray font-code mt-0.5";
+      lastLogin.textContent = `Last login ${formatTimestamp(row.lastLogin)}`;
+      details.append(emailLine, lastLogin);
+
+      const controls = document.createElement("div");
+      controls.className = "flex items-center gap-2 shrink-0";
+      const role = document.createElement("span");
+      role.className = `px-2 py-0.5 rounded-full border text-[10px] font-code ${isFriend ? "border-emerald-400/30 bg-emerald-400/10 text-emerald-400" : "border-borderNeon bg-darkBg/60 text-textGray"}`;
+      role.textContent = isFriend ? "Friend" : "Viewer";
+      controls.appendChild(role);
+      if (!isTheOwner) {
+        const action = document.createElement("button");
+        action.type = "button";
+        action.dataset.email = emailLower;
+        action.dataset.action = isFriend ? "demote" : "promote";
+        action.className = `whitelist-toggle-btn px-3 py-1.5 rounded-lg text-xs font-cyber font-bold tracking-wider ${isFriend ? "bg-rose-400/10 text-rose-400 hover:bg-rose-400/20" : "bg-neonPurple/10 text-neonPurple hover:bg-neonPurple/20"} transition-colors`;
+        action.textContent = isFriend ? "Demote" : "Promote";
+        controls.appendChild(action);
+      }
+      el.append(details, controls);
       return el;
     })
   );

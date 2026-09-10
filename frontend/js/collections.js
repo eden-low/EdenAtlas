@@ -61,8 +61,24 @@ async function mergeMinePublic(name) {
   const user = auth.currentUser;
   const map = new Map();
   try {
-    const publicSnap = await getDocs(query(collection(db, name), where("visibility", "==", "public")));
-    publicSnap.forEach((d) => map.set(d.id, { id: d.id, ...d.data() }));
+    let publicQuery;
+    if (name === "career_projects") {
+      const ownerSnap = await getDocs(query(
+        collection(db, "public_profiles"),
+        where("role", "==", "owner"),
+        where("careerVisibility", "==", "public")
+      ));
+      const canonicalTargetUid = ownerSnap.empty ? null : ownerSnap.docs[0].id;
+      publicQuery = canonicalTargetUid ? query(
+        collection(db, name),
+        where("uid", "==", canonicalTargetUid),
+        where("visibility", "==", "public")
+      ) : null;
+    } else {
+      publicQuery = query(collection(db, name), where("visibility", "==", "public"));
+    }
+    const publicSnap = publicQuery ? await getDocs(publicQuery) : null;
+    publicSnap?.forEach((d) => map.set(d.id, { id: d.id, ...d.data() }));
   } catch (err) {
     console.error(`[collections] ${name} public query failed:`, err.code || err);
   }

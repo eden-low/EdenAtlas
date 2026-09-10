@@ -435,6 +435,7 @@
     // (signed in, public content only). Cached in localStorage for cheap UI gating elsewhere —
     // firestore.rules re-checks `friends` fresh on every read/write, this is display-only.
     async function resolveUserMode(user) {
+      if (user?.emailVerified !== true) return "VIEWER";
       if (isOwner(user)) return "OWNER";
       try {
         const friendSnap = await getDoc(doc(db, "friends", user.email.toLowerCase()));

@@ -1,66 +1,130 @@
 rules_version = '2';
 service firebase.storage {
   match /b/{bucket}/o {
-    function canParticipate(email) {
-      return email == 'jjun8647@gmail.com'
-             || firestore.exists(/databases/(default)/documents/friends/$(email));
+    function hasVerifiedEmail() {
+      return request.auth != null
+             && request.auth.token.email is string
+             && request.auth.token.email.size() > 0
+             && request.auth.token.email.size() <= 254
+             && request.auth.token.email_verified == true;
+    }
+    function isOwner() {
+      return hasVerifiedEmail() && request.auth.token.email.lower() == 'jjun8647@gmail.com';
+    }
+    function isWhitelistedFriend() {
+      return hasVerifiedEmail()
+             && firestore.exists(/databases/(default)/documents/friends/$(request.auth.token.email.lower()));
+    }
+    function canParticipate() {
+      return isOwner() || isWhitelistedFriend();
+    }
+    function isAcceptedFriend(uid) {
+      return hasVerifiedEmail()
+             && firestore.exists(/databases/(default)/documents/friendships/$(uid)/friends/$(request.auth.uid));
+    }
+    function validCareerCollection(collectionName) {
+      return collectionName in [
+        'career_projects', 'career_experiences', 'career_certificates', 'career_awards'
+      ];
+    }
+    function careerItemExists(collectionName, itemId) {
+      return validCareerCollection(collectionName)
+             && firestore.exists(/databases/(default)/documents/$(collectionName)/$(itemId));
+    }
+    function careerItem(collectionName, itemId) {
+      return firestore.get(/databases/(default)/documents/$(collectionName)/$(itemId)).data;
+    }
+    function hasValidCareerPolicySnapshot(data) {
+      return data.keys().hasAll(['careerVisibility', 'careerPolicyVersion'])
+             && data.careerVisibility in ['private', 'connections', 'public']
+             && data.careerPolicyVersion is int
+             && data.careerPolicyVersion >= 1;
+    }
+    function canReadCareerItem(uid, collectionName, itemId) {
+      return careerItemExists(collectionName, itemId)
+             && careerItem(collectionName, itemId).uid == uid
+             && (
+               (request.auth != null && request.auth.uid == uid)
+               // Production Cloud Storage Rules allow at most two cross-service Firestore
+               // document reads. The item carries the versioned effective global policy, so
+               // the only second document needed for a connection is the live UID friendship.
+               || (hasValidCareerPolicySnapshot(careerItem(collectionName, itemId)) && (
+                 (careerItem(collectionName, itemId).careerVisibility == 'public'
+                   && careerItem(collectionName, itemId).visibility == 'public')
+                 || (careerItem(collectionName, itemId).careerVisibility in ['connections', 'public']
+                   && careerItem(collectionName, itemId).visibility in ['public', 'connections']
+                   && isAcceptedFriend(uid))
+               ))
+             );
     }
 
     match /gallery/{uid}/public/{allPaths=**} {
       allow read: if true;
-      allow write: if request.auth != null && request.auth.uid == uid && canParticipate(request.auth.token.email);
+      allow write: if request.auth != null && request.auth.uid == uid && canParticipate();
     }
     match /gallery/{uid}/private/{allPaths=**} {
       allow read: if request.auth != null && request.auth.uid == uid;
-      allow write: if request.auth != null && request.auth.uid == uid && canParticipate(request.auth.token.email);
+      allow write: if request.auth != null && request.auth.uid == uid && canParticipate();
     }
     // v3.2: connections-tier uploads — readable by the owner or anyone accepted into their
     // friendships/{uid}/friends subcollection (see firestore.rules' isAcceptedFriend()).
     match /gallery/{uid}/connections/{allPaths=**} {
-      allow read: if request.auth != null && (request.auth.uid == uid
-        || firestore.exists(/databases/(default)/documents/friendships/$(uid)/friends/$(request.auth.uid)));
-      allow write: if request.auth != null && request.auth.uid == uid && canParticipate(request.auth.token.email);
+      allow read: if request.auth != null && (request.auth.uid == uid || isAcceptedFriend(uid));
+      allow write: if request.auth != null && request.auth.uid == uid && canParticipate();
     }
     match /journal/{uid}/public/{allPaths=**} {
       allow read: if true;
-      allow write: if request.auth != null && request.auth.uid == uid && canParticipate(request.auth.token.email);
+      allow write: if request.auth != null && request.auth.uid == uid && canParticipate();
     }
     match /journal/{uid}/private/{allPaths=**} {
       allow read: if request.auth != null && request.auth.uid == uid;
-      allow write: if request.auth != null && request.auth.uid == uid && canParticipate(request.auth.token.email);
+      allow write: if request.auth != null && request.auth.uid == uid && canParticipate();
     }
     match /journal/{uid}/connections/{allPaths=**} {
-      allow read: if request.auth != null && (request.auth.uid == uid
-        || firestore.exists(/databases/(default)/documents/friendships/$(uid)/friends/$(request.auth.uid)));
-      allow write: if request.auth != null && request.auth.uid == uid && canParticipate(request.auth.token.email);
+      allow read: if request.auth != null && (request.auth.uid == uid || isAcceptedFriend(uid));
+      allow write: if request.auth != null && request.auth.uid == uid && canParticipate();
     }
 
-    // Career CMS uploads (project images/documents, certificate files) — owner-only, mirroring
-    // firestore.rules' career_* collections being Owner-only rather than canParticipate()-gated.
-    match /career/{uid}/public/{allPaths=**} {
-      allow read: if true;
-      allow write: if request.auth != null && request.auth.uid == uid && request.auth.token.email == 'jjun8647@gmail.com';
-    }
-    match /career/{uid}/private/{allPaths=**} {
-      allow read: if request.auth != null && request.auth.uid == uid;
-      allow write: if request.auth != null && request.auth.uid == uid && request.auth.token.email == 'jjun8647@gmail.com';
-    }
-    // v3.2.2: connections-tier career uploads (a per-item "Trusted Connections" visibility
-    // option, mirroring gallery/journal's existing connections path) — readable by the owner or
-    // anyone in their friendships/{uid}/friends subcollection.
-    match /career/{uid}/connections/{allPaths=**} {
-      allow read: if request.auth != null && (request.auth.uid == uid
-        || firestore.exists(/databases/(default)/documents/friendships/$(uid)/friends/$(request.auth.uid)));
-      allow write: if request.auth != null && request.auth.uid == uid && request.auth.token.email == 'jjun8647@gmail.com';
+    // Canonical Career objects are bound to a concrete Firestore item. The current item/global
+    // policy is authoritative on every read; historical path tiers are never authorization.
+    match /career/{uid}/{collectionName}/{itemId}/{attachmentId} {
+      allow read: if canReadCareerItem(uid, collectionName, itemId);
+      allow create, delete: if request.auth != null
+                            && request.auth.uid == uid
+                            && isOwner()
+                            && attachmentId.matches('^[A-Za-z0-9_-]{1,100}$')
+                            && careerItemExists(collectionName, itemId)
+                            && careerItem(collectionName, itemId).uid == uid;
+      allow update: if false;
     }
 
+    // Legacy visibility-tier paths are owner-readable/deletable only, solely for bounded lazy
+    // normalization. Non-owner reads are closed immediately, regardless of the old path name.
+    match /career/{uid}/{legacyVisibility}/{allPaths=**} {
+      allow read, delete: if legacyVisibility in ['private', 'connections', 'public']
+                          && request.auth != null && request.auth.uid == uid && isOwner();
+      allow create, update: if false;
+    }
+
+    // The MIME/12 MiB constraint below is intentionally Capsule-only: Phase 5 introduced that
+    // product-specific policy and does not redefine Gallery, Journal, or Career file formats.
     // Time Capsule attachments (v2.9) — always private, no /public split (capsules are never
     // shown to anyone but their own writer). v3.3: Time Capsule became one of the three
     // Owner-only modules (with Finance/Daily Reflection) — write is Owner-only, mirroring
     // career/{uid}'s email check, instead of canParticipate().
-    match /capsules/{uid}/{allPaths=**} {
+    match /capsules/{uid}/{attachmentId} {
       allow read: if request.auth != null && request.auth.uid == uid;
-      allow write: if request.auth != null && request.auth.uid == uid && request.auth.token.email == 'jjun8647@gmail.com';
+      allow create: if request.auth != null
+                    && request.auth.uid == uid
+                    && isOwner()
+                    && attachmentId.matches('^[A-Za-z0-9]{20}$')
+                    && request.resource.size > 0
+                    && request.resource.size <= 12582912
+                    && request.resource.contentType in [
+                      'image/jpeg', 'image/png', 'image/webp', 'application/pdf', 'text/plain'
+                    ];
+      allow update: if false;
+      allow delete: if request.auth != null && request.auth.uid == uid && isOwner();
     }
   }
 }

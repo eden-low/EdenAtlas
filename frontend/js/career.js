@@ -15,13 +15,22 @@ import {
   setDoc,
   updateDoc,
   deleteDoc,
+  deleteField,
   serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-firestore.js";
-import { ref, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-storage.js";
+import { ref, uploadBytes, getBlob, getMetadata, deleteObject } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-storage.js";
 import { getLang, setLang, t as i18nT } from "./i18n.js";
 import { resolveDisplayName } from "./identity.js";
+import { createObjectUrlRegistry } from "./object-url-lifecycle.js";
 // Canonical résumé content — single source of truth shared with portfolio.js.
 import { PROFILE, EDUCATION, EXPERIENCE, PROJECTS, LEADERSHIP, RESUME_SKILLS } from "./resume-data.js";
+import {
+  parseFirebaseStorageObjectUrl,
+  canonicalCareerObjectPath,
+  isCanonicalCareerObjectPath,
+  isOwnLegacyCareerObjectPath,
+  moveOrRotateStorageObject,
+} from "./storage-url-policy.js";
 
 const authControl = document.getElementById("auth-control");
 
@@ -87,14 +96,10 @@ async function populateCollectionSelect(selectEl, selectedId) {
 // Owner (career is still Owner-only to write — see firestore.rules — so in practice this almost
 // always resolves to the Owner either way; the fallback just avoids hardcoding a uid).
 //
-// `users/{uid}.careerVisibility` ("private"|"connections"|"public", missing == "private") is a
-// PAGE-LEVEL, client-side-only gate — same tier as profile.html's canViewProfile(): it decides
-// whether resume.html bothers rendering anything at all for this viewer. The actual security
-// boundary is still each career_*/{id} doc's own per-item `visibility` field, enforced by
-// firestore.rules' isCareerReadable() (public items readable with no auth at all; connections/
-// private items fall through to the existing isMineOrPublic()). A determined client could still
-// query a public career item directly even if the page-level toggle is "private" — an accepted
-// tradeoff, not a new one (profile.html already documents the identical caveat).
+// `public_profiles/{uid}.careerVisibility` is the owner-facing global policy. Each Career item
+// carries a versioned effective snapshot of that policy so Storage Rules can combine the item and
+// live UID friendship in two cross-service reads. The selector commits profile + every item in one
+// batch; missing/invalid/unversioned item snapshots fail closed for all non-owner Storage reads.
 const urlParams = new URLSearchParams(location.search);
 const targetUsernameParam = (urlParams.get("u") || "").trim().toLowerCase();
 const targetUidParam = urlParams.get("uid");
@@ -107,6 +112,8 @@ let targetUid = null;
 let targetIsOwner = false; // the résumé being viewed belongs to the app Owner (gates fallback content)
 let canEdit = false; // true only when the signed-in user IS the app Owner AND is viewing their own uid
 let access = { pageAccessible: false, includeConnections: false, includeAllMine: false };
+let currentCareerVisibility = "private";
+let currentCareerPolicyVersion = 0;
 
 // v3.2.3: resume.html's viewer-mode shell fix. `resume-viewer-mode`/`resume-owner-mode` on
 // <body> let styles.css hide the full private-app sidebar/mobile nav for anyone but the Owner
@@ -166,7 +173,6 @@ async function resolveTargetUid() {
 // sees the Owner's public career profile instead of a "sign in to view" wall. public_profiles is
 // world-readable (firestore.rules) and holds a `role` mirror, so this needs no auth. Only the
 // Owner ever has role == "owner"; if somehow none is found we fall through to the not_found notice.
-let resolvedViaOwnerFallback = false;
 async function resolveOwnerUidFallback() {
   try {
     const snap = await getDocs(query(collection(db, "public_profiles"), where("role", "==", "owner")));
@@ -177,13 +183,11 @@ async function resolveOwnerUidFallback() {
   return null;
 }
 
-// The signed-in user may read their own private users/{uid} record. Every cross-user or signed-
-// out lookup uses the world-readable public_profiles/{uid} mirror instead.
+// Every viewer, including the owner, reads the canonical global policy from public_profiles.
+// This prevents the private and public profile documents from silently disagreeing.
 async function fetchPersonForTarget(uid) {
-  const user = auth.currentUser;
   try {
-    const collectionName = user?.uid === uid ? "users" : "public_profiles";
-    const snap = await getDoc(doc(db, collectionName, uid));
+    const snap = await getDoc(doc(db, "public_profiles", uid));
     return snap.exists() ? snap.data() : null;
   } catch (err) {
     console.error("[career] person fetch failed:", err.code || err);
@@ -195,7 +199,7 @@ async function fetchPersonForTarget(uid) {
 // friendships subcollection, readable by either side per firestore.rules.
 async function isAcceptedFriendOfTarget(uid) {
   const me = auth.currentUser;
-  if (!me || me.uid === uid) return false;
+  if (!me || me.uid === uid || me.emailVerified !== true) return false;
   try {
     const snap = await getDoc(doc(db, "friendships", uid, "friends", me.uid));
     return snap.exists();
@@ -206,15 +210,13 @@ async function isAcceptedFriendOfTarget(uid) {
 }
 
 function computeAccess({ isSelf, careerVisibility, isFriend }) {
-  // Unified résumé (Login-Alignment / Public-Résumé pass): the Owner's own preview must show the
-  // SAME public-filtered content a logged-out recruiter sees — "what I see as my public résumé"
-  // == what recruiters see. So `isSelf` no longer grants `includeAllMine`/`includeConnections`;
-  // it's treated exactly like an anonymous public viewer (public items only). The Owner keeps
-  // edit affordances via `canEdit` (a separate gate), and can still Add new items — but a career
-  // item marked Private/Trusted-Connections simply won't appear in the résumé for anyone, Owner
-  // included. In practice every career item defaults to Public, so this hides nothing today.
-  if (isSelf) return { pageAccessible: true, includeConnections: false, includeAllMine: false };
-  const vis = careerVisibility || "private";
+  // Global privacy limits non-owner viewers only. The authenticated owner must retain a complete
+  // archive/management view in every global mode, including private items. The separate public
+  // portfolio and project pages remain the recruiter-facing public preview.
+  if (isSelf) return { pageAccessible: true, includeConnections: true, includeAllMine: true };
+  const vis = ["private", "connections", "public"].includes(careerVisibility)
+    ? careerVisibility
+    : "private";
   if (vis === "public") return { pageAccessible: true, includeConnections: isFriend, includeAllMine: false };
   if (vis === "connections") return { pageAccessible: isFriend, includeConnections: isFriend, includeAllMine: false };
   return { pageAccessible: false, includeConnections: false, includeAllMine: false };
@@ -259,16 +261,64 @@ function updateVisibilityControl(careerVisibility) {
   visibilityStatus.textContent = "";
 }
 
+async function requestCareerPolicyTransition(value) {
+  const user = auth.currentUser;
+  if (!user || user.uid !== targetUid || !isOwner(user)) throw new Error("career-policy-owner-only");
+  const token = await user.getIdToken();
+  const postTransition = async (body) => {
+    const response = await fetch("/.netlify/functions/career-policy-transition", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok || payload.ok !== true) throw new Error(payload.error || "career-policy-transition-failed");
+    return payload;
+  };
+
+  // The server is the sole capability issuer. Keep its raw one-time secret in this stack frame
+  // only; completion cannot create a marker, and the references are cleared on every exit path.
+  let transitionId = null;
+  let transitionSecret = null;
+  try {
+    const capability = await postTransition({ action: "begin", careerVisibility: value });
+    transitionId = capability.transitionId;
+    transitionSecret = capability.transitionSecret;
+    if (typeof transitionId !== "string" || typeof transitionSecret !== "string") {
+      throw new Error("career-policy-capability-invalid");
+    }
+    return await postTransition({
+      action: "complete",
+      careerVisibility: value,
+      transitionId,
+      transitionSecret,
+    });
+  } finally {
+    transitionId = null;
+    transitionSecret = null;
+  }
+}
+
 visibilitySelect.addEventListener("change", async (event) => {
   if (!canEdit || !targetUid) return;
   const value = event.target.value;
   visibilityStatus.textContent = i18nT("common.saving");
   try {
-    await setDoc(doc(db, "users", targetUid), { uid: targetUid, careerVisibility: value }, { merge: true });
-    await setDoc(doc(db, "public_profiles", targetUid), { uid: targetUid, careerVisibility: value }, { merge: true });
+    // Before tightening or widening the global policy, remove every legacy tokenized attachment
+    // and bind its replacement to the current Firestore item. A failed normalization aborts the
+    // policy change, so the UI never reports a privacy state that left an old public object live.
+    await normalizeAllCachedCareerAttachments();
+    const result = await requestCareerPolicyTransition(value);
+    currentCareerVisibility = value;
+    currentCareerPolicyVersion = result.careerPolicyVersion;
+    for (const item of [cachedExperiences, cachedProjects, cachedCertificates, cachedAwards].flat()) {
+      item.careerVisibility = value;
+      item.careerPolicyVersion = result.careerPolicyVersion;
+    }
     visibilityStatus.textContent = i18nT("career.visibility_saved");
   } catch (err) {
     console.error("[career] visibility save failed:", err.code || err);
+    event.target.value = currentCareerVisibility;
     visibilityStatus.textContent = i18nT("common.couldnt_save");
   }
 });
@@ -292,7 +342,7 @@ async function fetchCareerFor(name) {
   if (access.includeAllMine) {
     try {
       const snap = await getDocs(query(collection(db, name), where("uid", "==", targetUid)));
-      return snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+      return snap.docs.map((d) => ({ id: d.id, ...d.data(), _careerCollection: name }));
     } catch (err) {
       console.error(`[career] ${name} own query failed:`, err.code || err);
       return [];
@@ -305,14 +355,35 @@ async function fetchCareerFor(name) {
   const map = new Map();
   pub.forEach((d) => map.set(d.id, d));
   connections.forEach((d) => map.set(d.id, d));
-  return [...map.values()];
+  return [...map.values()].map((item) => ({ ...item, _careerCollection: name }));
 }
 
 let cachedExperiences = [];
 let cachedProjects = [];
 let cachedCertificates = [];
 let cachedAwards = [];
+let careerObjectUrls = createObjectUrlRegistry();
+let careerLoadGeneration = 0;
+let careerAccessGeneration = 0;
 let activeProjectCategory = "all";
+
+function clearCareerAttachmentState() {
+  // Invalidate an in-flight load before removing the currently rendered generation. This is also
+  // the auth-transition teardown: a private blob URL must not survive a same-page sign-out merely
+  // because the next viewer fails access checks before loadAll() can replace the registry.
+  careerLoadGeneration++;
+  cachedExperiences = [];
+  cachedProjects = [];
+  cachedCertificates = [];
+  cachedAwards = [];
+  renderExperiences();
+  renderProjects();
+  renderCertificates();
+  renderAwards();
+  const previousObjectUrls = careerObjectUrls;
+  careerObjectUrls = createObjectUrlRegistry();
+  previousObjectUrls.revokeAll();
+}
 
 // ---- Canonical fallback content (single source: js/resume-data.js) ----
 // The Career CMS is authoritative; these render ONLY when a collection returns no public items
@@ -464,32 +535,60 @@ function renderStaticResumeSections() {
 }
 
 async function loadAll() {
-  [cachedExperiences, cachedProjects, cachedCertificates, cachedAwards] = await Promise.all([
+  const loadGeneration = ++careerLoadGeneration;
+  const nextObjectUrls = createObjectUrlRegistry();
+  let replacedObjectUrls = null;
+  try {
+  let [experiences, projects, certificates, awards] = await Promise.all([
     fetchCareerFor("career_experiences"),
     fetchCareerFor("career_projects"),
     fetchCareerFor("career_certificates"),
     fetchCareerFor("career_awards"),
   ]);
+  if (canEdit) await normalizeAllCachedCareerAttachments(projects, certificates);
+  await Promise.all([
+    ...projects.filter((item) => !item._fallback).map((item) => hydrateCareerAttachments(item, "career_projects", nextObjectUrls)),
+    ...certificates.map((item) => hydrateCareerAttachments(item, "career_certificates", nextObjectUrls)),
+  ]);
   // Per-collection fallback so partial CMS population never blanks an unrelated section — but only
   // for the app Owner's résumé (this fallback content is the Owner's; never show it as a non-owner's
   // own empty résumé).
   if (targetIsOwner) {
-    if (!cachedExperiences.length) cachedExperiences = FALLBACK_EXPERIENCES;
-    if (!cachedProjects.length) cachedProjects = FALLBACK_PROJECTS;
+    if (!experiences.length) experiences = FALLBACK_EXPERIENCES;
+    if (!projects.length) projects = FALLBACK_PROJECTS;
   }
+  if (loadGeneration !== careerLoadGeneration) {
+    nextObjectUrls.revokeAll();
+    return;
+  }
+  const previousObjectUrls = careerObjectUrls;
+  replacedObjectUrls = previousObjectUrls;
+  careerObjectUrls = nextObjectUrls;
+  [cachedExperiences, cachedProjects, cachedCertificates, cachedAwards] = [
+    experiences, projects, certificates, awards,
+  ];
   renderExperiences();
   renderProjects();
   renderCertificates();
   renderAwards();
+  previousObjectUrls.revokeAll();
+  } catch (error) {
+    nextObjectUrls.revokeAll();
+    replacedObjectUrls?.revokeAll();
+    throw error;
+  }
 }
 
 // Resolves the target uid, fetches their access-gating fields, and decides what this viewer may
 // see — called once per auth-state change, before loadAll(). Replaces the old "just always fetch
 // every public item + my own" behavior with per-target, per-viewer access control.
 async function initCareerAccess(user) {
+  const accessGeneration = ++careerAccessGeneration;
   canEdit = false;
   targetIsOwner = false;
-  resolvedViaOwnerFallback = false;
+  targetUid = null;
+  access = { pageAccessible: false, includeConnections: false, includeAllMine: false };
+  clearCareerAttachmentState();
   applyViewerModeClass(user);
 
   if (!hasTargetParam) {
@@ -498,17 +597,20 @@ async function initCareerAccess(user) {
     // PUBLIC recruiter résumé route, so resolve the app Owner's uid and render their public
     // career profile (no login wall — objective of the Public-Résumé pass).
     if (!user) {
-      targetUid = await resolveOwnerUidFallback();
+      const resolvedUid = await resolveOwnerUidFallback();
+      if (accessGeneration !== careerAccessGeneration) return;
+      targetUid = resolvedUid;
       if (!targetUid) {
         showNotice("not_found");
         return;
       }
-      resolvedViaOwnerFallback = true;
     } else {
       targetUid = user.uid;
     }
   } else {
-    targetUid = await resolveTargetUid();
+    const resolvedUid = await resolveTargetUid();
+    if (accessGeneration !== careerAccessGeneration) return;
+    targetUid = resolvedUid;
     if (!targetUid) {
       showNotice("not_found");
       return;
@@ -519,13 +621,13 @@ async function initCareerAccess(user) {
 
   const isSelf = !!user && user.uid === targetUid;
   const person = await fetchPersonForTarget(targetUid);
+  if (accessGeneration !== careerAccessGeneration) return;
   if (!person && !isSelf) {
     showNotice("not_found");
     return;
   }
-  // Self mode never hard-fails on a missing users/{uid} doc (e.g. a getDoc race right after a
-  // brand-new first login, before login.html's upsert has landed) — isSelf alone is enough to
-  // grant full access; careerVisibility below just falls back to its usual "undefined" default.
+  // Self mode remains available for editing even when the public profile has not been created;
+  // all non-owner reads still fail closed until a valid global policy exists.
 
   // No multi-user Career CMS yet — only the app Owner has a resume. A shared link (?u=/?uid=)
   // resolving to anyone else (a friend's username, etc.) gets a clean "not found" notice instead
@@ -545,26 +647,24 @@ async function initCareerAccess(user) {
   applyViewerModeClass(user);
 
   let careerVisibility = person?.careerVisibility;
-  // Canonical public route (no param, signed out): a missing careerVisibility historically meant
-  // "public portfolio" (the app's original default), so treat undefined as "public" here rather
-  // than falling through to computeAccess's safe "private" default and locking recruiters out. An
-  // explicit "private"/"connections" the Owner deliberately set is still respected.
-  if (resolvedViaOwnerFallback && careerVisibility === undefined) careerVisibility = "public";
-  // One-time default upgrade: the app historically treated Career as a public portfolio, so the
-  // very first time the actual Owner loads their own resume with no careerVisibility ever set,
-  // default it to "public" instead of leaving it at the (safer, rules-level) implicit "private" —
-  // mirrors login.html's "only write createdAt on first login" one-time-write pattern.
-  if (canEdit && careerVisibility === undefined) {
-    careerVisibility = "public";
-    try {
-      await setDoc(doc(db, "users", targetUid), { uid: targetUid, careerVisibility }, { merge: true });
-      await setDoc(doc(db, "public_profiles", targetUid), { uid: targetUid, careerVisibility }, { merge: true });
-    } catch (err) {
-      console.error("[career] default visibility upgrade failed:", err.code || err);
-    }
+  currentCareerVisibility = ["private", "connections", "public"].includes(careerVisibility)
+    ? careerVisibility
+    : "private";
+  currentCareerPolicyVersion = Number.isInteger(person?.careerPolicyVersion)
+    && person.careerPolicyVersion >= 1
+    ? person.careerPolicyVersion
+    : 0;
+  if (canEdit && currentCareerPolicyVersion === 0) {
+    // Canonical initialization is deliberately private. A legacy public profile can never be
+    // promoted into a versioned public attachment policy without a later explicit owner action.
+    const initialized = await requestCareerPolicyTransition("private");
+    if (accessGeneration !== careerAccessGeneration) return;
+    currentCareerVisibility = initialized.careerVisibility;
+    currentCareerPolicyVersion = initialized.careerPolicyVersion;
+    careerVisibility = initialized.careerVisibility;
   }
-
   const isFriend = user && !isSelf ? await isAcceptedFriendOfTarget(targetUid) : false;
+  if (accessGeneration !== careerAccessGeneration) return;
   access = computeAccess({ isSelf, careerVisibility, isFriend });
   updateVisibilityControl(careerVisibility);
 
@@ -607,14 +707,174 @@ resumeLangZh?.addEventListener("click", () => setLang("zh-CN"));
 document.getElementById("resume-print-btn")?.addEventListener("click", () => window.print());
 syncResumeToolbarLang();
 
-// ---- Storage upload helper (mirrors gallery.js's upload flow) ----
-async function uploadCareerFile(file, visibility, subfolder) {
+// ---- Career attachment identity / bounded legacy normalization ----
+// Canonical paths carry the Firestore collection + document id. Storage Rules re-read that item
+// on every request, so changing its visibility changes authorization immediately without moving
+// the object. Long-lived download URLs are never stored or rendered for protected content.
+async function uploadCareerFile(file, collectionName, itemId, attachmentId = crypto.randomUUID()) {
   const user = auth.currentUser;
-  const storagePath = `career/${user.uid}/${visibility}/${subfolder}/${Date.now()}-${file.name}`;
-  const fileRef = ref(storage, storagePath);
+  const attachmentPath = canonicalCareerObjectPath(user.uid, collectionName, itemId, attachmentId);
+  const fileRef = ref(storage, attachmentPath);
   await uploadBytes(fileRef, file);
-  const url = await getDownloadURL(fileRef);
-  return { url, storagePath };
+  return { attachmentPath };
+}
+
+function currentCareerPolicySnapshot() {
+  return currentCareerPolicyVersion >= 1
+    ? {
+        careerVisibility: currentCareerVisibility,
+        careerPolicyVersion: currentCareerPolicyVersion,
+      }
+    : {};
+}
+
+async function normalizeAllCachedCareerAttachments(projects = cachedProjects, certificates = cachedCertificates) {
+  if (!canEdit) return;
+  for (const item of projects.filter((entry) => !entry._fallback)) {
+    await normalizeCareerAttachments("career_projects", item);
+  }
+  for (const item of certificates) {
+    await normalizeCareerAttachments("career_certificates", item);
+  }
+}
+
+function careerItemFor(collectionName, id) {
+  const source = {
+    career_experiences: cachedExperiences,
+    career_projects: cachedProjects,
+    career_certificates: cachedCertificates,
+    career_awards: cachedAwards,
+  }[collectionName] || [];
+  return source.find((item) => item.id === id);
+}
+
+function exactLegacyCareerPath(value, uid) {
+  if (typeof value === "object" && value && isOwnLegacyCareerObjectPath(value.storagePath, uid)) return value.storagePath;
+  const url = typeof value === "string" ? value : value?.url;
+  const parsed = parseFirebaseStorageObjectUrl(url, storage.app.options.storageBucket);
+  return parsed && isOwnLegacyCareerObjectPath(parsed.objectPath, uid) ? parsed.objectPath : null;
+}
+
+async function migrateCareerEntry(entry, collectionName, itemId, attachmentId) {
+  const uid = auth.currentUser.uid;
+  const canonicalExistingPath = entry && isCanonicalCareerObjectPath(
+    entry.attachmentPath, uid, collectionName, itemId
+  ) ? entry.attachmentPath : null;
+  const hasLegacyLocator = typeof entry === "string"
+    || (typeof entry === "object" && entry !== null
+      && (Object.prototype.hasOwnProperty.call(entry, "url")
+        || Object.prototype.hasOwnProperty.call(entry, "storagePath")));
+  const canonicalEntry = canonicalExistingPath
+    ? { attachmentPath: canonicalExistingPath, ...(entry?.name ? { name: entry.name } : {}) }
+    : null;
+  if (canonicalEntry && !hasLegacyLocator) return canonicalEntry;
+  const oldPath = exactLegacyCareerPath(entry, uid);
+  if (!oldPath) {
+    if (entry) console.warn("[career] legacy attachment classified unrecoverable", { collectionName, itemId, attachmentId });
+    // An untrusted extra URL cannot displace an already-valid canonical identity. Strip the URL
+    // from Firestore, keep SDK-only access to the canonical object, and never act on the URL.
+    return canonicalEntry;
+  }
+  const targetPath = canonicalExistingPath
+    || canonicalCareerObjectPath(uid, collectionName, itemId, attachmentId);
+  await moveOrRotateStorageObject({
+    sourcePath: oldPath,
+    targetPath,
+    targetExists: async (path) => {
+      try {
+        await getMetadata(ref(storage, path));
+        return true;
+      } catch (error) {
+        if (error?.code === "storage/object-not-found") return false;
+        throw error;
+      }
+    },
+    readObject: (path) => getBlob(ref(storage, path)),
+    writeObject: (path, blob) => uploadBytes(
+      ref(storage, path), blob, { contentType: blob.type || "application/octet-stream" }
+    ),
+    removeObject: (path) => deleteObject(ref(storage, path)),
+  });
+  return { attachmentPath: targetPath, ...(entry?.name ? { name: entry.name } : {}) };
+}
+
+async function normalizeCareerAttachments(collectionName, item) {
+  if (!canEdit || !item || item._fallback) return item;
+  if (collectionName === "career_projects") {
+    const oldImages = Array.isArray(item.images) ? item.images : [];
+    const oldDocuments = Array.isArray(item.documents) ? item.documents : [];
+    const needsMigration = [...oldImages, ...oldDocuments].some((entry) =>
+      !isCanonicalCareerObjectPath(entry?.attachmentPath, item.uid, collectionName, item.id)
+      || Object.prototype.hasOwnProperty.call(entry || {}, "url")
+      || Object.prototype.hasOwnProperty.call(entry || {}, "storagePath"));
+    if (!needsMigration) return item;
+    const images = (await Promise.all(oldImages.map((entry, index) =>
+      migrateCareerEntry(entry, collectionName, item.id, `legacy-image-${index}`)))).filter(Boolean);
+    const documents = (await Promise.all(oldDocuments.map((entry, index) =>
+      migrateCareerEntry(entry, collectionName, item.id, `legacy-document-${index}`)))).filter(Boolean);
+    await updateDoc(doc(db, collectionName, item.id), { images, documents, updatedAt: serverTimestamp() });
+    item.images = images;
+    item.documents = documents;
+  } else if (collectionName === "career_certificates" && item.fileUrl) {
+    const migrated = await migrateCareerEntry({
+      attachmentPath: item.fileAttachmentPath,
+      url: item.fileUrl,
+    }, collectionName, item.id, "legacy-file");
+    await updateDoc(doc(db, collectionName, item.id), {
+      fileAttachmentPath: migrated?.attachmentPath || null,
+      fileUrl: deleteField(),
+      updatedAt: serverTimestamp(),
+    });
+    item.fileAttachmentPath = migrated?.attachmentPath || null;
+    delete item.fileUrl;
+  }
+  return item;
+}
+
+async function hydrateCareerAttachments(item, collectionName, objectUrls = careerObjectUrls) {
+  const loadPath = async (attachmentPath) => {
+    if (!isCanonicalCareerObjectPath(attachmentPath, item.uid, collectionName, item.id)) return null;
+    try {
+      const blob = await getBlob(ref(storage, attachmentPath));
+      return objectUrls.create(blob);
+    } catch (error) {
+      console.error("[career] attachment read failed:", error.code || error);
+      return null;
+    }
+  };
+  if (collectionName === "career_projects") {
+    await Promise.all((item.images || []).map(async (entry) => { entry._href = await loadPath(entry.attachmentPath); }));
+    await Promise.all((item.documents || []).map(async (entry) => { entry._href = await loadPath(entry.attachmentPath); }));
+  } else if (collectionName === "career_certificates") {
+    item._fileHref = await loadPath(item.fileAttachmentPath);
+  }
+  return item;
+}
+
+window.addEventListener("pagehide", () => careerObjectUrls.revokeAll());
+
+async function deleteCareerItem(collectionName, id) {
+  const item = careerItemFor(collectionName, id);
+  const paths = [];
+  if (collectionName === "career_projects") {
+    for (const entry of [...(item?.images || []), ...(item?.documents || [])]) {
+      const canonical = entry?.attachmentPath;
+      const legacy = exactLegacyCareerPath(entry, auth.currentUser.uid);
+      if (isCanonicalCareerObjectPath(canonical, auth.currentUser.uid, collectionName, id)) paths.push(canonical);
+      else if (legacy) paths.push(legacy);
+    }
+  } else if (collectionName === "career_certificates") {
+    if (isCanonicalCareerObjectPath(item?.fileAttachmentPath, auth.currentUser.uid, collectionName, id)) paths.push(item.fileAttachmentPath);
+    else {
+      const legacy = exactLegacyCareerPath(item?.fileUrl, auth.currentUser.uid);
+      if (legacy) paths.push(legacy);
+    }
+  }
+  for (const path of [...new Set(paths)]) {
+    try { await deleteObject(ref(storage, path)); }
+    catch (error) { if (error?.code !== "storage/object-not-found") throw error; }
+  }
+  await deleteDoc(doc(db, collectionName, id));
 }
 
 function ownerControlsHTML(id, collectionName) {
@@ -633,7 +893,10 @@ function wireOwnerControls(root, onEdit) {
     btn.addEventListener("click", async () => {
       if (!confirm(i18nT("common.delete_confirm"))) return;
       try {
-        await deleteDoc(doc(db, btn.dataset.collection, btn.dataset.id));
+        await deleteCareerItem(btn.dataset.collection, btn.dataset.id);
+        // The object/document deletion has committed. Tear down the rendered generation before
+        // refetching so a failed refresh cannot leave a deleted attachment's blob URL live.
+        clearCareerAttachmentState();
         await loadAll();
       } catch (err) {
         console.error("[career] delete failed:", err.code || err);
@@ -725,6 +988,7 @@ document.getElementById("experience-form").addEventListener("submit", async (eve
     description_zh: document.getElementById("experience-description-zh").value.trim(),
     skills: document.getElementById("experience-skills").value.split(",").map((s) => s.trim()).filter(Boolean),
     visibility: document.querySelector('#experience-form input[name="experience-visibility"]:checked').value,
+    ...currentCareerPolicySnapshot(),
     updatedAt: serverTimestamp(),
   };
   try {
@@ -763,7 +1027,7 @@ function projectCard(project, owner) {
   const el = document.createElement("div");
   el.className = "card-lift bg-darkBg/60 border border-borderNeon rounded-xl overflow-hidden hover:border-neonPurple/40 transition-all cursor-pointer flex flex-col";
   const tech = (project.techStack || []).slice(0, 4).map((s) => `<span class="px-2 py-0.5 rounded-full border border-borderNeon text-[10px] font-code text-textGray">${esc(s)}</span>`).join(" ");
-  const cover = project.images?.[0]?.url || project.images?.[0];
+  const cover = project.images?.[0]?._href || null;
   const coverHTML = cover
     ? `<img src="${esc(cover)}" alt="" class="w-full h-36 object-cover">`
     : `<div class="w-full h-36 bg-darkBg/80 flex items-center justify-center text-textGray/50"><i class="fa-solid fa-diagram-project text-2xl"></i></div>`;
@@ -817,12 +1081,14 @@ function openProjectDetail(project) {
   document.getElementById("project-detail-links").innerHTML = links.join(" &middot; ");
   document.getElementById("project-detail-links-section").classList.toggle("hidden", links.length === 0);
 
-  const images = (project.images || []).map((img) => `<img src="${esc(img.url || img)}" class="w-full h-32 object-cover rounded-lg">`).join("");
+  const images = (project.images || []).map((img) => img._href
+    ? `<img src="${esc(img._href)}" class="w-full h-32 object-cover rounded-lg">`
+    : "").join("");
   document.getElementById("project-detail-images").innerHTML = images;
   document.getElementById("project-detail-gallery-section").classList.toggle("hidden", !(project.images || []).length);
 
-  const docs = (project.documents || []).map((d) => (d.url || d) && safeHref(d.url || d)
-    ? `<a href="${safeHref(d.url || d)}" target="_blank" rel="noopener" class="flex items-center gap-2 text-xs text-neonPurple hover:underline"><i class="fa-solid fa-file"></i>${esc(d.name || "Document")}</a>`
+  const docs = (project.documents || []).map((d) => d._href
+    ? `<a href="${esc(d._href)}" target="_blank" rel="noopener" class="flex items-center gap-2 text-xs text-neonPurple hover:underline"><i class="fa-solid fa-file"></i>${esc(d.name || "Document")}</a>`
     : "").join("");
   document.getElementById("project-detail-documents").innerHTML = docs;
   document.getElementById("project-detail-documents-section").classList.toggle("hidden", !(project.documents || []).length);
@@ -860,8 +1126,12 @@ async function openProjectForm(id) {
   document.getElementById("project-github-url").value = project?.githubUrl || "";
   document.getElementById("project-demo-url").value = project?.demoUrl || "";
   document.getElementById("project-featured").checked = !!project?.featured;
-  document.getElementById("project-images-existing").dataset.value = JSON.stringify(project?.images || []);
-  document.getElementById("project-documents-existing").dataset.value = JSON.stringify(project?.documents || []);
+  document.getElementById("project-images-existing").dataset.value = JSON.stringify(
+    (project?.images || []).map(({ attachmentPath }) => ({ attachmentPath }))
+  );
+  document.getElementById("project-documents-existing").dataset.value = JSON.stringify(
+    (project?.documents || []).map(({ attachmentPath, name }) => ({ attachmentPath, ...(name ? { name } : {}) }))
+  );
   document.querySelector(`#project-form input[name="project-visibility"][value="${project?.visibility || "public"}"]`).checked = true;
   document.getElementById("project-status").textContent = "";
   document.getElementById("project-modal").classList.remove("hidden");
@@ -879,17 +1149,42 @@ document.getElementById("project-form").addEventListener("submit", async (event)
   const id = document.getElementById("project-form-id").value;
   const visibility = document.querySelector('#project-form input[name="project-visibility"]:checked').value;
   statusEl.textContent = "Saving…";
+  const itemRef = id ? doc(db, "career_projects", id) : doc(collection(db, "career_projects"));
+  const itemId = itemRef.id;
+  const uploadedPaths = [];
+  let placeholderCreated = false;
+  let existingProject = null;
   try {
-    let images = JSON.parse(document.getElementById("project-images-existing").dataset.value || "[]");
-    let documents = JSON.parse(document.getElementById("project-documents-existing").dataset.value || "[]");
+    if (id) {
+      existingProject = careerItemFor("career_projects", id);
+      if (existingProject) await normalizeCareerAttachments("career_projects", existingProject);
+    } else {
+      // A private placeholder gives Storage Rules a canonical item identity without briefly
+      // exposing a partially uploaded public document.
+      await setDoc(itemRef, {
+        uid: user.uid, visibility: "private", images: [], documents: [],
+        ...currentCareerPolicySnapshot(),
+        createdAt: serverTimestamp(), updatedAt: serverTimestamp(),
+      });
+      placeholderCreated = true;
+    }
+    let images = existingProject
+      ? (existingProject.images || []).map(({ attachmentPath }) => ({ attachmentPath }))
+      : JSON.parse(document.getElementById("project-images-existing").dataset.value || "[]");
+    let documents = existingProject
+      ? (existingProject.documents || []).map(({ attachmentPath, name }) => ({ attachmentPath, ...(name ? { name } : {}) }))
+      : JSON.parse(document.getElementById("project-documents-existing").dataset.value || "[]");
 
     const imageFiles = document.getElementById("project-image-files").files;
     for (const file of imageFiles) {
-      images.push(await uploadCareerFile(file, visibility, "projects/images"));
+      const uploaded = await uploadCareerFile(file, "career_projects", itemId);
+      uploadedPaths.push(uploaded.attachmentPath);
+      images.push(uploaded);
     }
     const docFiles = document.getElementById("project-document-files").files;
     for (const file of docFiles) {
-      const uploaded = await uploadCareerFile(file, visibility, "projects/documents");
+      const uploaded = await uploadCareerFile(file, "career_projects", itemId);
+      uploadedPaths.push(uploaded.attachmentPath);
       documents.push({ ...uploaded, name: file.name });
     }
 
@@ -922,18 +1217,17 @@ document.getElementById("project-form").addEventListener("submit", async (event)
       images,
       documents,
       visibility,
+      ...currentCareerPolicySnapshot(),
       featured: document.getElementById("project-featured").checked,
       updatedAt: serverTimestamp(),
     };
 
-    if (id) {
-      await updateDoc(doc(db, "career_projects", id), payload);
-    } else {
-      await addDoc(collection(db, "career_projects"), { ...payload, createdAt: serverTimestamp() });
-    }
+    await updateDoc(itemRef, payload);
     document.getElementById("project-modal").classList.add("hidden");
     await loadAll();
   } catch (err) {
+    for (const path of uploadedPaths) await deleteObject(ref(storage, path)).catch(() => {});
+    if (placeholderCreated) await deleteDoc(itemRef).catch(() => {});
     console.error("[career] project save failed:", err.code || err);
     statusEl.textContent = "Couldn't save — check console.";
   }
@@ -953,7 +1247,7 @@ function renderCertificates() {
     ...sorted.map((cert) => {
       const el = document.createElement("div");
       el.className = "bg-darkBg/60 border border-borderNeon rounded-xl p-4";
-      const link = safeHref(cert.credentialUrl || cert.fileUrl || "");
+      const link = safeHref(cert.credentialUrl || "") || cert._fileHref || "";
       el.innerHTML = `
         <div class="flex items-start justify-between gap-3">
           <div class="min-w-0">
@@ -977,7 +1271,7 @@ function openCertificateForm(id) {
   document.getElementById("certificate-issuer").value = cert?.issuer || "";
   document.getElementById("certificate-issue-date").value = cert?.issueDate || "";
   document.getElementById("certificate-credential-url").value = cert?.credentialUrl || "";
-  document.getElementById("certificate-file-existing").dataset.value = cert?.fileUrl || "";
+  document.getElementById("certificate-file-existing").dataset.value = cert?.fileAttachmentPath || "";
   document.querySelector(`#certificate-form input[name="certificate-visibility"][value="${cert?.visibility || "public"}"]`).checked = true;
   document.getElementById("certificate-status").textContent = "";
   document.getElementById("certificate-modal").classList.remove("hidden");
@@ -995,12 +1289,32 @@ document.getElementById("certificate-form").addEventListener("submit", async (ev
   const id = document.getElementById("certificate-form-id").value;
   const visibility = document.querySelector('#certificate-form input[name="certificate-visibility"]:checked').value;
   statusEl.textContent = "Saving…";
+  const itemRef = id ? doc(db, "career_certificates", id) : doc(collection(db, "career_certificates"));
+  const itemId = itemRef.id;
+  let uploadedPath = null;
+  let previousPath = null;
+  let placeholderCreated = false;
   try {
-    let fileUrl = document.getElementById("certificate-file-existing").dataset.value || "";
+    if (id) {
+      const existing = careerItemFor("career_certificates", id);
+      if (existing) await normalizeCareerAttachments("career_certificates", existing);
+      previousPath = existing?.fileAttachmentPath || null;
+    } else {
+      await setDoc(itemRef, {
+        uid: user.uid, visibility: "private", fileAttachmentPath: null,
+        ...currentCareerPolicySnapshot(),
+        createdAt: serverTimestamp(), updatedAt: serverTimestamp(),
+      });
+      placeholderCreated = true;
+    }
+    let fileAttachmentPath = id
+      ? careerItemFor("career_certificates", id)?.fileAttachmentPath || null
+      : null;
     const file = document.getElementById("certificate-file").files[0];
     if (file) {
-      const uploaded = await uploadCareerFile(file, visibility, "certificates");
-      fileUrl = uploaded.url;
+      const uploaded = await uploadCareerFile(file, "career_certificates", itemId);
+      uploadedPath = uploaded.attachmentPath;
+      fileAttachmentPath = uploadedPath;
     }
     const payload = {
       uid: user.uid,
@@ -1009,18 +1323,22 @@ document.getElementById("certificate-form").addEventListener("submit", async (ev
       issuer: document.getElementById("certificate-issuer").value.trim(),
       issueDate: document.getElementById("certificate-issue-date").value,
       credentialUrl: document.getElementById("certificate-credential-url").value.trim(),
-      fileUrl,
+      fileAttachmentPath,
       visibility,
+      ...currentCareerPolicySnapshot(),
       updatedAt: serverTimestamp(),
     };
-    if (id) {
-      await updateDoc(doc(db, "career_certificates", id), payload);
-    } else {
-      await addDoc(collection(db, "career_certificates"), { ...payload, createdAt: serverTimestamp() });
+    await updateDoc(itemRef, payload);
+    if (uploadedPath && previousPath && uploadedPath !== previousPath) {
+      await deleteObject(ref(storage, previousPath)).catch((error) => {
+        if (error?.code !== "storage/object-not-found") console.error("[career] replaced certificate cleanup failed:", error.code || error);
+      });
     }
     document.getElementById("certificate-modal").classList.add("hidden");
     await loadAll();
   } catch (err) {
+    if (uploadedPath) await deleteObject(ref(storage, uploadedPath)).catch(() => {});
+    if (placeholderCreated) await deleteDoc(itemRef).catch(() => {});
     console.error("[career] certificate save failed:", err.code || err);
     statusEl.textContent = "Couldn't save — check console.";
   }
@@ -1087,6 +1405,7 @@ document.getElementById("award-form").addEventListener("submit", async (event) =
     description_en: document.getElementById("award-description-en").value.trim(),
     description_zh: document.getElementById("award-description-zh").value.trim(),
     visibility: document.querySelector('#award-form input[name="award-visibility"]:checked').value,
+    ...currentCareerPolicySnapshot(),
     updatedAt: serverTimestamp(),
   };
   try {

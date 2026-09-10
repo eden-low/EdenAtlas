@@ -122,11 +122,11 @@
       <form id="capsule-form" class="space-y-4">
         <div>
           <label class="block text-xs font-code text-textGray mb-1.5" for="capsule-title" data-i18n="time_capsule.title_label">Title</label>
-          <input id="capsule-title" type="text" required class="w-full bg-darkBg/60 border border-borderNeon rounded-lg px-3 py-2 text-sm text-white">
+          <input id="capsule-title" type="text" required maxlength="120" class="w-full bg-darkBg/60 border border-borderNeon rounded-lg px-3 py-2 text-sm text-white">
         </div>
         <div>
           <label class="block text-xs font-code text-textGray mb-1.5" for="capsule-message" data-i18n="time_capsule.message_label">Message</label>
-          <textarea id="capsule-message" rows="5" required class="w-full bg-darkBg/60 border border-borderNeon rounded-lg px-3 py-2 text-sm text-white"></textarea>
+          <textarea id="capsule-message" rows="5" required maxlength="10000" class="w-full bg-darkBg/60 border border-borderNeon rounded-lg px-3 py-2 text-sm text-white"></textarea>
         </div>
         <div>
           <label class="block text-xs font-code text-textGray mb-1.5" for="capsule-open-date" data-i18n="time_capsule.open_date_label">Open Date</label>
@@ -134,7 +134,7 @@
         </div>
         <div>
           <label class="block text-xs font-code text-textGray mb-1.5" for="capsule-attachment" data-i18n="time_capsule.attachment_label">Attachment (optional)</label>
-          <input id="capsule-attachment" type="file" class="w-full text-xs text-textGray file:mr-3 file:px-3 file:py-2 file:rounded-lg file:border file:border-borderNeon file:bg-darkBg/60 file:text-white file:text-xs">
+          <input id="capsule-attachment" type="file" accept="image/jpeg,image/png,image/webp,application/pdf,text/plain" data-max-bytes="12582912" class="w-full text-xs text-textGray file:mr-3 file:px-3 file:py-2 file:rounded-lg file:border file:border-borderNeon file:bg-darkBg/60 file:text-white file:text-xs">
         </div>
         <button type="submit" class="w-full px-5 py-2.5 bg-gradient-to-r from-neonViolet to-neonPurple rounded-xl text-xs font-cyber font-bold tracking-wider text-white hover:scale-105 transition-all" data-i18n="time_capsule.seal">
           Seal
@@ -156,11 +156,11 @@
         <input type="hidden" id="capsule-edit-id">
         <div>
           <label class="block text-xs font-code text-textGray mb-1.5" for="capsule-edit-title" data-i18n="time_capsule.title_label">Title</label>
-          <input id="capsule-edit-title" type="text" required class="w-full bg-darkBg/60 border border-borderNeon rounded-lg px-3 py-2 text-sm text-white">
+          <input id="capsule-edit-title" type="text" required maxlength="120" class="w-full bg-darkBg/60 border border-borderNeon rounded-lg px-3 py-2 text-sm text-white">
         </div>
         <div>
           <label class="block text-xs font-code text-textGray mb-1.5" for="capsule-edit-message" data-i18n="time_capsule.message_label">Message</label>
-          <textarea id="capsule-edit-message" rows="5" required class="w-full bg-darkBg/60 border border-borderNeon rounded-lg px-3 py-2 text-sm text-white"></textarea>
+          <textarea id="capsule-edit-message" rows="5" required maxlength="10000" class="w-full bg-darkBg/60 border border-borderNeon rounded-lg px-3 py-2 text-sm text-white"></textarea>
         </div>
         <div>
           <label class="block text-xs font-code text-textGray mb-1.5" for="capsule-edit-open-date" data-i18n="time_capsule.open_date_label">Open Date</label>
