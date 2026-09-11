@@ -283,6 +283,47 @@ required.
 16. Never point any of the above at Production data — every step above provisions a project
     that is deliberately separate from `lfj-profolio`.
 
+### Local authenticated E2E (Tier 1)
+
+`npm run test:e2e` runs the authentication foundation and Phase 5 security-critical domain flows
+in Chromium against Firebase emulators only. Coverage includes Career Owner UI authorization,
+one-time Career policy transitions and replay rejection, friendship revocation/self-heal,
+Time Capsule UI and attachments, and direct cross-user Firestore/Storage isolation. It starts a
+deterministic local topology on loopback: Auth `127.0.0.1:9099`, Firestore
+`127.0.0.1:8080`, Storage `127.0.0.1:9199`, and the static app server
+`http://127.0.0.1:4173`. The Firebase project is always `demo-edenatlas-e2e`; the launcher rejects
+`lfj-profolio`, `edenatlas-staging`, every non-demo project, deployed Netlify contexts, non-loopback
+URLs, and ambient Google credentials before starting.
+
+The harness creates four deterministic Auth Emulator identities (Owner, verified non-owner,
+unverified user, and unrelated user). They use reserved `.invalid` addresses and have no live
+Firebase counterpart. Owner behavior is enabled by temporary Rules copies inside
+`.e2e-runtime/`; tracked `firestore.rules`, `storage.rules`, and deployed Owner authorization are
+never changed. Browser Firebase initialization still performs real authentication and Rules
+checks—it connects the SDKs to the three local emulators and does not bypass authorization. The
+Career policy endpoint is mounted only on the loopback test server using its production
+parser/state-machine source plus Auth/Firestore Emulator dependencies; capability values are not
+written to traces or persistent browser storage.
+
+Run headless or headed:
+
+```sh
+npx playwright install chromium
+npm run test:e2e
+npm run test:e2e:headed
+```
+
+Each Playwright test clears and recreates the deterministic emulator fixtures. The runner also
+clears Auth, Firestore, and Storage at startup and in final teardown, then removes
+`.e2e-runtime/`. If a process is interrupted, stop any remaining Firebase emulator processes and
+run `npm run test:e2e:cleanup`; that command targets only the exact demo project and loopback
+ports, tolerates already-stopped emulators, and removes the local runtime directory.
+
+This Tier-1 harness is suitable for local/CI execution without secrets. It intentionally cannot
+authenticate against Production or Staging and is not a substitute for a separately authorized,
+staging-only Tier-2 identity. This repository does not currently have a CI workflow; a future CI
+job can install Chromium and run `npm run test:e2e` without adding Firebase credentials.
+
 ## Atlas Assistant: `assistant.html` + `backend/netlify/functions/assistant.js`
 
 An Owner-only, read-only AI assistant over the Owner's own Memories/Journal/Journey/Calendar,

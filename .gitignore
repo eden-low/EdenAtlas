@@ -4,6 +4,12 @@ firestore-debug.log
 ui-debug.log
 node_modules/
 
+# Deterministic local Playwright/Firebase emulator runtime. The harness removes this directory
+# after normal and failed runs; test:e2e:cleanup is the interrupted-run recovery path.
+/.e2e-runtime/
+/playwright-report/
+/test-results/
+
 # Generated Netlify publish output (scripts/build-site.js) — reproducible from source on every
 # deploy, never hand-edited, never committed.
 /site/

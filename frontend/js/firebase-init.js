@@ -1,10 +1,10 @@
 // Shared Firebase setup, imported by any page that needs auth/data (currently gallery.js;
 // future phases like notes/dashboard widgets will reuse this same module).
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-app.js";
-import { getAuth, GoogleAuthProvider, setPersistence, browserLocalPersistence } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-auth.js";
-import { getFirestore } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-firestore.js";
-import { getStorage } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-storage.js";
-import { getBuildInfo, getEnvironment, isPreProduction, selectFirebaseConfig } from "./environment.js";
+import { getAuth, GoogleAuthProvider, setPersistence, browserLocalPersistence, connectAuthEmulator } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-auth.js";
+import { getFirestore, connectFirestoreEmulator } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-firestore.js";
+import { getStorage, connectStorageEmulator } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-storage.js";
+import { ENV, getBuildInfo, getEnvironment, isPreProduction, selectFirebaseConfig } from "./environment.js";
 
 // authDomain controls where Firebase's OAuth handler page (/__/auth/handler) lives. The default,
 // {project}.firebaseapp.com, is a third-party origin relative to this site — on iOS, a
@@ -73,15 +73,61 @@ const DEVELOPMENT_PLACEHOLDER_CONFIG = {
   appId: "1:0:web:unconfigured-development",
 };
 
+// Tier-1 authenticated E2E is deliberately a real Firebase Auth/Firestore/Storage flow against
+// local emulators, never an authorization bypass. The marker is generated only in the temporary
+// E2E site (it is not a tracked/deployed build-info value), and every field is pinned here rather
+// than accepted from a caller. Even if someone manually defines window.__EDEN_E2E__ on a deployed
+// page, the hostname + explicit DEV/DEVELOPMENT checks throw before Firebase initializes.
+const LOCAL_E2E_PROJECT_ID = "demo-edenatlas-e2e";
+const LOCAL_E2E_OWNER_EMAIL = "owner@edenatlas-e2e.invalid";
+const LOCAL_E2E_TOPOLOGY = Object.freeze({
+  auth: Object.freeze({ host: "127.0.0.1", port: 9099 }),
+  firestore: Object.freeze({ host: "127.0.0.1", port: 8080 }),
+  storage: Object.freeze({ host: "127.0.0.1", port: 9199 }),
+});
+
+function readLocalE2EConfig() {
+  const marker = typeof window !== "undefined" ? window.__EDEN_E2E__ : null;
+  if (!marker) return null;
+
+  const environment = getEnvironment();
+  const hostname = typeof location !== "undefined" ? location.hostname : "";
+  const isLoopback = hostname === "127.0.0.1" || hostname === "localhost" || hostname === "::1";
+  const isLocalEnvironment = environment === ENV.DEV || environment === ENV.DEVELOPMENT;
+  const hasExactMarker = Object.keys(marker).sort().join(",") === "enabled,projectId"
+    && marker.enabled === true
+    && marker.projectId === LOCAL_E2E_PROJECT_ID;
+
+  if (!isLoopback || !isLocalEnvironment || !hasExactMarker) {
+    throw new Error("Local E2E Firebase configuration rejected outside the pinned demo/loopback environment");
+  }
+
+  return Object.freeze({
+    projectId: LOCAL_E2E_PROJECT_ID,
+    ownerEmail: LOCAL_E2E_OWNER_EMAIL,
+    topology: LOCAL_E2E_TOPOLOGY,
+  });
+}
+
 const buildInfo = getBuildInfo();
 const preProdOverride = isPreProduction() && buildInfo && buildInfo.stagingFirebaseConfig;
-const firebaseConfig = selectFirebaseConfig({
-  environment: getEnvironment(),
-  productionConfig: productionFirebaseConfig,
-  stagingConfig: preProdOverride,
-  preProductionPlaceholderConfig: PREPRODUCTION_PLACEHOLDER_CONFIG,
-  developmentPlaceholderConfig: DEVELOPMENT_PLACEHOLDER_CONFIG,
-});
+const localE2EConfig = readLocalE2EConfig();
+const firebaseConfig = localE2EConfig
+  ? Object.freeze({
+      apiKey: "demo-only-not-a-live-key",
+      authDomain: "127.0.0.1",
+      projectId: LOCAL_E2E_PROJECT_ID,
+      storageBucket: `${LOCAL_E2E_PROJECT_ID}.appspot.com`,
+      messagingSenderId: "0",
+      appId: "1:0:web:demo-edenatlas-e2e",
+    })
+  : selectFirebaseConfig({
+      environment: getEnvironment(),
+      productionConfig: productionFirebaseConfig,
+      stagingConfig: preProdOverride,
+      preProductionPlaceholderConfig: PREPRODUCTION_PLACEHOLDER_CONFIG,
+      developmentPlaceholderConfig: DEVELOPMENT_PLACEHOLDER_CONFIG,
+    });
 
 // Exported so callers (Discover's follow/status/remove/notification writes; any future module
 // that wants the same guard) can decide whether it's safe to write, without each one having to
@@ -108,18 +154,43 @@ const app = initializeApp(firebaseConfig);
 export { app, firebaseConfig };
 
 export const auth = getAuth(app);
+export const db = getFirestore(app);
+export const storage = getStorage(app);
+
+if (localE2EConfig) {
+  connectAuthEmulator(
+    auth,
+    `http://${localE2EConfig.topology.auth.host}:${localE2EConfig.topology.auth.port}`,
+    { disableWarnings: true }
+  );
+  connectFirestoreEmulator(
+    db,
+    localE2EConfig.topology.firestore.host,
+    localE2EConfig.topology.firestore.port
+  );
+  connectStorageEmulator(
+    storage,
+    localE2EConfig.topology.storage.host,
+    localE2EConfig.topology.storage.port
+  );
+}
+
+// Read-only diagnostics for the local Playwright preflight. Null in every normal deployment.
+export const LOCAL_E2E_RUNTIME = localE2EConfig
+  ? Object.freeze({ projectId: localE2EConfig.projectId, topology: localE2EConfig.topology })
+  : null;
+
 // Explicit rather than relying on the SDK default so the PWA (standalone launch,
 // no browser chrome) reliably keeps the session across relaunches.
 setPersistence(auth, browserLocalPersistence).catch(console.error);
 export const googleProvider = new GoogleAuthProvider();
-export const db = getFirestore(app);
-export const storage = getStorage(app);
 
 // The single site owner — always allowed to write, and the only role that sees admin UI
 // (System Logs, Whitelist Management). Everyone else is either an approved friend (own
 // private data space, granted via the `friends` Firestore collection — see firestore.rules)
 // or a plain viewer (read-only, public content only).
-export const OWNER_EMAIL = "jjun8647@gmail.com";
+const PRODUCT_OWNER_EMAIL = "jjun8647@gmail.com";
+export const OWNER_EMAIL = localE2EConfig ? LOCAL_E2E_OWNER_EMAIL : PRODUCT_OWNER_EMAIL;
 
 export function isOwner(user) {
   return !!user
