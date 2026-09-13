@@ -200,7 +200,7 @@ await test("mediaCard()/renderDetailModal() never build an <img src=...> tag by 
 // + ownership-merge fix" pass's identical documented limitation).
 // ==================================================================================
 
-const OWNER_EMAIL = "jjun8647@gmail.com";
+const OWNER_EMAIL = "owner@test.invalid";
 const STATUS_ALLOWLIST = ["planning", "watching", "completed", "paused", "dropped"];
 const ALLOWED_KEYS = ["uid", "anilistId", "mediaType", "title", "coverImage", "format", "status", "isAdult", "followedAt", "updatedAt"];
 const REQUEST_TIME = Symbol("request.time"); // stand-in for Firestore's serverTimestamp()/request.time equality check

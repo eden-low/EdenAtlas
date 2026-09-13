@@ -1,4 +1,4 @@
-import { auth, db, getUserMode } from "./firebase-init.js";
+import { auth, db, getUserMode, OWNER_UID } from "./firebase-init.js";
 import { getLang, t as i18nT } from "./i18n.js";
 import { validateCoords } from "./location-fields.js";
 import { isDeleted } from "./memory-filters.js";
@@ -231,9 +231,9 @@ async function loadConnectionsClusters() {
       const u = d.data();
       if (me && u.uid === me.uid) return;
       if (mode === "VIEWER") {
-        if (u.role === "owner") allowedUids.add(u.uid);
+        if (OWNER_UID && u.uid === OWNER_UID) allowedUids.add(u.uid);
       } else {
-        if (u.role === "owner" || u.role === "friend") allowedUids.add(u.uid);
+        if ((OWNER_UID && u.uid === OWNER_UID) || u.role === "friend") allowedUids.add(u.uid);
       }
     });
   } catch (err) {

@@ -17,8 +17,8 @@
 // structural fact (no import exists), not a runtime check.
 //
 // Owner-only authorization reuses the EXACT three-signal approach assistant.js/anilist.js already
-// established: a server-verified Firebase ID token's own email AND the stored users/{uid} doc's
-// role/email fields must all agree with the hardcoded OWNER_EMAIL constant, checked BEFORE any
+// established: project-bound UID, verified token email, and the stored users/{uid} doc's
+// UID/role/email fields must all agree, checked BEFORE any
 // AniList call, followed_anime read, or Qwen call.
 //
 // Qwen output handling: this pass does NOT rely on `response_format: {type:"json_object"}` —
@@ -56,12 +56,7 @@ const { checkAndIncrementDailyUsage } = require("./lib/rate-limit");
 const { callQwenChatCompletions, QwenError } = require("./lib/qwen");
 const { FirebaseConfigError } = require("./lib/firebase-admin");
 const { readGeneratedDeployOrigins } = require("./lib/deploy-origin");
-
-// Duplicated from firebase-init.js/assistant.js/anilist.js on purpose — see anilist.js's identical
-// comment: this Function can't import a browser ES module, and re-deriving "who is the Owner" from
-// two independent hardcoded sources (this constant + users/{uid}.role) is deliberate
-// defense-in-depth, not an oversight.
-const OWNER_EMAIL = "jjun8647@gmail.com";
+const { assertOwnerAuthorization, resolveConfiguredOwnerPrincipal } = require("./lib/owner-authorization");
 
 const REQUIRED_ENV = [
   "FIREBASE_PROJECT_ID", "FIREBASE_SERVICE_ACCOUNT", "ALLOWED_ORIGIN",
@@ -267,9 +262,19 @@ function createHandler(deps) {
       console.error("[discover-ai] users/{uid} read failed:", err && err.code);
       return jsonResponse(500, { ok: false, error: "profile_lookup_failed" }, baseHeaders);
     }
-    const isOwner = !!userDoc && userDoc.role === "owner" && decoded.email === OWNER_EMAIL && userDoc.email === OWNER_EMAIL;
-    if (!isOwner) {
-      return jsonResponse(403, { ok: false, error: "owner_only" }, baseHeaders);
+    try {
+      assertOwnerAuthorization({
+        decoded,
+        userDoc,
+        projectId: deps.projectId || env.FIREBASE_PROJECT_ID,
+        ownerPrincipal: deps.ownerPrincipal || deps.getOwnerPrincipal?.(),
+      });
+    } catch (err) {
+      if (err?.statusCode === 500) {
+        logAuthStageFailure("owner_principal", err);
+        return jsonResponse(500, { ok: false, error: "discover_ai_not_configured" }, baseHeaders);
+      }
+      return jsonResponse(err?.statusCode || 403, { ok: false, error: err?.code || "owner_only" }, baseHeaders);
     }
 
     // 5. Parse + validate the top-level request shape (operation allowlist, no unknown fields).
@@ -531,6 +536,8 @@ function buildProductionDeps() {
 
   return {
     env,
+    projectId: process.env.FIREBASE_PROJECT_ID,
+    getOwnerPrincipal: () => resolveConfiguredOwnerPrincipal(process.env.FIREBASE_PROJECT_ID, process.env),
     now: () => new Date(),
     ensureFirebaseAdmin: async () => { ensureApp(); },
     verifyIdToken: (token) => getAuth(ensureApp()).verifyIdToken(token, true),

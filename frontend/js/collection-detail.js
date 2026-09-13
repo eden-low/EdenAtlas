@@ -1,4 +1,4 @@
-import { auth, db } from "./firebase-init.js";
+import { auth, db, OWNER_UID } from "./firebase-init.js";
 import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-auth.js";
 import {
   collection,
@@ -55,12 +55,13 @@ async function mergeMinePublic(name) {
   try {
     let publicQuery;
     if (name === "career_projects") {
+      if (!OWNER_UID) return [];
       const ownerSnap = await getDocs(query(
         collection(db, "public_profiles"),
-        where("role", "==", "owner"),
+        where("uid", "==", OWNER_UID),
         where("careerVisibility", "==", "public")
       ));
-      const canonicalTargetUid = ownerSnap.empty ? null : ownerSnap.docs[0].id;
+      const canonicalTargetUid = ownerSnap.empty ? null : OWNER_UID;
       publicQuery = canonicalTargetUid ? query(
         collection(db, name),
         where("uid", "==", canonicalTargetUid),

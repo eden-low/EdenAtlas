@@ -18,9 +18,8 @@
 //   2. This Function verifies that token server-side via Firebase Admin — the UID it acts on is
 //      ALWAYS the one decoded from that verified token, never anything the request body claims.
 //   3. It then re-reads `users/{uid}` via Firebase Admin (which bypasses firestore.rules
-//      entirely) and requires `role === "owner"` AND the token's email to match the same
-//      hardcoded OWNER_EMAIL constant firebase-init.js uses client-side — two independent
-//      signals, so a stale/incorrect `role` field alone can never grant access.
+//      entirely) and requires every immutable project-bound Owner signal to agree: project,
+//      UID, verified token email, and the users/{uid} identity/role fields.
 //   4. Every Firestore read a tool performs is hardcoded to `where("uid","==",<verified uid>)`
 //      against one fixed collection name — see lib/tools.js. The model never supplies a
 //      collection name, document path, uid, or raw query operator.
@@ -32,13 +31,7 @@ const { FirebaseConfigError } = require("./lib/firebase-admin");
 const { buildDateContext, DEFAULT_TIME_ZONE } = require("./lib/date-utils");
 const { buildAtlasAutoContext, emptyAtlasAutoContext } = require("./lib/atlas-context");
 const { APPLICATION_CONTEXT_SYSTEM_POLICY } = require("./lib/atlas-prompt");
-
-// Duplicated from firebase-init.js's OWNER_EMAIL on purpose (see that file's own comment) — this
-// Function has no way to import a browser ES module, and re-deriving "who is the Owner" from
-// two independent hardcoded sources (this constant + the `role` field on users/{uid}) is a
-// deliberate defense-in-depth choice: a bug that wrongly sets `role: "owner"` on some other
-// account still can't pass this second check.
-const OWNER_EMAIL = "jjun8647@gmail.com";
+const { assertOwnerAuthorization, resolveConfiguredOwnerPrincipal } = require("./lib/owner-authorization");
 
 const REQUIRED_ENV = [
   "FIREBASE_PROJECT_ID",
@@ -326,9 +319,19 @@ function createHandler(deps) {
       console.error("[assistant] users/{uid} read failed:", err && err.code);
       return jsonResponse(500, { ok: false, error: "profile_lookup_failed" }, baseHeaders);
     }
-    const isOwner = !!userDoc && userDoc.role === "owner" && decoded.email === OWNER_EMAIL && userDoc.email === OWNER_EMAIL;
-    if (!isOwner) {
-      return jsonResponse(403, { ok: false, error: "owner_only" }, baseHeaders);
+    try {
+      assertOwnerAuthorization({
+        decoded,
+        userDoc,
+        projectId: deps.projectId || env.FIREBASE_PROJECT_ID,
+        ownerPrincipal: deps.ownerPrincipal || deps.getOwnerPrincipal?.(),
+      });
+    } catch (err) {
+      if (err?.statusCode === 500) {
+        logAuthStageFailure("owner_principal", err);
+        return jsonResponse(500, { ok: false, error: "assistant_not_configured" }, baseHeaders);
+      }
+      return jsonResponse(err?.statusCode || 403, { ok: false, error: err?.code || "owner_only" }, baseHeaders);
     }
 
     // 5. Validate the request body.
@@ -493,6 +496,8 @@ function buildProductionDeps() {
 
   return {
     env: process.env,
+    projectId: process.env.FIREBASE_PROJECT_ID,
+    getOwnerPrincipal: () => resolveConfiguredOwnerPrincipal(process.env.FIREBASE_PROJECT_ID, process.env),
     now: () => new Date(),
     // The dedicated initialization boundary (see assistant.js's handler, step 2, and
     // lib/firebase-admin.js) — throws a classified FirebaseConfigError on failure, never

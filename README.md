@@ -79,7 +79,7 @@ link set, with owner-only pages redirecting non-owners on direct access. See `CL
 
 ## Roles
 
-- **Owner** (`jjun8647@gmail.com`) — full access everywhere, plus the only role that sees System Logs and Whitelist Management in Me → Connections/System Logs.
+- **Owner** — the exact project-bound principal (Firebase project ID + immutable UID + normalized verified email). Production remains the existing human Owner; Staging has no Owner until its dedicated principal is provisioned.
 - **Friend** — anyone approved via Settings' Whitelist (a `friends/{email}` Firestore doc). Gets their own space for Memories/Journal/Journey/Habits/Atlas/Collections/Calendar, structurally identical to the owner's for those modules. As of v3.3, Finance/Time Capsule/Daily Reflection stay Owner-only regardless of Friend status.
 - **Viewer** — anyone else who signs in with Google. Read-only: sees public content from the owner and any friend, can like/comment on public gallery posts, but can't create anything of their own.
 
@@ -88,6 +88,11 @@ This role system decides CRUD permissions and profile discoverability; it's inde
 **friend graph** (v3.2) that separately decides whether `visibility: "connections"` content is
 shown to a specific accepted friend once a profile is reachable at all — see the v3.2 paragraph
 above.
+
+The Owner architecture and its fail-closed build/Rules configuration contract are documented in
+[docs/owner-principal.md](docs/owner-principal.md). Phase 6 Round 1 changes repository code and
+local tests only; dedicated Staging identity provisioning and all deployments remain a separate,
+gated operational phase.
 
 ## Pages
 
@@ -254,10 +259,11 @@ required.
    role/email data the app's own login flow already writes) exists for that project.
 5. Firestore is created automatically the first time a document is written, or manually via the
    Firebase Console.
-6. Deploy this repo's current `firestore.rules` (and `storage.rules`) to the staging project —
-   `npx firebase-tools deploy --only firestore:rules,storage --project <staging-project-id>`; no
-   composite indexes are required anywhere in this codebase (see CLAUDE.md's query-pattern
-   convention).
+6. Deploy this repo's generated Staging `firestore.rules` and `storage.rules` artifacts —
+   only through `npm run deploy:rules:staging`; the guarded entrypoint pins the generated Staging
+   configuration and literal project ID, and refuses implicit/default/alias targets before
+   Firebase CLI can start. No composite indexes are required anywhere in this codebase (see
+   CLAUDE.md's query-pattern convention).
 7. Cloud Messaging → Web configuration → generate a Web Push certificate (VAPID key pair) for the
    staging project.
 8. Set the six `STAGING_FIREBASE_*` build variables in Netlify (Site configuration → Environment
@@ -535,7 +541,7 @@ The site moved from a neon-cyber "hunter status" look to a dark glassmorphism da
 
 Every content collection (`expenses`, `journals`, `photos`, `life_events`, `habits`) is scoped by a `uid` field identifying its creator. The core fetch pattern, used identically across Gallery/Journal/Timeline/Habits: two Firestore queries merged by doc ID — `where("uid","==",myUid)` (all of *my* docs, any visibility) plus `where("visibility","==","public")` (everyone's public docs). Expenses skip the public half entirely (always private, no visibility concept). Every "New X" button and write is gated by `canParticipate()` (Owner or Friend) rather than a global owner check, and every new doc is written with `uid: auth.currentUser.uid`.
 
-`friends/{email}` (Me → Connections' Whitelist — Friend Management) grants Friend status; `users/{uid}` is a lightweight directory doc upserted on every login (now also carrying a public `role` field and an optional `username`), powering **Search People**. `usernames/{username}` is a one-doc-per-handle reservation collection (doc ID = the handle) that makes unique @usernames possible without a backend — Firestore's create-vs-update distinction means "claim if free" falls out of a plain `create` rule with no matching `update` rule. `collections/{id}` (v2.7) is a life-chapter container — same `isMineOrPublic` shape as `journals`/`life_events`/`habits` — that existing records reference via an optional `collectionId` field; `photos`/`journals`/`life_events`/`expenses`/`career_projects` also gained optional `tags`/`locationName`/`latitude`/`longitude` fields (expenses get `collectionId`/`tags` only — no location UI, no visibility, always private). `time_capsules` and `daily_reflections` (v2.9) are the two newest collections — always private, same owner-uid-only shape as `expenses`/`goals` (no `isMineOrPublic()`, ever): read/update/delete require `resource.data.uid == request.auth.uid`, create requires `canParticipate()`. [firestore.rules](firestore.rules) and [storage.rules](storage.rules) are the source of truth for all of this; after editing either, deploy with `npx firebase-tools deploy --only firestore:rules,storage` (see [firebase.json](firebase.json)/[.firebaserc](.firebaserc) — a dev-only CLI tool, the site itself stays buildless).
+`friends/{email}` (Me → Connections' Whitelist — Friend Management) grants Friend status; `users/{uid}` is a lightweight directory doc upserted on every login (now also carrying a public `role` field and an optional `username`), powering **Search People**. `usernames/{username}` is a one-doc-per-handle reservation collection (doc ID = the handle) that makes unique @usernames possible without a backend — Firestore's create-vs-update distinction means "claim if free" falls out of a plain `create` rule with no matching `update` rule. `collections/{id}` (v2.7) is a life-chapter container — same `isMineOrPublic` shape as `journals`/`life_events`/`habits` — that existing records reference via an optional `collectionId` field; `photos`/`journals`/`life_events`/`expenses`/`career_projects` also gained optional `tags`/`locationName`/`latitude`/`longitude` fields (expenses get `collectionId`/`tags` only — no location UI, no visibility, always private). `time_capsules` and `daily_reflections` (v2.9) are the two newest collections — always private, same owner-uid-only shape as `expenses`/`goals` (no `isMineOrPublic()`, ever): read/update/delete require `resource.data.uid == request.auth.uid`, create requires `canParticipate()`. [firestore.rules](firestore.rules) and [storage.rules](storage.rules) are the source of truth for all of this; a future Production deployment must explicitly include `--project lfj-profolio` rather than relying on Firebase CLI state (see [firebase.json](firebase.json)/[.firebaserc](.firebaserc) — a dev-only CLI tool, the site itself stays buildless).
 
 ## Gallery: Instagram-style feed with social features
 

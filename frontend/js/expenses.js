@@ -1,4 +1,4 @@
-import { auth, googleProvider, db, canParticipate } from "./firebase-init.js";
+import { auth, googleProvider, db, canParticipate, isOwner } from "./firebase-init.js";
 import { t as i18nT, getLang } from "./i18n.js";
 import { resolveDisplayName } from "./identity.js";
 import {
@@ -263,6 +263,8 @@ setActiveTab("all");
 async function fetchMyExpenses() {
   const user = auth.currentUser;
   let expenses = [];
+  // Preserve access to a participant's own pre-v3.3 records. Firestore remains the
+  // authoritative gate; only creation is restricted to the project-bound Owner below.
   if (user && canParticipate()) {
     try {
       const snap = await getDocs(query(collection(db, "expenses"), where("uid", "==", user.uid)));
@@ -302,7 +304,7 @@ async function renderSignedIn(user) {
     </button>`;
   document.getElementById("auth-signout-btn").addEventListener("click", () => signOut(auth));
 
-  const mayParticipate = canParticipate();
+  const mayParticipate = isOwner(user);
   newExpenseBtn.classList.toggle("hidden", !mayParticipate);
   accessNote.classList.toggle("hidden", mayParticipate);
   maybeAutoOpenFromQuickAdd(mayParticipate);
@@ -509,7 +511,7 @@ receiptExtractBtn.addEventListener("click", async () => {
 expenseForm.addEventListener("submit", async (event) => {
   event.preventDefault();
   const user = auth.currentUser;
-  if (!user || !canParticipate()) return;
+  if (!user || !isOwner(user)) return;
 
   let payload;
   try {

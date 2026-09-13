@@ -37,7 +37,7 @@ async function test(name, fn) {
 
 const OWNER_UID = "owner-uid";
 const OTHER_UID = "other-user";
-const OWNER_EMAIL = "jjun8647@gmail.com";
+const OWNER_EMAIL = "owner@test.invalid";
 const NOW = new Date("2026-09-15T06:00:00.000Z");
 const TIME_ZONE = "Asia/Kuala_Lumpur";
 const ORIGIN = "https://staging--edenatlas.netlify.app";
@@ -124,9 +124,11 @@ function handlerDeps(overrides = {}) {
       QWEN_BASE_URL: "https://qwen.invalid/v1",
       ALLOWED_ORIGIN: ORIGIN,
     },
+    projectId: "edenatlas-staging",
+    ownerPrincipal: { projectId: "edenatlas-staging", uid: OWNER_UID, email: OWNER_EMAIL },
     now: () => NOW,
     ensureFirebaseAdmin: async () => {},
-    verifyIdToken: async () => ({ uid: OWNER_UID, email: OWNER_EMAIL }),
+    verifyIdToken: async () => ({ uid: OWNER_UID, email: OWNER_EMAIL, email_verified: true }),
     getUserDoc: async () => ({ uid: OWNER_UID, role: "owner", email: OWNER_EMAIL }),
     getDb: () => db,
     fetchImpl: async () => ({

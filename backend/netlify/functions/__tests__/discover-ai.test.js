@@ -41,7 +41,7 @@ async function test(name, fn) {
 
 const PROD_ORIGIN = "https://edenatlas.netlify.app";
 const OWNER_UID = "owner-uid-123";
-const OWNER_EMAIL = "jjun8647@gmail.com";
+const OWNER_EMAIL = "owner@test.invalid";
 const FRIEND_UID = "friend-uid-456";
 const VIEWER_UID = "viewer-uid-789";
 const QWEN_BASE = "https://example-dashscope.invalid/compatible-mode/v1";
@@ -281,10 +281,12 @@ function makeDeps(overrides = {}) {
   const db = overrides.db || makeMockDb(overrides.seed || SEED);
   return {
     env: baseEnv(),
+    projectId: baseEnv().FIREBASE_PROJECT_ID,
+    ownerPrincipal: { projectId: baseEnv().FIREBASE_PROJECT_ID, uid: OWNER_UID, email: OWNER_EMAIL },
     now: () => FIXED_NOW,
     ensureFirebaseAdmin: async () => {},
-    verifyIdToken: async () => ({ uid: OWNER_UID, email: OWNER_EMAIL }),
-    getUserDoc: async () => ({ role: "owner", email: OWNER_EMAIL }),
+    verifyIdToken: async () => ({ uid: OWNER_UID, email: OWNER_EMAIL, email_verified: true }),
+    getUserDoc: async () => ({ uid: OWNER_UID, role: "owner", email: OWNER_EMAIL }),
     getDb: () => db,
     checkBurst: (key, now) => checkBurst(key, now),
     getCachedRecommendation: require("../lib/discover-ai-cache.js").getCachedRecommendation,

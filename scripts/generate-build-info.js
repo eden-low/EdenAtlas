@@ -22,6 +22,7 @@
 
 const fs = require("fs");
 const path = require("path");
+const { PROJECTS, resolveOwnerPrincipal } = require("../shared/owner-principal");
 
 const ROOT = path.resolve(__dirname, "..");
 const OUT_PATH = path.join(ROOT, "frontend", "js", "build-info.generated.js");
@@ -113,6 +114,18 @@ function generate() {
   const branch = rawOrNull(process.env.BRANCH);
   const stagingFirebaseConfig = readStagingFirebaseConfig();
   const vapidPublicKey = rawOrNull(process.env.FIREBASE_VAPID_PUBLIC_KEY);
+  let ownerPrincipal = null;
+  try {
+    if (context === "production" && branch === "main") {
+      ownerPrincipal = resolveOwnerPrincipal(PROJECTS.PRODUCTION, process.env);
+    } else if (isPreProductionBuild(context) && stagingFirebaseConfig?.projectId === PROJECTS.STAGING) {
+      ownerPrincipal = resolveOwnerPrincipal(PROJECTS.STAGING, process.env);
+    }
+  } catch {
+    // Missing or malformed Owner configuration is represented as null. firebase-init.js treats
+    // that as no Owner at all; it never falls back to Production or infers identity in-browser.
+    ownerPrincipal = null;
+  }
 
   const info = {
     // CONTEXT: "production" | "deploy-preview" | "branch-deploy" (Netlify build metadata —
@@ -125,6 +138,7 @@ function generate() {
     deployPrimeUrl: rawOrNull(process.env.DEPLOY_PRIME_URL),
     vapidPublicKey,
     stagingFirebaseConfig,
+    ownerPrincipal,
     builtAt: new Date().toISOString(),
   };
 
@@ -139,7 +153,7 @@ function generate() {
   console.log(
     `generate-build-info: wrote ${path.relative(ROOT, OUT_PATH)} ` +
     `(context=${info.context}, branch=${info.branch || "null"}, vapidPublicKey=${info.vapidPublicKey ? "set" : "unset"}, ` +
-    `stagingFirebaseConfig=${info.stagingFirebaseConfig ? "set" : "unset"})`
+    `stagingFirebaseConfig=${info.stagingFirebaseConfig ? "set" : "unset"}, ownerPrincipal=${info.ownerPrincipal ? "set" : "unset"})`
   );
 
   // Gap 2 fix (now aligned with the deploy-context policy): the SAME resolution firebase-init.js's

@@ -10,7 +10,7 @@
 // rendered when the CMS returns no matching public items — the same "graceful fallback to the
 // existing summary" pattern used across this codebase. Once the Owner populates the CMS (marking
 // EdenAtlas / EPMS / the internship project as `featured` with a `slug`), CMS data wins.
-import { db, auth } from "./firebase-init.js";
+import { db, auth, OWNER_UID } from "./firebase-init.js";
 import { init as i18nInit, getLang, setLang, t } from "./i18n.js";
 import { collection, query, where, getDocs } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-firestore.js";
 import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-auth.js";
@@ -310,13 +310,14 @@ function renderAll() {
 
 // ==================== CMS load (supersedes fallbacks when present) ====================
 async function resolvePublicCareerOwner() {
+  if (!OWNER_UID) return null;
   try {
     const snap = await getDocs(query(
       collection(db, "public_profiles"),
-      where("role", "==", "owner"),
+      where("uid", "==", OWNER_UID),
       where("careerVisibility", "==", "public")
     ));
-    return snap.empty ? null : snap.docs[0].id;
+    return snap.empty ? null : OWNER_UID;
   } catch (err) {
     console.error("[portfolio] public Career owner lookup failed:", err.code || err);
     return null;

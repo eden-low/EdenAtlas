@@ -37,7 +37,7 @@ async function test(name, fn) {
 
 const PROD_ORIGIN = "https://edenatlas.netlify.app";
 const OWNER_UID = "owner-uid-123";
-const OWNER_EMAIL = "jjun8647@gmail.com";
+const OWNER_EMAIL = "owner@test.invalid";
 const FRIEND_UID = "friend-uid-456";
 const VIEWER_UID = "viewer-uid-789";
 
@@ -109,10 +109,12 @@ function makeDeps(overrides = {}) {
   _resetCacheForTests();
   return {
     env: baseEnv(),
+    projectId: baseEnv().FIREBASE_PROJECT_ID,
+    ownerPrincipal: { projectId: baseEnv().FIREBASE_PROJECT_ID, uid: OWNER_UID, email: OWNER_EMAIL },
     now: () => new Date("2026-07-20T04:00:00Z"),
     ensureFirebaseAdmin: async () => {},
-    verifyIdToken: async () => ({ uid: OWNER_UID, email: OWNER_EMAIL }),
-    getUserDoc: async () => ({ role: "owner", email: OWNER_EMAIL }),
+    verifyIdToken: async () => ({ uid: OWNER_UID, email: OWNER_EMAIL, email_verified: true }),
+    getUserDoc: async () => ({ uid: OWNER_UID, role: "owner", email: OWNER_EMAIL }),
     checkBurst: () => ({ allowed: true }),
     getCached,
     setCached,

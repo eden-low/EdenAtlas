@@ -1,4 +1,4 @@
-import { auth, googleProvider, db, canParticipate } from "./firebase-init.js";
+import { auth, googleProvider, db, canParticipate, OWNER_UID } from "./firebase-init.js";
 import { excludeDeleted } from "./memory-filters.js";
 import {
   onAuthStateChanged,
@@ -63,12 +63,13 @@ async function mergeMinePublic(name) {
   try {
     let publicQuery;
     if (name === "career_projects") {
+      if (!OWNER_UID) return [];
       const ownerSnap = await getDocs(query(
         collection(db, "public_profiles"),
-        where("role", "==", "owner"),
+        where("uid", "==", OWNER_UID),
         where("careerVisibility", "==", "public")
       ));
-      const canonicalTargetUid = ownerSnap.empty ? null : ownerSnap.docs[0].id;
+      const canonicalTargetUid = ownerSnap.empty ? null : OWNER_UID;
       publicQuery = canonicalTargetUid ? query(
         collection(db, name),
         where("uid", "==", canonicalTargetUid),

@@ -7,7 +7,7 @@ const {
 } = require("../career-policy-transition.js");
 
 const OWNER_UID = "owner-policy-uid";
-const OWNER_EMAIL = "jjun8647@gmail.com";
+const OWNER_EMAIL = "owner@test.invalid";
 const ORIGIN = "https://edenatlas.netlify.app";
 const NOW = 1_800_000;
 const DELETE = Symbol("delete");
@@ -97,9 +97,11 @@ function profile(visibility = "private", version = 7) {
 function handlerDeps(overrides = {}) {
   return {
     env: { FIREBASE_PROJECT_ID: "test", FIREBASE_SERVICE_ACCOUNT: "test", ALLOWED_ORIGIN: ORIGIN },
+    projectId: "test",
+    ownerPrincipal: { projectId: "test", uid: OWNER_UID, email: OWNER_EMAIL },
     ensureFirebaseAdmin: async () => {},
     verifyIdToken: async () => ({ uid: OWNER_UID, email: OWNER_EMAIL, email_verified: true }),
-    getUserDoc: async () => ({ role: "owner", email: OWNER_EMAIL }),
+    getUserDoc: async () => ({ uid: OWNER_UID, role: "owner", email: OWNER_EMAIL }),
     nowMs: () => NOW,
     beginTransition: async () => ({ ...CAP_A, sourceCareerVisibility: "private", sourceCareerPolicyVersion: 7 }),
     completeTransition: async () => ({ careerVisibility: "public", careerPolicyVersion: 8 }),

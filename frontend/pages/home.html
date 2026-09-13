@@ -316,7 +316,7 @@
     <script type="module" src="js/mobile-nav.js"></script>
     <script type="module" src="js/sidebar.js"></script>
     <script type="module">
-        import { auth, db, storage, canParticipate, isOwner, getUserMode } from "./js/firebase-init.js";
+        import { auth, db, storage, canParticipate, isOwner } from "./js/firebase-init.js";
         import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-auth.js";
         import { collection, query, where, limit, getDocs, getDoc, doc, setDoc, addDoc, serverTimestamp, Timestamp } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-firestore.js";
         import { ref, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-storage.js";
@@ -392,12 +392,10 @@
             return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth();
         }
 
-        // v3.3 "Friend Spaces": Finance/Time Capsule/Daily Reflection stay Owner-only even though
-        // Friends now get their own space for Memories/Journal/Journey/Habits — same isOwner(user)
-        // || getUserMode() === "OWNER" fallback js/sidebar.js and js/mobile-nav.js already use, so
-        // a missing/cleared lfj:userMode cache can't wrongly collapse the Owner's own Home.
+        // v3.3 "Friend Spaces": Finance/Time Capsule/Daily Reflection creation stays Owner-only.
+        // This UX gate uses the exact project-bound principal, never cached user-mode state.
         function isOwnerRole(user) {
-            return isOwner(user) || getUserMode() === "OWNER";
+            return isOwner(user);
         }
 
         // ---- Data: this Home is strictly personal (mine only), matching dashboard.js's convention ----

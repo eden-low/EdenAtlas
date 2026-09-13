@@ -3,7 +3,7 @@
 // `<script type="module" src="global-search.js"></script>` tag (right after auth-guard.js).
 // Injects its own trigger button + modal into the header's <nav> rather than requiring
 // per-page markup, matching auth-guard.js's self-contained pattern.
-import { auth, db, getUserMode } from "./firebase-init.js";
+import { auth, db, getUserMode, OWNER_UID } from "./firebase-init.js";
 import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-auth.js";
 import { collection, query, where, getDocs } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-firestore.js";
 import { init as initI18n, applyTranslations, t } from "./i18n.js";
@@ -141,8 +141,9 @@ function searchableUsers(users) {
   const myRole = getUserMode();
   return users.filter((p) => {
     if (p.uid === auth.currentUser?.uid) return false;
-    if (myRole === "VIEWER") return p.role === "owner";
-    return p.role === "owner" || p.role === "friend";
+    const isCanonicalOwner = !!OWNER_UID && p.uid === OWNER_UID;
+    if (myRole === "VIEWER") return isCanonicalOwner;
+    return isCanonicalOwner || p.role === "friend";
   });
 }
 

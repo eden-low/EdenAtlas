@@ -7,7 +7,7 @@
 // is written specifically because that distinction matters: a bug in the hand-translation could
 // pass while the real deployed rule fails, or vice versa). Every assertion here runs the actual
 // `@firebase/rules-unit-testing` SDK against a real Firestore Emulator process, loading the
-// literal, unmodified firestore.rules file from the repo root and exercising it with real
+// deterministic Tier-1 artifact generated from the reviewed root template and exercising it with real
 // Firestore client SDK calls (setDoc/getDoc/getDocs/updateDoc/deleteDoc/writeBatch) under real
 // request.auth/request.resource/resource.data semantics as Firestore itself evaluates them.
 //
@@ -50,6 +50,7 @@ if (!/^(127\.0\.0\.1|localhost|\[::1\]):\d+$/.test(process.env.FIRESTORE_EMULATO
 const assert = require("node:assert");
 const fs = require("node:fs");
 const path = require("node:path");
+const { DEMO_PROJECT_ID: PROJECT_ID, USERS } = require("../../../e2e/constants.js");
 const {
   initializeTestEnvironment,
   assertSucceeds,
@@ -70,10 +71,9 @@ const {
   writeBatch,
 } = require("firebase/firestore");
 
-const PROJECT_ID = "demo-edenatlas-discover-rules";
-const OWNER_EMAIL = "jjun8647@gmail.com"; // must match firestore.rules' hardcoded isOwner() email
 
-const OWNER_UID = "owner-uid-1";
+const OWNER_UID = USERS.owner.uid;
+const OWNER_EMAIL = USERS.owner.email;
 const OTHER_OWNER_UID = "owner-uid-2"; // a second uid that ALSO claims the owner email (impersonation-shaped test)
 const FRIEND_UID = "friend-uid-1";
 const FRIEND_EMAIL = "friend@example.com";
@@ -196,7 +196,7 @@ async function adminExists(id) {
 }
 
 async function run() {
-  const rulesPath = path.join(__dirname, "..", "..", "..", "firestore.rules");
+  const rulesPath = path.join(__dirname, "..", "..", "..", ".rules-runtime", "firestore.rules");
   const rules = fs.readFileSync(rulesPath, "utf8");
   assert.ok(rules.includes("match /followed_anime/{id}"), "firestore.rules is missing the followed_anime match block - wrong file?");
 

@@ -1,5 +1,6 @@
 {
   "projects": {
-    "default": "lfj-profolio"
+    "production": "lfj-profolio",
+    "staging": "edenatlas-staging"
   }
 }

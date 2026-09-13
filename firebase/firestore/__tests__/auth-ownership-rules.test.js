@@ -9,6 +9,7 @@ if (!process.env.FIRESTORE_EMULATOR_HOST
 
 const fs = require("node:fs");
 const path = require("node:path");
+const { DEMO_PROJECT_ID: PROJECT_ID, USERS } = require("../../../e2e/constants.js");
 const assert = require("node:assert");
 const {
   initializeTestEnvironment,
@@ -31,10 +32,9 @@ const {
   writeBatch,
 } = require("firebase/firestore");
 
-const PROJECT_ID = "demo-edenatlas-discover-rules";
-const OWNER_UID = "auth-owner";
-const OWNER_EMAIL = "jjun8647@gmail.com";
 const OTHER_UID = "auth-other";
+const OWNER_UID = USERS.owner.uid;
+const OWNER_EMAIL = USERS.owner.email;
 const OTHER_EMAIL = "other@example.com";
 const FRIEND_UID = "auth-friend";
 const FRIEND_EMAIL = "friend@example.com";
@@ -133,7 +133,7 @@ function legacyCapsule(overrides = {}) {
 async function run() {
   testEnv = await initializeTestEnvironment({
     projectId: PROJECT_ID,
-    firestore: { rules: fs.readFileSync(path.resolve(__dirname, "..", "..", "..", "firestore.rules"), "utf8") },
+    firestore: { rules: fs.readFileSync(path.resolve(__dirname, "..", "..", "..", ".rules-runtime", "firestore.rules"), "utf8") },
   });
 
   try {

@@ -9,7 +9,9 @@ service cloud.firestore {
              && request.auth.token.email_verified == true;
     }
     function isOwner() {
-      return hasVerifiedEmail() && request.auth.token.email.lower() == 'jjun8647@gmail.com';
+      return hasVerifiedEmail()
+             && request.auth.uid == '__OWNER_UID_REQUIRED__'
+             && request.auth.token.email.lower() == '__OWNER_EMAIL_REQUIRED__';
     }
     function isFriend() {
       return hasVerifiedEmail()

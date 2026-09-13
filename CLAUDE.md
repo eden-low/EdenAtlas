@@ -629,7 +629,7 @@ included. This pass closes that gap rather than opening new ones:
    changed `.js`/inline `<script type="module">`, `JSON.parse` on both locale files, and a
    manual trace of the new rules against the brief's QA scenarios. Run the real two-account QA
    checklist from the v3.3 brief before treating this as fully verified in production, and run
-   `npx firebase-tools deploy --only firestore:rules,storage` (not run automatically by this
+   `npx firebase-tools deploy --only firestore:rules,storage --project lfj-profolio` (not run automatically by this
    pass) to actually publish the rules changes.
 
 **"HR-ready resume restructure"** — `resume.html`'s static content was reorganized
@@ -2387,7 +2387,7 @@ can never fully guarantee matches.
    test:firestore-rules` itself (29/29, 52 real assertSucceeds/assertFails calls) — each run
    individually with its exact pass count recorded, not inferred from a single combined command.
 8. **Explicitly not done, per this pass's own hard boundaries**: `firestore.rules` was not deployed
-   (`npx firebase-tools deploy --only firestore:rules,storage` was never run); PR #8 was not merged;
+   (`npx firebase-tools deploy --only firestore:rules,storage --project lfj-profolio` was never run); PR #8 was not merged;
    no production Firestore project was ever contacted (every write/read in this pass's new suite
    targets `demo-edenatlas-discover-rules` against a local emulator process only); `.firebaserc`'s
    real project id was never touched. A JDK (Eclipse Temurin 21) was installed on this machine via
@@ -2848,7 +2848,7 @@ still too loose in two ways, plus corrected a false premise about branch diverge
 - **[settings.html](settings.html)** — as of v2.7, a one-line `<meta http-equiv="refresh" content="0;url=me.html">` compatibility redirect (added right after the charset meta, rest of the file left as-is) — everything it used to own (Profile, Preferences, Export & Backup, System Logs, Whitelist Management) lives in [me.html](me.html)/[me.js](me.js) now, see the Me bullet above. `settings.js` itself is unchanged and still script-tagged on `settings.html` (harmless — it runs briefly against `settings.html`'s still-intact markup before the meta-refresh navigates away) — kept in the repo as the historical source `me.js`'s logic was copied from, not as a parallel implementation to maintain going forward. [export.js](export.js)'s `fetchMyCollection(name)` still exports strictly "my own docs," never anyone else's public ones, unaffected by the move.
 - **[images/](images/)** holds photo assets plus the PWA icons `icon-192.png`/`icon-512.png` (cropped from `me5.jpeg` via a one-off PowerShell/`System.Drawing` script — no build tool involved, just static files).
 - **[firebase-init.js](firebase-init.js)** — shared Firebase bootstrap. Exports `auth`, `googleProvider`, `db`, `storage`, `OWNER_EMAIL`, `isOwner(user)`, plus the role helpers `USER_MODE_KEY`, `getUserMode()`, `canParticipate()` (read `lfj:userMode` from `localStorage` — UI gating only, real enforcement is always the Firestore/Storage rules re-checking `friends` fresh). Also calls `setPersistence(auth, browserLocalPersistence)` so sessions survive a PWA relaunch.
-- **Deploying rules**: `npx firebase-tools deploy --only firestore:rules,storage` (project `lfj-profolio`, via [firebase.json](firebase.json)/[.firebaserc](.firebaserc)) after any `firestore.rules`/`storage.rules` edit. Dev-only tool, doesn't affect the site's buildless runtime.
+- **Deploying Production rules**: explicitly target `lfj-profolio`; never rely on an active/default Firebase CLI project. Staging Rules use only `npm run deploy:rules:staging`, whose guard pins the generated Staging artifacts and literal project. Dev-only tooling doesn't affect the site's buildless runtime.
 - **PWA**: [manifest.json](manifest.json) + [service-worker.js](service-worker.js) (network-first with cache fallback; `CACHE` is version-stamped — bump it whenever `PRECACHE`'s file list changes, currently `eden-shell-v8`). Bypasses `gstatic.com`/`googleapis.com`/`firebaseapp.com`/`openweathermap.org`/CDN hosts so it never intercepts live Auth/Firestore/Storage/weather/CDN requests.
 - **Light mode**: toggle in Me's Preferences tab (was Settings' Preferences pre-v2.7), stored in `localStorage` (`lfj:settings.theme`), applied via a synchronous theme-preload inline `<script>` at the top of every `<head>` plus `styles.css`'s `html[data-theme="light"]` overrides.
 

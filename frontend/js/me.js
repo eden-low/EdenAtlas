@@ -425,7 +425,7 @@ async function loadWhitelistManagement() {
   list.replaceChildren(
     ...rows.map((row) => {
       const emailLower = row.email.toLowerCase();
-      const isTheOwner = emailLower === OWNER_EMAIL.toLowerCase();
+      const isTheOwner = !!OWNER_EMAIL && emailLower === OWNER_EMAIL;
       const isFriend = isTheOwner || friendEmails.has(emailLower);
 
       const el = document.createElement("div");

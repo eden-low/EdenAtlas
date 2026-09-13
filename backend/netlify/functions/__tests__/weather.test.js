@@ -83,7 +83,7 @@ function makeDeps(overrides = {}) {
     env: baseEnv(),
     now: () => new Date("2026-07-19T04:00:00Z"),
     ensureFirebaseAdmin: async () => {},
-    verifyIdToken: async () => ({ uid: OWNER_UID, email: "jjun8647@gmail.com" }),
+    verifyIdToken: async () => ({ uid: OWNER_UID, email: "owner@test.invalid" }),
     checkBurst: () => ({ allowed: true }),
     fetchImpl: makeFakeFetch({ json: { main: { temp: 28.4 }, weather: [{ description: "light rain" }] } }),
     ...overrides,

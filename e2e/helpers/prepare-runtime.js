@@ -2,6 +2,7 @@ const fs = require("fs");
 const path = require("path");
 const { spawnSync } = require("child_process");
 const { PAGE_FILES } = require("../../scripts/build-site.js");
+const { renderTemplate } = require("../../scripts/generate-owner-rules.js");
 const {
   ROOT,
   RUNTIME_ROOT,
@@ -46,13 +47,10 @@ function generateTailwind() {
   if (result.status !== 0) throw new Error("E2E Tailwind generation failed");
 }
 
-function transformRules(sourcePath, outputPath, expectedOwnerEmail) {
+function renderOwnerRules(sourcePath, outputPath) {
   const source = fs.readFileSync(sourcePath, "utf8");
-  const transformed = source.split(expectedOwnerEmail).join(USERS.owner.email);
-  if (transformed === source || transformed.includes(expectedOwnerEmail)) {
-    throw new Error(`E2E owner-rule transformation failed for ${path.basename(sourcePath)}`);
-  }
-  fs.writeFileSync(outputPath, transformed, "utf8");
+  const principal = { projectId: DEMO_PROJECT_ID, uid: USERS.owner.uid, email: USERS.owner.email };
+  fs.writeFileSync(outputPath, renderTemplate(source, principal), "utf8");
 }
 
 function prepareRuntime() {
@@ -81,6 +79,7 @@ function prepareRuntime() {
     url: "http://127.0.0.1:4173",
     deployPrimeUrl: "http://127.0.0.1:4173",
     stagingFirebaseConfig: null,
+    ownerPrincipal: null,
     vapidPublicKey: null,
     builtAt: new Date(0).toISOString(),
   };
@@ -106,25 +105,21 @@ function prepareRuntime() {
     "utf8"
   );
 
-  const firestoreRules = fs.readFileSync(path.join(ROOT, "firestore.rules"), "utf8");
-  const ownerMatch = firestoreRules.match(/email\.lower\(\)\s*==\s*'([^']+)'/);
-  if (!ownerMatch) throw new Error("E2E could not locate the deployed Owner binding");
-  transformRules(path.join(ROOT, "firestore.rules"), path.join(RUNTIME_ROOT, "firestore.rules"), ownerMatch[1]);
-  transformRules(path.join(ROOT, "storage.rules"), path.join(RUNTIME_ROOT, "storage.rules"), ownerMatch[1]);
+  renderOwnerRules(path.join(ROOT, "firestore.rules"), path.join(RUNTIME_ROOT, "firestore.rules"));
+  renderOwnerRules(path.join(ROOT, "storage.rules"), path.join(RUNTIME_ROOT, "storage.rules"));
 
-  // Run the real policy-transition handler in the loopback harness while keeping the deployed
-  // Owner identity byte-for-byte untouched. Only this disposable demo runtime receives the
-  // emulator Owner binding; the handler's parser, authentication checks, and transition logic
-  // are otherwise the production source.
+  // Run the real policy-transition handler in the loopback harness. Only this disposable demo
+  // runtime receives the pinned Tier-1 principal; the handler's parser, authentication checks,
+  // and transition logic are otherwise the production source.
   fs.mkdirSync(FUNCTION_ROOT, { recursive: true });
   copyDirectory(
     path.join(ROOT, "backend", "netlify", "functions", "lib"),
     path.join(FUNCTION_ROOT, "lib")
   );
-  transformRules(
+  copyDirectory(path.join(ROOT, "shared"), path.join(RUNTIME_ROOT, "shared"));
+  fs.copyFileSync(
     path.join(ROOT, "backend", "netlify", "functions", "career-policy-transition.js"),
-    path.join(FUNCTION_ROOT, "career-policy-transition.js"),
-    ownerMatch[1]
+    path.join(FUNCTION_ROOT, "career-policy-transition.js")
   );
 
   const firebaseConfig = {

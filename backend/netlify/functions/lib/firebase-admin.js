@@ -39,8 +39,8 @@ const crypto = require("node:crypto");
 
 const STAGES = ["json_parse", "credential_validation", "admin_initialization"];
 
-// Duplicated from firebase-init.js on purpose — same convention as OWNER_EMAIL's own duplication
-// across every Netlify Function (this module can't import a browser ES module; re-deriving "which
+// Duplicated from firebase-init.js on purpose because this CommonJS module cannot import a browser
+// ES module; re-deriving "which
 // project is Production" from an independent hardcoded source is deliberate defense-in-depth, not
 // an oversight). Used ONLY by the deploy-context policy below, never for any other check.
 const PRODUCTION_PROJECT_ID = "lfj-profolio";

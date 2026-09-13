@@ -9,6 +9,7 @@ node_modules/
 /.e2e-runtime/
 /playwright-report/
 /test-results/
+/.rules-runtime/
 
 # Generated Netlify publish output (scripts/build-site.js) — reproducible from source on every
 # deploy, never hand-edited, never committed.

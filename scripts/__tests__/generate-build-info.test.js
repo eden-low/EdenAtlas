@@ -13,6 +13,7 @@
 
 const assert = require("node:assert");
 const fs = require("node:fs");
+const { PROJECTS, PRODUCTION_OWNER_EMAIL, STAGING_OWNER } = require("../../shared/owner-principal.js");
 
 const {
   generate, OUT_PATH, FCM_CONFIG_OUT_PATH, PRODUCTION_FIREBASE_CONFIG,
@@ -40,6 +41,7 @@ const ENV_KEYS = [
   "CONTEXT", "BRANCH", "URL", "DEPLOY_PRIME_URL", "FIREBASE_VAPID_PUBLIC_KEY",
   "STAGING_FIREBASE_API_KEY", "STAGING_FIREBASE_AUTH_DOMAIN", "STAGING_FIREBASE_PROJECT_ID",
   "STAGING_FIREBASE_STORAGE_BUCKET", "STAGING_FIREBASE_MESSAGING_SENDER_ID", "STAGING_FIREBASE_APP_ID",
+  "PRODUCTION_OWNER_UID", "PRODUCTION_OWNER_EMAIL", "STAGING_OWNER_UID", "STAGING_OWNER_EMAIL",
   // Deliberately included even though generate-build-info.js never reads these — the "secrets
   // never emitted" tests below plant fake values under these names to prove they can't leak
   // through by accident (e.g. via an errant `...process.env` spread this file doesn't have, but
@@ -83,6 +85,22 @@ const FULL_STAGING_ENV = {
     });
   });
 
+  await test("Production Owner principal fails closed when its immutable UID slot is missing", () => {
+    withEnv({ CONTEXT: "production", BRANCH: "main" }, () => {
+      assert.strictEqual(generate().ownerPrincipal, null);
+    });
+  });
+
+  await test("Production build emits only the exact configured project-bound public identity tuple", () => {
+    withEnv({ CONTEXT: "production", BRANCH: "main", PRODUCTION_OWNER_UID: "production-owner-uid" }, () => {
+      assert.deepStrictEqual(generate().ownerPrincipal, {
+        projectId: PROJECTS.PRODUCTION,
+        uid: "production-owner-uid",
+        email: PRODUCTION_OWNER_EMAIL,
+      });
+    });
+  });
+
   await test("Development/Netlify Dev builds generate an inert FCM project, never Production", () => {
     for (const context of ["development", "dev"]) {
       withEnv({ CONTEXT: context, BRANCH: "local" }, () => {
@@ -107,9 +125,54 @@ const FULL_STAGING_ENV = {
     withEnv(FULL_STAGING_ENV, () => {
       const info = generate();
       assert.strictEqual(info.context, "branch-deploy");
+      assert.strictEqual(info.ownerPrincipal, null, "Staging has no implicit Production fallback");
       const fcmConfig = JSON.parse(fs.readFileSync(FCM_CONFIG_OUT_PATH, "utf8").replace(/^.*self\.__EDEN_FCM_CONFIG__\s*=\s*/s, "").replace(/;\s*$/, ""));
       assert.strictEqual(fcmConfig.firebaseConfig.projectId, "edenatlas-staging");
       assert.notStrictEqual(fcmConfig.firebaseConfig.projectId, PRODUCTION_FIREBASE_CONFIG.projectId);
+    });
+  });
+
+  await test("Staging build emits only its dedicated configured principal", () => {
+    const stagingOwner = {
+      STAGING_OWNER_UID: STAGING_OWNER.uid,
+      STAGING_OWNER_EMAIL: STAGING_OWNER.email,
+    };
+    withEnv({ ...FULL_STAGING_ENV, ...stagingOwner }, () => {
+      assert.deepStrictEqual(generate().ownerPrincipal, {
+        projectId: PROJECTS.STAGING,
+        uid: STAGING_OWNER.uid,
+        email: STAGING_OWNER.email,
+      });
+    });
+  });
+
+  await test("Staging build rejects a valid but non-canonical Owner UID", () => {
+    withEnv({
+      ...FULL_STAGING_ENV,
+      STAGING_OWNER_UID: "wrong-staging-owner-uid",
+      STAGING_OWNER_EMAIL: STAGING_OWNER.email,
+    }, () => {
+      assert.strictEqual(generate().ownerPrincipal, null);
+    });
+  });
+
+  await test("Staging build rejects a valid but non-canonical Owner email", () => {
+    withEnv({
+      ...FULL_STAGING_ENV,
+      STAGING_OWNER_UID: STAGING_OWNER.uid,
+      STAGING_OWNER_EMAIL: "other-owner@staging.invalid",
+    }, () => {
+      assert.strictEqual(generate().ownerPrincipal, null);
+    });
+  });
+
+  await test("Staging build rejects the Production Owner instead of accepting both Owners", () => {
+    withEnv({
+      ...FULL_STAGING_ENV,
+      STAGING_OWNER_UID: STAGING_OWNER.uid,
+      STAGING_OWNER_EMAIL: PRODUCTION_OWNER_EMAIL,
+    }, () => {
+      assert.strictEqual(generate().ownerPrincipal, null);
     });
   });
 

@@ -1,7 +1,7 @@
 const path = require("path");
 const { getAuth } = require("firebase-admin/auth");
 const { FieldValue, Timestamp, getFirestore } = require("firebase-admin/firestore");
-const { BASE_URL, DEMO_PROJECT_ID, FUNCTION_ROOT } = require("../constants.js");
+const { BASE_URL, DEMO_PROJECT_ID, FUNCTION_ROOT, USERS } = require("../constants.js");
 const { assertEmulatorEnvironment, assertLoopbackBaseUrl } = require("./safety.js");
 const { getAdminApp } = require("./emulator-fixtures.js");
 
@@ -15,6 +15,12 @@ function createPolicyTransitionHandler() {
   const db = getFirestore(app);
 
   return implementation.createHandler({
+    projectId: DEMO_PROJECT_ID,
+    ownerPrincipal: {
+      projectId: DEMO_PROJECT_ID,
+      uid: USERS.owner.uid,
+      email: USERS.owner.email,
+    },
     env: {
       FIREBASE_PROJECT_ID: DEMO_PROJECT_ID,
       FIREBASE_SERVICE_ACCOUNT: "emulator-only-not-a-service-account",

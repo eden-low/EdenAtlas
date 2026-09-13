@@ -1,4 +1,4 @@
-import { auth, googleProvider, db, getUserMode } from "./firebase-init.js";
+import { auth, googleProvider, db, getUserMode, OWNER_UID } from "./firebase-init.js";
 import { t } from "./i18n.js";
 import { resolveDisplayName, publicDisplayName, formatHandle } from "./identity.js";
 import {
@@ -80,9 +80,10 @@ function searchableUsers() {
   const myRole = getUserMode(); // OWNER / FRIEND / VIEWER
   return allUsers.filter((p) => {
     if (p.uid === auth.currentUser?.uid) return false;
-    if (myRole === "OWNER") return p.role === "owner" || p.role === "friend";
-    if (myRole === "FRIEND") return p.role === "owner" || p.role === "friend";
-    return p.role === "owner";
+    const isCanonicalOwner = !!OWNER_UID && p.uid === OWNER_UID;
+    if (myRole === "OWNER") return isCanonicalOwner || p.role === "friend";
+    if (myRole === "FRIEND") return isCanonicalOwner || p.role === "friend";
+    return isCanonicalOwner;
   });
 }
 
@@ -336,7 +337,7 @@ function personCard(person) {
       <div class="min-w-0 flex-1">
         <div class="flex items-center gap-1.5 min-w-0">
           <p class="text-sm font-semibold text-white truncate">${esc(publicDisplayName(person))}</p>
-          ${person.role === "owner" ? `<i class="fa-solid fa-star text-neonPurple text-[10px]" title="${t("people.owner_badge")}"></i>` : ""}
+          ${OWNER_UID && person.uid === OWNER_UID ? `<i class="fa-solid fa-star text-neonPurple text-[10px]" title="${t("people.owner_badge")}"></i>` : ""}
           ${state === "friend" ? `<i class="fa-solid fa-user-check text-emerald-400 text-[10px]" title="${t("people.friend")}"></i>` : ""}
         </div>
         ${handle ? `<p class="text-[11px] text-textGray font-code truncate">${esc(handle)}</p>` : ""}

@@ -5,6 +5,7 @@ import { getAuth, GoogleAuthProvider, setPersistence, browserLocalPersistence, c
 import { getFirestore, connectFirestoreEmulator } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-firestore.js";
 import { getStorage, connectStorageEmulator } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-storage.js";
 import { ENV, getBuildInfo, getEnvironment, isPreProduction, selectFirebaseConfig } from "./environment.js";
+import { resolveFrontendOwnerPrincipal } from "./owner-principal.js";
 
 // authDomain controls where Firebase's OAuth handler page (/__/auth/handler) lives. The default,
 // {project}.firebaseapp.com, is a third-party origin relative to this site — on iOS, a
@@ -79,6 +80,7 @@ const DEVELOPMENT_PLACEHOLDER_CONFIG = {
 // than accepted from a caller. Even if someone manually defines window.__EDEN_E2E__ on a deployed
 // page, the hostname + explicit DEV/DEVELOPMENT checks throw before Firebase initializes.
 const LOCAL_E2E_PROJECT_ID = "demo-edenatlas-e2e";
+const LOCAL_E2E_OWNER_UID = "e2e-owner-uid";
 const LOCAL_E2E_OWNER_EMAIL = "owner@edenatlas-e2e.invalid";
 const LOCAL_E2E_TOPOLOGY = Object.freeze({
   auth: Object.freeze({ host: "127.0.0.1", port: 9099 }),
@@ -104,7 +106,11 @@ function readLocalE2EConfig() {
 
   return Object.freeze({
     projectId: LOCAL_E2E_PROJECT_ID,
-    ownerEmail: LOCAL_E2E_OWNER_EMAIL,
+    ownerPrincipal: Object.freeze({
+      projectId: LOCAL_E2E_PROJECT_ID,
+      uid: LOCAL_E2E_OWNER_UID,
+      email: LOCAL_E2E_OWNER_EMAIL,
+    }),
     topology: LOCAL_E2E_TOPOLOGY,
   });
 }
@@ -185,17 +191,23 @@ export const LOCAL_E2E_RUNTIME = localE2EConfig
 setPersistence(auth, browserLocalPersistence).catch(console.error);
 export const googleProvider = new GoogleAuthProvider();
 
-// The single site owner — always allowed to write, and the only role that sees admin UI
-// (System Logs, Whitelist Management). Everyone else is either an approved friend (own
+// The project-bound Owner UX principal. Backend authorization and Rules independently enforce
+// the same tuple; this browser value never grants server authority. Everyone else is either an approved friend (own
 // private data space, granted via the `friends` Firestore collection — see firestore.rules)
 // or a plain viewer (read-only, public content only).
-const PRODUCT_OWNER_EMAIL = "jjun8647@gmail.com";
-export const OWNER_EMAIL = localE2EConfig ? LOCAL_E2E_OWNER_EMAIL : PRODUCT_OWNER_EMAIL;
+const principalCandidate = localE2EConfig
+  ? localE2EConfig.ownerPrincipal
+  : buildInfo?.ownerPrincipal;
+export const OWNER_PRINCIPAL = resolveFrontendOwnerPrincipal(firebaseConfig.projectId, principalCandidate);
+export const OWNER_UID = OWNER_PRINCIPAL?.uid || null;
+export const OWNER_EMAIL = OWNER_PRINCIPAL?.email || null;
 
 export function isOwner(user) {
-  return !!user
+  return !!OWNER_PRINCIPAL
+    && !!user
+    && user.uid === OWNER_PRINCIPAL.uid
     && user.emailVerified === true
-    && user.email?.toLowerCase() === OWNER_EMAIL;
+    && user.email?.toLowerCase() === OWNER_PRINCIPAL.email;
 }
 
 // Role is decided once at login time (see login.html) and cached here — real enforcement is

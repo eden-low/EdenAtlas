@@ -431,7 +431,7 @@
       return raw && KNOWN_PRIVATE_PAGES.has(raw) ? raw : "home.html";
     }
 
-    // OWNER (jjun8647@gmail.com) > approved FRIEND (an entry in `friends/{email}`) > VIEWER
+    // Project-bound OWNER > approved FRIEND (an entry in `friends/{email}`) > VIEWER
     // (signed in, public content only). Cached in localStorage for cheap UI gating elsewhere —
     // firestore.rules re-checks `friends` fresh on every read/write, this is display-only.
     async function resolveUserMode(user) {

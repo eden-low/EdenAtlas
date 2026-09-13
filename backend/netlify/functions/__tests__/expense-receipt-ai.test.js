@@ -10,7 +10,7 @@ const {
 } = require("../lib/rate-limit.js");
 
 const ORIGIN = "https://edenatlas.netlify.app";
-const OWNER_EMAIL = "jjun8647@gmail.com";
+const OWNER_EMAIL = "owner@test.invalid";
 const OWNER_UID = "owner-receipt-uid";
 const SECRET = "RECEIPT_VISION_SECRET_NEVER_EXPOSE";
 let pass = 0;
@@ -62,9 +62,11 @@ function deps(overrides = {}) {
       QWEN_VISION_MODEL: "qwen3.7-plus-2026-05-26",
       QWEN_BASE_URL: "https://dashscope.invalid/v1",
     },
+    projectId: "test-project",
+    ownerPrincipal: { projectId: "test-project", uid: OWNER_UID, email: OWNER_EMAIL },
     ensureFirebaseAdmin: async () => {},
-    verifyIdToken: async () => ({ uid: OWNER_UID, email: OWNER_EMAIL }),
-    getUserDoc: async () => ({ role: "owner", email: OWNER_EMAIL }),
+    verifyIdToken: async () => ({ uid: OWNER_UID, email: OWNER_EMAIL, email_verified: true }),
+    getUserDoc: async () => ({ uid: OWNER_UID, role: "owner", email: OWNER_EMAIL }),
     getDb: () => ({ rateOnly: true }),
     checkBurst: () => ({ allowed: true }),
     checkDaily: async () => ({ allowed: true, limit: 10 }),

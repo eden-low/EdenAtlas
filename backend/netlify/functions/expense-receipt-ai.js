@@ -16,8 +16,8 @@ const {
   validateImageDataUrl,
 } = require("./lib/expense-receipt-validation");
 const { QwenVisionError, callQwenReceiptVision } = require("./lib/qwen-vision");
+const { assertOwnerAuthorization, resolveConfiguredOwnerPrincipal } = require("./lib/owner-authorization");
 
-const OWNER_EMAIL = "jjun8647@gmail.com";
 const REQUIRED_ENV = [
   "FIREBASE_PROJECT_ID", "FIREBASE_SERVICE_ACCOUNT", "ALLOWED_ORIGIN",
   "DASHSCOPE_API_KEY", "QWEN_VISION_MODEL", "QWEN_BASE_URL",
@@ -160,9 +160,20 @@ function createHandler(deps) {
       console.error(`[expense-receipt-ai] profile lookup failed: code=${(err && err.code) || "no_code"}`);
       return jsonResponse(500, { ok: false, error: "profile_lookup_failed" }, baseHeaders);
     }
-    const isOwner = !!userDoc && userDoc.role === "owner"
-      && decoded.email === OWNER_EMAIL && userDoc.email === OWNER_EMAIL;
-    if (!isOwner) return jsonResponse(403, { ok: false, error: "owner_only" }, baseHeaders);
+    try {
+      assertOwnerAuthorization({
+        decoded,
+        userDoc,
+        projectId: deps.projectId || env.FIREBASE_PROJECT_ID,
+        ownerPrincipal: deps.ownerPrincipal || deps.getOwnerPrincipal?.(),
+      });
+    } catch (err) {
+      if (err?.statusCode === 500) {
+        logAuthFailure("owner_principal", err);
+        return jsonResponse(500, { ok: false, error: "expense_receipt_ai_not_configured" }, baseHeaders);
+      }
+      return jsonResponse(err?.statusCode || 403, { ok: false, error: err?.code || "owner_only" }, baseHeaders);
+    }
 
     const parsed = parseRequestBody(event.body);
     if (parsed.error) return jsonResponse(400, { ok: false, error: parsed.error }, baseHeaders);
@@ -259,6 +270,8 @@ function buildProductionDeps() {
 
   return {
     env,
+    projectId: process.env.FIREBASE_PROJECT_ID,
+    getOwnerPrincipal: () => resolveConfiguredOwnerPrincipal(process.env.FIREBASE_PROJECT_ID, process.env),
     now: () => new Date(),
     ensureFirebaseAdmin: async () => { ensureApp(); },
     // checkRevoked=true is mandatory for this endpoint.

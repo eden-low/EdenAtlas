@@ -1,7 +1,7 @@
 // Site-wide login gate. Drop `<script type="module" src="auth-guard.js"></script>` on any
 // protected page (right after scripts.js) — no per-page wiring needed. Redirects to login.html
 // if signed out; reveals the page (removes body.auth-check-pending, see styles.css) once resolved.
-import { auth, db, getUserMode } from "./firebase-init.js";
+import { auth, db, isOwner } from "./firebase-init.js";
 import { mountNonProductionBanner } from "./environment.js";
 import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-auth.js";
 import { collection, query, where, getDocs } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-firestore.js";
@@ -56,7 +56,7 @@ onAuthStateChanged(auth, (user) => {
   // than each page reimplementing the same check — see home.html's `?notice=private_space`
   // handling. Friend-mode navigation (js/sidebar.js, js/mobile-nav.js) already hides these links
   // for non-owners; this is the direct-URL backstop.
-  if (document.body.dataset.ownerOnly === "true" && getUserMode() !== "OWNER") {
+  if (document.body.dataset.ownerOnly === "true" && !isOwner(user)) {
     location.href = "home.html?notice=private_space";
     return;
   }

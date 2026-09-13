@@ -285,6 +285,7 @@ async function run() {
     // buildContext wiring proof) after it — an insertion in the middle, not just an append, so
     // this is checked by exact array equality rather than the ordered-subsequence check above.
     assert.deepStrictEqual(functionsCmds, [
+      "npm run test:owner-principal",
       "node backend/netlify/functions/__tests__/assistant.test.js",
       "node backend/netlify/functions/__tests__/atlas-context.test.js",
       "node backend/netlify/functions/__tests__/atlas-retrieval.test.js",
@@ -364,7 +365,7 @@ async function run() {
     assert.strictEqual(pkg.scripts["test:generate-build-info"], "node scripts/__tests__/generate-build-info.test.js");
     assert.strictEqual(
       pkg.scripts["test:all"],
-      "npm run test && npm run test:firestore-rules && npm run test:storage-rules && npm run test:tailwind-migration && npm run test:generate-build-info && npm run test:staging-packaging"
+      "npm run test && npm run test:firestore-rules && npm run test:storage-rules && npm run test:tailwind-migration && npm run test:generate-build-info && npm run test:deploy-staging-rules && npm run test:staging-packaging"
     );
     // test:staging-packaging is a real, heavy Netlify Function-packaging test (real esbuild via
     // @netlify/zip-it-and-ship-it) — deliberately kept OUT of `test`/`test:functions`, the same

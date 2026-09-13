@@ -5,8 +5,8 @@
 
 const crypto = require("node:crypto");
 const { readGeneratedDeployOrigins } = require("./lib/deploy-origin");
+const { assertOwnerAuthorization, resolveConfiguredOwnerPrincipal } = require("./lib/owner-authorization");
 
-const OWNER_EMAIL = "jjun8647@gmail.com";
 const CAREER_COLLECTIONS = Object.freeze([
   "career_experiences", "career_projects", "career_certificates", "career_awards",
 ]);
@@ -265,12 +265,22 @@ function createHandler(deps) {
     try { decoded = await deps.verifyIdToken(bearer[1]); } catch {
       return jsonResponse(401, { ok: false, error: "invalid_or_expired_token" }, headers);
     }
-    if (!decoded?.uid || decoded.email !== OWNER_EMAIL || decoded.email_verified !== true) {
-      return jsonResponse(403, { ok: false, error: "owner_only" }, headers);
+    if (!decoded?.uid) {
+      return jsonResponse(401, { ok: false, error: "invalid_or_expired_token" }, headers);
     }
     const userDoc = await deps.getUserDoc(decoded.uid).catch(() => null);
-    if (!userDoc || userDoc.role !== "owner" || userDoc.email !== OWNER_EMAIL) {
-      return jsonResponse(403, { ok: false, error: "owner_only" }, headers);
+    try {
+      assertOwnerAuthorization({
+        decoded,
+        userDoc,
+        projectId: deps.projectId || env.FIREBASE_PROJECT_ID,
+        ownerPrincipal: deps.ownerPrincipal || deps.getOwnerPrincipal?.(),
+      });
+    } catch (err) {
+      if (err?.statusCode === 500) {
+        return jsonResponse(500, { ok: false, error: "career_policy_not_configured" }, headers);
+      }
+      return jsonResponse(err?.statusCode || 403, { ok: false, error: err?.code || "owner_only" }, headers);
     }
 
     try {
@@ -317,6 +327,8 @@ function buildProductionDeps() {
   const db = () => getFirestore(ensureApp());
   return {
     env,
+    projectId: process.env.FIREBASE_PROJECT_ID,
+    getOwnerPrincipal: () => resolveConfiguredOwnerPrincipal(process.env.FIREBASE_PROJECT_ID, process.env),
     ensureFirebaseAdmin: async () => { ensureApp(); },
     verifyIdToken: (token) => getAuth(ensureApp()).verifyIdToken(token, true),
     getUserDoc: async (uid) => {

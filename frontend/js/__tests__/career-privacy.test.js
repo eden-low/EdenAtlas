@@ -88,7 +88,9 @@ await test("missing policy is never upgraded to public by the client", () => {
 await test("public portfolio CMS queries bind global policy and item reads to the Owner UID", () => {
   for (const source of [PORTFOLIO, PROJECT]) {
     assert.ok(source.includes('collection(db, "public_profiles")'));
-    assert.ok(source.includes('where("role", "==", "owner")'));
+    assert.ok(source.includes('OWNER_UID'));
+    assert.ok(source.includes('where("uid", "==", OWNER_UID)'));
+    assert.ok(!source.includes('where("role", "==", "owner")'));
     assert.ok(source.includes('where("careerVisibility", "==", "public")'));
     assert.ok(source.includes('where("uid", "==", ownerUid)'));
     assert.ok(source.includes('where("visibility", "==", "public")'));

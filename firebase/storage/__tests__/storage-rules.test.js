@@ -10,6 +10,7 @@ if (!process.env.FIRESTORE_EMULATOR_HOST
 
 const fs = require("node:fs");
 const path = require("node:path");
+const { DEMO_PROJECT_ID: PROJECT_ID, USERS } = require("../../../e2e/constants.js");
 const assert = require("node:assert");
 const {
   initializeTestEnvironment,
@@ -20,10 +21,9 @@ const { doc, setDoc, deleteDoc, updateDoc, writeBatch, serverTimestamp } = requi
 const { ref, uploadBytes, getBytes, deleteObject, updateMetadata } = require("firebase/storage");
 const { analyzeCareerStorageLookups, RulesAnalysisError } = require("../rules-static-analysis.js");
 
-const PROJECT_ID = "demo-edenatlas-storage-rules";
 const BUCKET = `gs://${PROJECT_ID}.appspot.com`;
-const OWNER_UID = "storage-owner";
-const OWNER_EMAIL = "jjun8647@gmail.com";
+const OWNER_UID = USERS.owner.uid;
+const OWNER_EMAIL = USERS.owner.email;
 const FRIEND_UID = "storage-friend";
 const FRIEND_EMAIL = "friend@example.com";
 const CONNECTION_UID = "storage-connection";
@@ -90,13 +90,13 @@ async function test(name, fn) {
 async function run() {
   testEnv = await initializeTestEnvironment({
     projectId: PROJECT_ID,
-    firestore: { rules: fs.readFileSync(path.resolve(__dirname, "..", "..", "..", "firestore.rules"), "utf8") },
-    storage: { rules: fs.readFileSync(path.resolve(__dirname, "..", "..", "..", "storage.rules"), "utf8") },
+    firestore: { rules: fs.readFileSync(path.resolve(__dirname, "..", "..", "..", ".rules-runtime", "firestore.rules"), "utf8") },
+    storage: { rules: fs.readFileSync(path.resolve(__dirname, "..", "..", "..", ".rules-runtime", "storage.rules"), "utf8") },
   });
 
   try {
     await test("Career read authorization has a static two-document lookup ceiling", async () => {
-      const rules = fs.readFileSync(path.resolve(__dirname, "..", "..", "..", "storage.rules"), "utf8");
+      const rules = fs.readFileSync(path.resolve(__dirname, "..", "..", "..", ".rules-runtime", "storage.rules"), "utf8");
       const report = analyzeCareerStorageLookups(rules);
       const lookups = new Set(report.lookupTemplates);
       if (lookups.size !== 2) {

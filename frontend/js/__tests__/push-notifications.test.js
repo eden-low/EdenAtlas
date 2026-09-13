@@ -270,8 +270,8 @@ function runInBrowserLikeSandbox(src, browserGlobals = {}) {
     const fakeDb = makeFakeFirestore(store);
     const consoleErrors = [];
     const globals = {
-      auth: { currentUser: { uid: FAKE_UID, email: "jjun8647@gmail.com" } },
-      isOwner: (user) => !!user && user.email === "jjun8647@gmail.com",
+      auth: { currentUser: { uid: FAKE_UID, email: "owner@test.invalid" } },
+      isOwner: (user) => !!user && user.email === "owner@test.invalid",
       isStagingWritesUnsafe: () => false,
       isPushApiSupported: () => true,
       isPushConfigured: () => true,

@@ -1,7 +1,7 @@
 // Reusable public case-study renderer (project.html?slug=...). It reads CMS data only when the
 // Owner's canonical global Career policy and the item are both public. The bundled, curated
 // fallback remains intentionally public and fills gaps without claiming Firestore protection.
-import { db } from "./firebase-init.js";
+import { db, OWNER_UID } from "./firebase-init.js";
 import { init as i18nInit, getLang, setLang, t } from "./i18n.js";
 import { collection, query, where, getDocs } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-firestore.js";
 // Canonical project identity (name/tag/slug) — single source of truth shared with portfolio.js /
@@ -246,15 +246,15 @@ function render() {
 }
 
 async function fetchCmsProject() {
-  if (!slug) return null;
+  if (!slug || !OWNER_UID) return null;
   try {
     const ownerSnap = await getDocs(query(
       collection(db, "public_profiles"),
-      where("role", "==", "owner"),
+      where("uid", "==", OWNER_UID),
       where("careerVisibility", "==", "public")
     ));
     if (ownerSnap.empty) return null;
-    const ownerUid = ownerSnap.docs[0].id;
+    const ownerUid = OWNER_UID;
     const snap = await getDocs(query(
       collection(db, "career_projects"),
       where("uid", "==", ownerUid),

@@ -1,4 +1,4 @@
-import { auth, googleProvider, db, storage, canParticipate } from "./firebase-init.js";
+import { auth, googleProvider, db, storage, isOwner } from "./firebase-init.js";
 import {
   onAuthStateChanged,
   signInWithPopup,
@@ -424,7 +424,7 @@ async function renderSignedIn(user) {
   signOutButton.addEventListener("click", () => signOut(auth));
   authControl.replaceChildren(signedIn, signOutButton);
 
-  const mayParticipate = canParticipate();
+  const mayParticipate = isOwner(user);
   newCapsuleBtn.classList.toggle("hidden", !mayParticipate);
   accessNote.classList.toggle("hidden", mayParticipate);
   maybeAutoOpenFromQuickAdd(mayParticipate);
@@ -470,7 +470,7 @@ capsuleModalBackdrop.addEventListener("click", closeModal);
 capsuleForm.addEventListener("submit", async (event) => {
   event.preventDefault();
   const user = auth.currentUser;
-  if (!user || !canParticipate()) return;
+  if (!user || !isOwner(user)) return;
 
   const title = document.getElementById("capsule-title").value.trim();
   const message = document.getElementById("capsule-message").value.trim();

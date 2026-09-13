@@ -8,9 +8,9 @@
 // established (see that file's header comment, point 3) rather than inventing a weaker or
 // different check: the browser sends a Firebase ID token; this Function verifies it server-side
 // via Firebase Admin, re-reads users/{uid} via Admin (which bypasses firestore.rules entirely,
-// same as assistant.js), and requires TWO independent signals to agree — the server-verified
-// token's own email AND the stored users/{uid} doc's `role`/`email` fields both matching the
-// hardcoded OWNER_EMAIL constant — before treating the caller as the Owner. Discover is strictly
+// same as assistant.js), and requires the project-bound UID and verified token email plus the
+// stored users/{uid} doc's UID/role/email fields to agree before treating the caller as Owner.
+// Discover is strictly
 // Owner-only end to end (product decision): Friend/Connection/Viewer accounts must never reach
 // AniList data through this Function, regardless of any client-side role check or which page they
 // came from — this server-side check is the actual security boundary, never the UI.
@@ -30,12 +30,7 @@ const { getCached, setCached } = require("./lib/anilist-cache");
 const { checkBurst } = require("./lib/rate-limit");
 const { FirebaseConfigError } = require("./lib/firebase-admin");
 const { readGeneratedDeployOrigins } = require("./lib/deploy-origin");
-
-// Duplicated from firebase-init.js on purpose — see assistant.js's identical comment: this
-// Function can't import a browser ES module, and re-deriving "who is the Owner" from two
-// independent hardcoded sources (this constant + users/{uid}.role) is a deliberate
-// defense-in-depth choice, not an oversight.
-const OWNER_EMAIL = "jjun8647@gmail.com";
+const { assertOwnerAuthorization, resolveConfiguredOwnerPrincipal } = require("./lib/owner-authorization");
 
 const REQUIRED_ENV = ["FIREBASE_PROJECT_ID", "FIREBASE_SERVICE_ACCOUNT", "ALLOWED_ORIGIN"];
 
@@ -235,9 +230,19 @@ function createHandler(deps) {
       console.error("[anilist] users/{uid} read failed:", err && err.code);
       return jsonResponse(500, { ok: false, error: "profile_lookup_failed" }, baseHeaders);
     }
-    const isOwner = !!userDoc && userDoc.role === "owner" && decoded.email === OWNER_EMAIL && userDoc.email === OWNER_EMAIL;
-    if (!isOwner) {
-      return jsonResponse(403, { ok: false, error: "owner_only" }, baseHeaders);
+    try {
+      assertOwnerAuthorization({
+        decoded,
+        userDoc,
+        projectId: deps.projectId || env.FIREBASE_PROJECT_ID,
+        ownerPrincipal: deps.ownerPrincipal || deps.getOwnerPrincipal?.(),
+      });
+    } catch (err) {
+      if (err?.statusCode === 500) {
+        logAuthStageFailure("owner_principal", err);
+        return jsonResponse(500, { ok: false, error: "anilist_not_configured" }, baseHeaders);
+      }
+      return jsonResponse(err?.statusCode || 403, { ok: false, error: err?.code || "owner_only" }, baseHeaders);
     }
 
     // 5. Burst rate-limit — in-memory, per-uid, namespaced with an "anilist:" prefix so it never
@@ -356,6 +361,8 @@ function buildProductionDeps() {
 
   return {
     env,
+    projectId: process.env.FIREBASE_PROJECT_ID,
+    getOwnerPrincipal: () => resolveConfiguredOwnerPrincipal(process.env.FIREBASE_PROJECT_ID, process.env),
     now: () => new Date(),
     ensureFirebaseAdmin: async () => { ensureApp(); },
     verifyIdToken: (token) => getAuth(ensureApp()).verifyIdToken(token, true),

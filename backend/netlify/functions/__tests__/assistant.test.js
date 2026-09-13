@@ -43,7 +43,7 @@ async function test(name, fn) {
 // ---- Fixtures ----
 
 const OWNER_UID = "owner-uid-123";
-const OWNER_EMAIL = "jjun8647@gmail.com";
+const OWNER_EMAIL = "owner@test.invalid";
 const FRIEND_UID = "friend-uid-456";
 const OTHER_UID = "someone-else-uid";
 const FAKE_KEY = "FAKE_DASHSCOPE_SECRET_DO_NOT_LEAK_9f8e7d";
@@ -115,8 +115,8 @@ function makeMockDb(seed) {
 
 const SEED = {
   users: {
-    [OWNER_UID]: { role: "owner", email: OWNER_EMAIL },
-    [FRIEND_UID]: { role: "friend", email: "friend@example.com" },
+    [OWNER_UID]: { uid: OWNER_UID, role: "owner", email: OWNER_EMAIL },
+    [FRIEND_UID]: { uid: FRIEND_UID, role: "friend", email: "friend@example.com" },
   },
   photos: [
     { id: "p1", data: { uid: OWNER_UID, caption: "Kampar riverside walk", tags: ["kampar", "river"], locationName: "Kampar", latitude: 4.3, longitude: 101.1, uploadedAt: { toMillis: () => 1000 } } },
@@ -177,6 +177,8 @@ function baseDeps(overrides = {}) {
   const db = makeMockDb(SEED);
   return {
     env: baseEnv(),
+    projectId: baseEnv().FIREBASE_PROJECT_ID,
+    ownerPrincipal: { projectId: baseEnv().FIREBASE_PROJECT_ID, uid: OWNER_UID, email: OWNER_EMAIL },
     now: () => FIXED_NOW,
     // Real production wiring calls getApp() here (see lib/firebase-admin.js); the mock default
     // simulates a healthy, already-initialized Admin app — tests that want to exercise a
@@ -184,8 +186,8 @@ function baseDeps(overrides = {}) {
     // something that throws a FirebaseConfigError, exactly like initializeFirebaseAdmin() would.
     ensureFirebaseAdmin: async () => {},
     verifyIdToken: async (token) => {
-      if (token === "owner-token") return { uid: OWNER_UID, email: OWNER_EMAIL };
-      if (token === "friend-token") return { uid: FRIEND_UID, email: "friend@example.com" };
+      if (token === "owner-token") return { uid: OWNER_UID, email: OWNER_EMAIL, email_verified: true };
+      if (token === "friend-token") return { uid: FRIEND_UID, email: "friend@example.com", email_verified: true };
       const e = new Error("invalid token");
       e.code = "auth/argument-error";
       throw e;

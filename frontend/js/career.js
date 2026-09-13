@@ -1,4 +1,4 @@
-import { auth, googleProvider, db, storage, isOwner } from "./firebase-init.js";
+import { auth, googleProvider, db, storage, isOwner, OWNER_UID } from "./firebase-init.js";
 import {
   onAuthStateChanged,
   signInWithPopup,
@@ -170,17 +170,10 @@ async function resolveTargetUid() {
 
 // Canonical public résumé fallback: with no ?u=/?uid= param and nobody signed in, resume.html is
 // the app's public recruiter résumé — resolve the one app Owner's uid so an anonymous HR visitor
-// sees the Owner's public career profile instead of a "sign in to view" wall. public_profiles is
-// world-readable (firestore.rules) and holds a `role` mirror, so this needs no auth. Only the
-// Owner ever has role == "owner"; if somehow none is found we fall through to the not_found notice.
+// sees the configured Owner's public career profile instead of a "sign in to view" wall. The
+// public role mirror is presentation metadata and must never select the canonical Owner.
 async function resolveOwnerUidFallback() {
-  try {
-    const snap = await getDocs(query(collection(db, "public_profiles"), where("role", "==", "owner")));
-    if (!snap.empty) return snap.docs[0].id;
-  } catch (err) {
-    console.error("[career] owner fallback lookup failed:", err.code || err);
-  }
-  return null;
+  return OWNER_UID || null;
 }
 
 // Every viewer, including the owner, reads the canonical global policy from public_profiles.
@@ -634,7 +627,7 @@ async function initCareerAccess(user) {
   // of an empty resume rendered around the Owner's static Profile/Education/Leadership prose.
   // Deliberately skipped for isSelf, so a possible users/{uid} getDoc race on the Owner's own
   // visit (person null/role missing) can never lock the Owner out of their own resume.
-  if (hasTargetParam && !isSelf && person?.role !== "owner") {
+  if (hasTargetParam && !isSelf && targetUid !== OWNER_UID) {
     showNotice("not_found");
     return;
   }
@@ -643,7 +636,7 @@ async function initCareerAccess(user) {
   // The Owner's résumé — the only résumé the app has content/fallbacks for. True for the app Owner
   // viewing their own uid, and for any recruiter/friend/anon viewing the Owner via ?u=/?uid=/the
   // no-param fallback (all of which resolve a person whose role is "owner").
-  targetIsOwner = person?.role === "owner" || (isSelf && isOwner(user));
+  targetIsOwner = (!!OWNER_UID && targetUid === OWNER_UID) || (isSelf && isOwner(user));
   applyViewerModeClass(user);
 
   let careerVisibility = person?.careerVisibility;

@@ -79,7 +79,7 @@ await test("repeated saves on the same day always target the same dateKey regard
 //   allow read, update, delete: if request.auth != null && resource.data.uid == request.auth.uid;
 //   allow create: if isOwner() && request.resource.data.uid == request.auth.uid;
 // }
-const OWNER_EMAIL = "jjun8647@gmail.com";
+const OWNER_EMAIL = "owner@test.invalid";
 
 function isOwner(callerEmail) {
   return callerEmail === OWNER_EMAIL;
