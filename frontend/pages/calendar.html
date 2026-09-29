@@ -51,15 +51,15 @@
   <main class="max-w-6xl mx-auto px-4 mt-8 space-y-6">
     <section class="reveal bg-cardBg/90 neon-border-purple rounded-2xl p-6">
       <div class="flex items-center justify-between gap-4">
-        <button id="cal-prev" class="w-9 h-9 rounded-lg bg-darkBg/60 border border-borderNeon text-textGray hover:text-neonPurple hover:border-neonPurple/50 transition-colors">
-          <i class="fa-solid fa-chevron-left"></i>
+        <button id="cal-prev" type="button" class="w-11 h-11 rounded-lg bg-darkBg/60 border border-borderNeon text-textGray hover:text-neonPurple hover:border-neonPurple/50 transition-colors">
+          <i class="fa-solid fa-chevron-left" aria-hidden="true"></i><span class="sr-only" data-i18n="calendar.previous_month">Previous month</span>
         </button>
         <div class="text-center">
           <h1 id="cal-month-label" class="font-cyber font-semibold text-xl">&mdash;</h1>
           <p class="text-textGray text-xs mt-1">Your own expenses, photos &amp; journal entries this month</p>
         </div>
-        <button id="cal-next" class="w-9 h-9 rounded-lg bg-darkBg/60 border border-borderNeon text-textGray hover:text-neonPurple hover:border-neonPurple/50 transition-colors">
-          <i class="fa-solid fa-chevron-right"></i>
+        <button id="cal-next" type="button" class="w-11 h-11 rounded-lg bg-darkBg/60 border border-borderNeon text-textGray hover:text-neonPurple hover:border-neonPurple/50 transition-colors">
+          <i class="fa-solid fa-chevron-right" aria-hidden="true"></i><span class="sr-only" data-i18n="calendar.next_month">Next month</span>
         </button>
       </div>
     </section>

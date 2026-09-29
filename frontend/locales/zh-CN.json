@@ -24,6 +24,7 @@
     "discover": "发现"
   },
   "common": {
+    "skip_to_content": "跳转到主要内容",
     "save": "保存",
     "saving": "保存中…",
     "saved": "已保存。",
@@ -366,6 +367,8 @@
     "no_habits": "微小的坚持，会带来长久的改变。今天开始一个吧。"
   },
   "calendar": {
+    "previous_month": "上个月",
+    "next_month": "下个月",
     "title": "日历",
     "subtitle": "按天查看你自己的支出、照片与日记记录。",
     "prev": "上一个",

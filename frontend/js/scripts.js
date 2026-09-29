@@ -1,3 +1,18 @@
+// Shared keyboard shortcut to the primary content of each page.
+document.addEventListener('DOMContentLoaded', () => {
+  const main = document.querySelector('main');
+  if (!main || document.querySelector('.eden-skip-link')) return;
+  if (!main.id) main.id = 'eden-main-content';
+  main.setAttribute('tabindex', '-1');
+  const skip = document.createElement('a');
+  skip.className = 'eden-skip-link';
+  skip.href = `#${main.id}`;
+  skip.setAttribute('data-i18n', 'common.skip_to_content');
+  skip.textContent = 'Skip to content';
+  document.body.prepend(skip);
+  window.EdenI18n?.init().then(() => window.EdenI18n.applyTranslations(document));
+});
+
 document.addEventListener('DOMContentLoaded', () => {
   const revealEls = document.querySelectorAll('.reveal');
   if (!revealEls.length) return;

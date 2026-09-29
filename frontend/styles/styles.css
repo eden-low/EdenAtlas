@@ -5,7 +5,37 @@
 html {
   scroll-behavior: smooth;
   overflow-x: hidden;
+  scroll-padding-top: 5rem;
+  scroll-padding-bottom: 5rem;
 }
+
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+}
+
+/* Consistent keyboard focus, including controls that suppress the native outline. */
+:where(a, button, input, select, textarea, [tabindex]:not(main)):focus-visible {
+  outline: 2px solid #a78bfa !important;
+  outline-offset: 3px;
+}
+
+html[data-theme="light"] :where(a, button, input, select, textarea, [tabindex]:not(main)):focus-visible {
+  outline-color: #6d28d9 !important;
+}
+
+.eden-skip-link {
+  position: fixed;
+  z-index: 10001;
+  top: -5rem;
+  left: 1rem;
+  padding: 0.75rem 1rem;
+  border-radius: 0.75rem;
+  background: #17151f;
+  color: #fff;
+  text-decoration: none;
+}
+
+.eden-skip-link:focus-visible { top: 1rem; }
 
 body {
   background-color: #0a0a0e;
@@ -489,11 +519,8 @@ canvas {
   }
 }
 
-@media (max-width: 390px) {
-  .bottomnav-label {
-    display: none;
-  }
-}
+/* Keep labels at every phone width. Truncation protects layout while the
+   full DOM text remains available to assistive technology. */
 
 /* me.html mobile fixes: the tab bar (#me-tabs) used to be flex-wrap, which turned 7 buttons
    into an ugly multi-row block on narrow screens — scrolling horizontally reads better than
@@ -549,6 +576,13 @@ canvas {
 
 #eden-sidebar {
   transition: width 0.2s ease;
+}
+
+#eden-sidebar nav a,
+#eden-sidebar > div a,
+#eden-sidebar > div button,
+#eden-sidebar .sidebar-lang-btn {
+  min-height: 44px;
 }
 
 #eden-sidebar.eden-sidebar-collapsed .eden-sidebar-label,

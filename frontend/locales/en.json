@@ -24,6 +24,7 @@
     "discover": "Discover"
   },
   "common": {
+    "skip_to_content": "Skip to content",
     "save": "Save",
     "saving": "Saving…",
     "saved": "Saved.",
@@ -367,6 +368,8 @@
   },
   "calendar": {
     "title": "Calendar",
+    "previous_month": "Previous month",
+    "next_month": "Next month",
     "subtitle": "A day-by-day view of your own expenses, photos, and journal entries.",
     "prev": "Previous",
     "next": "Next"
