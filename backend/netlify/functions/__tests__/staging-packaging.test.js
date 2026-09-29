@@ -264,9 +264,9 @@ function optionsEvent(origin) {
     // production incident's error code names. Must fail closed with the specific
     // config/staging-not-configured code, distinguishing it from scenario 2's total resolution
     // failure. ----
-    console.log("\nScenario: staging branch-deploy context resolves, but STAGING_FIREBASE_PROJECT_ID is unset");
+    console.log("\nScenario: non-staging branch-deploy context resolves, but STAGING_FIREBASE_PROJECT_ID is unset");
     withGeneratorEnv(
-      { CONTEXT: "branch-deploy", BRANCH: "staging" },
+      { CONTEXT: "branch-deploy", BRANCH: "some-other-feature-branch" },
       () => require("../../../../scripts/generate-function-context.js").generate()
     );
 

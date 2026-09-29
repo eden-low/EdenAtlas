@@ -22,6 +22,9 @@
 
 const fs = require("fs");
 const path = require("path");
+// These seven values are public browser configuration. On the staging branch, read the
+// tracked build input so Netlify UI variables can eventually be removed from Functions.
+const STAGING_PUBLIC_CONFIG = require("../config/staging-public.json");
 
 const ROOT = path.resolve(__dirname, "..");
 const OUT_PATH = path.join(ROOT, "frontend", "js", "build-info.generated.js");
@@ -62,14 +65,16 @@ const PRODUCTION_FIREBASE_CONFIG = {
 // staging project exists and these are set in Netlify, this stays null and Staging deploys
 // share Production's Firebase project — js/environment.js's isStagingWithoutIsolatedBackend()
 // is what makes that safe (see discover.js's write guard).
-function readStagingFirebaseConfig() {
+// The stable staging branch now passes the tracked public config; the legacy environment
+// source remains for other pre-production contexts.
+function readStagingFirebaseConfig(source = process.env) {
   const cfg = {
-    apiKey: rawOrNull(process.env.STAGING_FIREBASE_API_KEY),
-    authDomain: rawOrNull(process.env.STAGING_FIREBASE_AUTH_DOMAIN),
-    projectId: rawOrNull(process.env.STAGING_FIREBASE_PROJECT_ID),
-    storageBucket: rawOrNull(process.env.STAGING_FIREBASE_STORAGE_BUCKET),
-    messagingSenderId: rawOrNull(process.env.STAGING_FIREBASE_MESSAGING_SENDER_ID),
-    appId: rawOrNull(process.env.STAGING_FIREBASE_APP_ID),
+    apiKey: rawOrNull(source.STAGING_FIREBASE_API_KEY),
+    authDomain: rawOrNull(source.STAGING_FIREBASE_AUTH_DOMAIN),
+    projectId: rawOrNull(source.STAGING_FIREBASE_PROJECT_ID),
+    storageBucket: rawOrNull(source.STAGING_FIREBASE_STORAGE_BUCKET),
+    messagingSenderId: rawOrNull(source.STAGING_FIREBASE_MESSAGING_SENDER_ID),
+    appId: rawOrNull(source.STAGING_FIREBASE_APP_ID),
   };
   return Object.values(cfg).every(Boolean) ? cfg : null;
 }
@@ -111,8 +116,15 @@ const DEVELOPMENT_PLACEHOLDER_CONFIG = {
 function generate() {
   const context = rawOrNull(process.env.CONTEXT) || "development";
   const branch = rawOrNull(process.env.BRANCH);
-  const stagingFirebaseConfig = readStagingFirebaseConfig();
-  const vapidPublicKey = rawOrNull(process.env.FIREBASE_VAPID_PUBLIC_KEY);
+  const publicSource = context === "branch-deploy" && branch === "staging"
+    ? STAGING_PUBLIC_CONFIG
+    : process.env;
+  const stagingFirebaseConfig = readStagingFirebaseConfig(publicSource);
+  const vapidPublicKey = rawOrNull(publicSource.FIREBASE_VAPID_PUBLIC_KEY);
+  if (publicSource === STAGING_PUBLIC_CONFIG &&
+      (!stagingFirebaseConfig || stagingFirebaseConfig.projectId !== "edenatlas-staging" || !vapidPublicKey)) {
+    throw new Error("Staging public Firebase configuration is incomplete or has an unexpected project ID");
+  }
 
   const info = {
     // CONTEXT: "production" | "deploy-preview" | "branch-deploy" (Netlify build metadata —

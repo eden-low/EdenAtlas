@@ -20,6 +20,9 @@
 
 const fs = require("fs");
 const path = require("path");
+// Independent public expected-project input for the existing Firebase Admin safety check.
+// No service-account value is read from this file or written into the snapshot.
+const STAGING_PUBLIC_CONFIG = require("../config/staging-public.json");
 
 const ROOT = path.resolve(__dirname, "..");
 const OUT_PATH = path.join(ROOT, "backend", "netlify", "functions", "lib", "build-context.generated.json");
@@ -29,10 +32,19 @@ function rawOrNull(value) {
 }
 
 function generate() {
+  const context = rawOrNull(process.env.CONTEXT);
+  const branch = rawOrNull(process.env.BRANCH);
+  const isStaging = context === "branch-deploy" && branch === "staging";
+  const expectedStagingProjectId = isStaging
+    ? rawOrNull(STAGING_PUBLIC_CONFIG.STAGING_FIREBASE_PROJECT_ID)
+    : rawOrNull(process.env.STAGING_FIREBASE_PROJECT_ID);
+  if (isStaging && expectedStagingProjectId !== "edenatlas-staging") {
+    throw new Error("Staging public Firebase project ID is missing or unexpected");
+  }
   const config = {
-    context: rawOrNull(process.env.CONTEXT),
-    branch: rawOrNull(process.env.BRANCH),
-    expectedStagingProjectId: rawOrNull(process.env.STAGING_FIREBASE_PROJECT_ID),
+    context,
+    branch,
+    expectedStagingProjectId,
   };
 
   fs.mkdirSync(path.dirname(OUT_PATH), { recursive: true });

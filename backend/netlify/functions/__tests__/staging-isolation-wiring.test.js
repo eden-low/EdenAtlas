@@ -200,15 +200,15 @@ async function test(name, fn) {
       );
     });
 
-    await test("fail-closed is retained through the real generator: a staging branch-deploy with STAGING_FIREBASE_PROJECT_ID unset still writes expectedStagingProjectId:null, and enforceDeployContextPolicy still rejects it (config/staging-not-configured)", () => {
+    await test("staging generator reads the independent tracked project ID even when the Netlify variable is absent", () => {
       const written = withGeneratorEnv({ CONTEXT: "branch-deploy", BRANCH: "staging" }, () => generateFunctionContext());
-      assert.strictEqual(written.expectedStagingProjectId, null);
+      assert.strictEqual(written.expectedStagingProjectId, "edenatlas-staging");
       invalidateBuildContextCache();
       const buildContext = readGeneratedBuildContext();
-      assert.strictEqual(buildContext.expectedStagingProjectId, null);
+      assert.strictEqual(buildContext.expectedStagingProjectId, "edenatlas-staging");
       assert.throws(
-        () => enforceDeployContextPolicy({ resolvedProjectId: "edenatlas-staging", buildContext, env: {} }),
-        (err) => err instanceof FirebaseConfigError && err.code === "config/staging-not-configured"
+        () => enforceDeployContextPolicy({ resolvedProjectId: "different-staging-project", buildContext, env: {} }),
+        (err) => err instanceof FirebaseConfigError && err.code === "config/staging-project-mismatch"
       );
     });
 

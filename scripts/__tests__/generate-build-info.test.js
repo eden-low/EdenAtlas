@@ -13,6 +13,7 @@
 
 const assert = require("node:assert");
 const fs = require("node:fs");
+const STAGING_PUBLIC_CONFIG = require("../../config/staging-public.json");
 
 const {
   generate, OUT_PATH, FCM_CONFIG_OUT_PATH, PRODUCTION_FIREBASE_CONFIG,
@@ -103,19 +104,30 @@ const FULL_STAGING_ENV = {
     });
   });
 
-  await test("a genuine Staging build (CONTEXT=branch-deploy, BRANCH=staging, all six STAGING_FIREBASE_* set) resolves fcm-config.generated.js to a DIFFERENT project id than Production", () => {
-    withEnv(FULL_STAGING_ENV, () => {
+  await test("a genuine Staging build uses tracked public config without Netlify staging variables", () => {
+    withEnv({ CONTEXT: "branch-deploy", BRANCH: "staging" }, () => {
       const info = generate();
       assert.strictEqual(info.context, "branch-deploy");
       const fcmConfig = JSON.parse(fs.readFileSync(FCM_CONFIG_OUT_PATH, "utf8").replace(/^.*self\.__EDEN_FCM_CONFIG__\s*=\s*/s, "").replace(/;\s*$/, ""));
       assert.strictEqual(fcmConfig.firebaseConfig.projectId, "edenatlas-staging");
       assert.notStrictEqual(fcmConfig.firebaseConfig.projectId, PRODUCTION_FIREBASE_CONFIG.projectId);
+      assert.strictEqual(info.vapidPublicKey, STAGING_PUBLIC_CONFIG.FIREBASE_VAPID_PUBLIC_KEY);
+      assert.strictEqual(fcmConfig.vapidPublicKey, STAGING_PUBLIC_CONFIG.FIREBASE_VAPID_PUBLIC_KEY);
     });
   });
 
-  await test("a Staging build with only a PARTIAL staging config (e.g. missing STAGING_FIREBASE_APP_ID) falls back to the inert placeholder — never a half-populated config, and NEVER Production's real project (deploy-context policy: never silently fall back to Production)", () => {
+  await test("tracked staging public config wins while old Netlify values are still present", () => {
+    withEnv({ ...FULL_STAGING_ENV, STAGING_FIREBASE_PROJECT_ID: "wrong-project", FIREBASE_VAPID_PUBLIC_KEY: "wrong-public-key" }, () => {
+      const info = generate();
+      assert.strictEqual(info.stagingFirebaseConfig.projectId, "edenatlas-staging");
+      assert.strictEqual(info.vapidPublicKey, STAGING_PUBLIC_CONFIG.FIREBASE_VAPID_PUBLIC_KEY);
+    });
+  });
+
+  await test("a non-staging branch with partial environment config uses the inert placeholder", () => {
     const partial = { ...FULL_STAGING_ENV };
     delete partial.STAGING_FIREBASE_APP_ID;
+    partial.BRANCH = "some-other-feature-branch";
     withEnv(partial, () => {
       const info = generate();
       assert.strictEqual(info.stagingFirebaseConfig, null);
@@ -164,7 +176,7 @@ const FULL_STAGING_ENV = {
   });
 
   await test("fcm-config.generated.js contains ONLY the allowlisted shape: firebaseConfig (6 known keys) + vapidPublicKey, nothing else", () => {
-    withEnv({ ...FULL_STAGING_ENV, FIREBASE_VAPID_PUBLIC_KEY: "BExampleVapidPublicKey123" }, () => {
+    withEnv({ ...FULL_STAGING_ENV, BRANCH: "some-other-feature-branch", FIREBASE_VAPID_PUBLIC_KEY: "BExampleVapidPublicKey123" }, () => {
       generate();
       const fcmConfig = JSON.parse(fs.readFileSync(FCM_CONFIG_OUT_PATH, "utf8").replace(/^.*self\.__EDEN_FCM_CONFIG__\s*=\s*/s, "").replace(/;\s*$/, ""));
       assert.deepStrictEqual(Object.keys(fcmConfig).sort(), ["firebaseConfig", "vapidPublicKey"]);
